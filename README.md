@@ -25,8 +25,10 @@ The libraries you need are
 * scipy
 * pandas
 * scikit-learn 
-and maybe something else, basically all the packages are installed via command-line:
-sudo pip install numpy scipy pandas scikit-learn
+* rootpy  
+* root-numpy
+and maybe something else, basically the packages are installed via command-line:
+sudo pip install numpy scipy pandas scikit-learn rootpy root-numpy
 
 
 Roadway:
