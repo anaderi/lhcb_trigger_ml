@@ -1,5 +1,4 @@
-lhcb_trigger_ml
-===============
+#lhcb_trigger_ml
 LHCb trigger based on machine learning research
 
 Project should enable one to compare several classifiers by their characteristics based on some training dataset.
@@ -11,7 +10,7 @@ At this moment project contains several notebooks which use python classifiers,
 see IPythonWorkflow/ROOTSimpleSkLearn.ipynb for example and explanations.
 
 
-==Getting this to work==
+###Getting this to work
 To run the notebooks on some machine, you should have
 * CERN ROOT, make sure you have it by typing 'root' in the console
 * IPython, see ipython.org/install.html
@@ -27,9 +26,11 @@ The libraries you need are
 * scikit-learn 
 * rootpy  
 * root-numpy
+
 and maybe something else, basically the packages are installed via command-line:
-sudo pip install numpy scipy pandas scikit-learn rootpy root-numpy
+    sudo pip install numpy scipy pandas scikit-learn rootpy root-numpy
+IPython can be installed via pip as well
+    sudo pip install ipython
 
-
-Roadway:
+###Roadway:
 Support for TMVA classifiers will be added soon
