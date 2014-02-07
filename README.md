@@ -30,10 +30,10 @@ The libraries you need are
 * root-numpy
 
 and maybe something else, basically the packages are installed via command-line:
-    sudo pip install numpy scipy pandas scikit-learn rootpy root-numpy
+ <pre>sudo pip install numpy scipy pandas scikit-learn rootpy root-numpy</pre>
 IPython can be installed via pip as well
-    sudo pip install ipython
+ <pre> sudo pip install ipython</pre>
 
 ###Roadway:
-uBoost implementation in python will be added soon
+uBoost implementation in python will be added soon.
 We are going to publish notebook on some server to provide easy access from any machine.
