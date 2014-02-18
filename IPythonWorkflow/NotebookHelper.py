@@ -1,4 +1,4 @@
-# This is supplementary function, which connects other IPython notebook
+# This is supplementary function, which enables us to use other IPython notebook
 # with helpful functions. 
 # Absolutely inimportant
 import io

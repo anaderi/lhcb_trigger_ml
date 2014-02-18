@@ -9,6 +9,7 @@ the analysis is performed in IPython notebooks - commonly used in machine learni
 At this moment project contains several notebooks which use python classifiers, 
 and some functions to import data from ROOT files, these one need ROOT and python wrappers for it.
 
+There is also procedure to generate toy Monte-Carlo (generates new set of events based on the set of events we already have with same distribution) and special notebook 'ToyMonteCarlo' to demonstrate and analyze its results. 
 
 ###Getting this to work
 To run the UniformingClassifiersExample notebook, only IPython and some python libraries is needed.
