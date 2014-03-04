@@ -34,6 +34,7 @@ and maybe something else, basically the packages are installed via command-line:
  <pre>sudo pip install numpy scipy pandas scikit-learn rootpy root-numpy</pre>
 IPython can be installed via pip as well
  <pre> sudo pip install ipython</pre>
+ To run IPython, there is shell script in IpythonWorkflow/ subfolder
 
 ###Roadway:
 uBoost implementation in python will be added soon.
