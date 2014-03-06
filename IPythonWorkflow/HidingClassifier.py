@@ -3,15 +3,16 @@ from sklearn.base import BaseEstimator, ClassifierMixin, clone
 
 class HidingClassifier(BaseEstimator, ClassifierMixin):
 
-    def __init__(self, train_variables, base_estimator):
+    def __init__(self, train_variables=None, base_estimator=None):
         """This is a metaclassifier, which uses only subset of variables to train
         base classifier"""
         self.train_variables = train_variables
-        self.base_estimstor = base_estimator
+        self.base_estimator = base_estimator
 
     def fit(self, X, y):
-        self._trained_estimator = clone(self.base_estimstor)\
-            .fit(X[self.train_variables], y)
+        assert self.base_estimator is not None, "base estimator was not set"
+        self._trained_estimator = clone(self.base_estimator)
+        self._trained_estimator.fit(X[self.train_variables], y)
 
     def predict(self, X):
         return self._trained_estimator.predict(X[self.train_variables])

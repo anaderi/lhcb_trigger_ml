@@ -391,8 +391,8 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
     def fit(self, X, y):
         if self.uniform_variables is None:
             raise ValueError("Please set uniformVariables")
-        if len(self.uniform_variables) != 1:
-            raise ValueError("Only one uniform variable is supported by now")
+        if len(self.uniform_variables) == 0:
+            raise ValueError("The set of uniform variables cannot be empty")
         if self.train_variables is not None:
             X_train_vars = X[self.train_variables]
         else:
