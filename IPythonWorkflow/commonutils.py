@@ -1,47 +1,48 @@
-# -*- coding: utf-8 -*-
-# <nbformat>3.0</nbformat>
-
-# <markdowncell>
-
 # #About
 # 
 # This file contains some helpful functions and classes which are often used.
 # This file is ROOT-independent
-import time
 
-from matplotlib.pyplot import figure, plot
+import math
+from IPython.nbformat import current
 
 import pandas
 import numpy
 import pylab
-import math
-
-from numpy import rec
-from math import floor
-
+import io
 from sklearn.cross_validation import train_test_split
-from sklearn.metrics import roc_curve, auc
 from sklearn.metrics import precision_score, recall_score, f1_score, mean_squared_error
+from sklearn.neighbors.dist_metrics import MinkowskiDistance
+from sklearn.neighbors.unsupervised import NearestNeighbors
+from IPython.core.getipython import get_ipython
+from sklearn.utils.validation import check_arrays
+
 
 Precision = precision_score
 Recall = recall_score
 F1Score = f1_score
 
 
+def execute_notebook(fileName):
+    with io.open(fileName) as f:
+        nb = current.read(f, 'json')
+    ip = get_ipython()
+    for cell in nb.worksheets[0].cells:
+        if cell.cell_type != 'code': continue
+        ip.run_cell(cell.input)
 
-def constantArray(length, value, dtype = 'int16'):
-    return numpy.zeros(length, dtype=dtype) + value
 
 def addIsSignalColumn(dataFrame, is_signal):
     """Is signal can be either 1 or 0 or array """
     dataFrame["IsSignal"] = is_signal
+
 
 def getProbabilitiesOfSignal(classifier, test_data):
     """predictProba returns the 2d array, 
         [:,0] - probabilities of 0 class (bg)
         [:,1] - probabilities of 1 class (signal)
     """
-    return classifier.predict_proba(test_data)[:,1]
+    return classifier.predict_proba(test_data)[:, 1]
 
 
 def shuffleDataSet(dataFrame, answers):
@@ -49,6 +50,7 @@ def shuffleDataSet(dataFrame, answers):
     Pay attention that dataFrame is changed in the procedure,
     this may cause some side-effects, so if you need original dataFrame, use clone() before
     """
+    # TODO sklearn shuffle
     length = len(dataFrame)
     if len(answers) != length:
         raise ValueError("Different lengths")
@@ -64,74 +66,65 @@ def shuffleDataSet(dataFrame, answers):
 
 def splitOnTestAndTrain(signalDataFrame, bgDataFrame,
                         signalTrainPart=0.5, bgTrainPart=0.5):
-    signalTrainInd, signalTestInd = train_test_split(range(len(signalDataFrame)), 
-        train_size = signalTrainPart)
-    
-    bgTrainInd, bgTestInd = train_test_split(range(len(bgDataFrame)), 
-        train_size = bgTrainPart)
-    
+    signalTrainInd, signalTestInd = train_test_split(range(len(signalDataFrame)), train_size=signalTrainPart)
+    bgTrainInd, bgTestInd = train_test_split(range(len(bgDataFrame)), train_size=bgTrainPart)
+
     signalTrain = signalDataFrame.irow(signalTrainInd)
-    signalAnsTrain = constantArray(len(signalTrainInd), 1)
-    signalTest  = signalDataFrame.irow(signalTestInd)
-    signalAnsTest = constantArray(len(signalTestInd), 1)
-    
+    signalAnsTrain = numpy.ones_like(signalTrainInd)
+    signalTest = signalDataFrame.irow(signalTestInd)
+    signalAnsTest = numpy.ones_like(signalTestInd)
+
     bgTrain = bgDataFrame.irow(bgTrainInd)
-    bgAnsTrain = constantArray(len(bgTrainInd), 0)
-    bgTest  = bgDataFrame.irow(bgTestInd)
-    bgAnsTest = constantArray(len(bgTestInd), 0)
-    
+    bgAnsTrain = numpy.zeros_like(bgTrainInd)
+    bgTest = bgDataFrame.irow(bgTestInd)
+    bgAnsTest = numpy.zeros_like(bgTestInd)
+
     # Concatenating in single dataframe
     train = pandas.concat([signalTrain, bgTrain], join='inner', ignore_index=True)
-    test  = pandas.concat([signalTest, bgTest],   join='inner', ignore_index=True)
+    test = pandas.concat([signalTest, bgTest], join='inner', ignore_index=True)
     trainAns = numpy.concatenate((signalAnsTrain, bgAnsTrain))
     testAns = numpy.concatenate((signalAnsTest, bgAnsTest))
-    
-    # Shuffling. It isn't mandatory, in case classifier would somehow take order into account
+
+    # Shuffling. It isn't mandatory, just in case classifier would somehow take order into account
     # it is better to shuffle data
     train, trainAns = shuffleDataSet(train, trainAns)
     test, testAns = shuffleDataSet(test, testAns)
-    
+
     return train, trainAns, test, testAns
 
 
-
-def buildRocCurves(testAnswer, testPredictionProbas, isBigPlot = True):
+def my_train_test_split(*arrays, **kw_args):
     """
-    testAnswer in numpy.array with zeros and ones
-    testPredictions is dictionary:
-    - key is string (classifier name usually)
-    - value is numpy.array with probabilities of class 1
+    Does the same thin as train_test_split, but preserves columns in dataframes
+    Uses the same parameters: test_size. train_size, random_state
     """
-    if isBigPlot:
-        figure(num=None, figsize=(12, 12), dpi=80, facecolor='w', edgecolor='k')
-    pylab.clf()
-    for classifierName, predictions in testPredictionProbas.iteritems():
-        fpr, tpr, thresholds = roc_curve(testAnswer, predictions[:,1])
-        # tpr = recall = isSasS / isS = signalEfficiecncy
-        # fpr = isBasS / isB = 1 - specifity ?=?  1 - backgroundRejection
-        bgRej =  1 - numpy.array(fpr)
-        roc_auc = auc(fpr, tpr)
-        pylab.plot(tpr, bgRej, label='%s (area = %0.3f)' % (classifierName, roc_auc))
-    
-    pylab.plot([0, 1], [1, 0], 'k--')
-    pylab.xlim([-0.003, 1.00])
-    pylab.ylim([0.0, 1.003])
-    pylab.xlabel('Signal Efficiency')
-    pylab.ylabel('Background Rejection')
-    pylab.title('Receiver operating characteristic (ROC)')
-    pylab.legend(loc="lower left")
+    assert len(arrays) > 0, "at least one array should be given"
+    length = len(arrays[0])
+    for array in arrays:
+        assert len(array) == length, "different size"
+    train_indices, test_indices = train_test_split(range(length), **kw_args)
+    result = []
+    for array in arrays:
+        if isinstance(array, pandas.DataFrame):
+            result.append(array.irow(train_indices))
+            result.append(array.irow(test_indices))
+        else:
+            result.append(array[train_indices])
+            result.append(array[test_indices])
+    return result
 
-    pylab.show()
+
+df = pandas.DataFrame(numpy.random.rand(100, 10))
+a, b = my_train_test_split(df)
+
 
 
 
 class Binner:
-    """
-    Binner is a class that helps to split the values into several bins.
-    Initially an array of values is given, which is then splitted into 'bins_number' equal parts,
-    and thus we are computing limits (boundaries of bins).
-    """
     def __init__(self, values, bins_number):
+        """Binner is a class that helps to split the values into several bins.
+        Initially an array of values is given, which is then splitted into 'bins_number' equal parts,
+        and thus we are computing limits (boundaries of bins)."""
         percentiles = [i * 100.0 / bins_number for i in range(1, bins_number)]
         self.limits = numpy.percentile(values, percentiles)
 
@@ -160,7 +153,7 @@ class Binner:
             assert len(array) == len(values), "passed arrays have different length"
         bins = self.get_bins(values)
         result = []
-        for bin in range(len(self.limits)+1):
+        for bin in range(len(self.limits) + 1):
             indices = bins == bin
             result.append([numpy.array(array)[indices] for array in arrays])
         return result
@@ -179,167 +172,51 @@ def testBinner():
     binner = Binner(numpy.random.permutation(100), 7)
     p = numpy.random.permutation(100)
     assert numpy.all(binner.get_bins(p) == binner.get_bins_dumb(p)), "getBins() function is wrong"
-    # assert numpy.all(binner.getBins(p) == binner.getBinsDumb2(p)), "getBins() function is wrong"
 
     binner = Binner(numpy.random.permutation(20), 5)
     p = numpy.random.permutation(40)
     # checking whether binner preserves correspondence
     list1 = list(binner.split_into_bins(numpy.array(range(-10, 30))[p], numpy.array(range(0, 40))[p]))
     for a, b in list1:
-        for x, y in zip(a,b):
+        for x, y in zip(a, b):
             assert x + 10 == y, 'transpositions are wrong after binning'
     binner = Binner(numpy.random.permutation(30), 3)
     res2 = list(binner.split_into_bins(range(10, 20)))
     ans2 = [[], range(10, 20), []]
 
     for a, b in zip(res2, ans2):
-        for x, y in zip(a[0],b):
+        for x, y in zip(a[0], b):
             assert x == y, 'binning is wrong'
 
     res3 = list(binner.split_into_bins(numpy.random.permutation(45)))
     ans3 = list(binner.split_into_bins(range(45)))
     for x, y in zip(res3, ans3):
-        assert set(x[0]) == set(y[0]), "doesn't work well with permutations"
-
-    p1 = numpy.random.permutation(100)
-    p2 = numpy.random.permutation(100)
-
-    # splitted_1 = list(binner.splitIntoBins(p1, p2))
-    # splitted_2 = list(binner.splitIntoBinsDumb(p1, p2))
-    #
-    # for vals1, vals2 in zip(splitted_1, splitted_2):
-    #     for arr1, arr2 in zip(vals1, vals2):
-    #         assert set(arr1) == set(arr2), "something is wrong with splitIntoBins"
+        assert set(x[0]) == set(y[0]), "binner doesn't work well with permutations"
 
     print 'binner is ok'
 
+
 testBinner()
 
-# Score functions
-# Some notation used here
-# IsSignal - is really signal
-# AsSignal - classified as signal
-# IsBackgroundAsSignal - background, but classified as signal
-# ... and so on. Cute, right?
-
-def Efficiency(answer, prediction):
-    """Efficiency = right classified signal / everything that is really signal
-    Efficiency == recall
-    """
-    isSignal = 0.01 + numpy.sum(answer)
-    isSignalAsSignal = numpy.sum(answer * prediction)
-    return isSignalAsSignal * 1.0 / isSignal
-
-def partOfIsSignal(answer, prediction):
-    """Part of is signal = signal events / total amount of events"""
-    if len(answer) != len(prediction):
-        raise ValueError("Different size of arrays")
-    return numpy.sum(answer) * 1.0 / len(answer)
-
-def partOfAsSignal(answer, prediction):
-    """Part of is signal = Is signal / total amount of events"""
-    if len(answer) != len(prediction):
-        raise ValueError("Different size of arrays")
-    return numpy.sum(prediction) * 1.0 / len(answer)
-
-def plotScoreVariableCorrelation(answers, prediction_proba, correlation_values,
-        classifier_name="", var_name="", score_function=Efficiency,
-        bins_number=20, thresholds=None, y_limits=None, draw_separately=True,
-        is_big_plot=True, show_legend=False):
-    """
-    Different score functions available: Efficiency, Precision, Recall, F1Score, 
-    and other things from sklearn.metrics
-    var_name - for example, 'mass', just a name for plotting.
-    """
-
-    if thresholds is None:
-        thresholds = [0.2, 0.4, 0.5, 0.6, 0.8]
-    if is_big_plot:
-        figure(num=None, figsize=(12, 8), dpi=80, facecolor='w', edgecolor='k')
-
-    # TODO smoothing and many-binning calculations
-    binner = Binner(correlation_values, bins_number=bins_number)
-    bins_data = binner.split_into_bins(correlation_values, answers, prediction_proba)
-    for threshold in thresholds:
-        x_values = []
-        y_values = []
-        for bin_data in bins_data:
-            masses = bin_data[0]
-            answers = bin_data[1]
-            probabilities = bin_data[2]
-            y_values.append(score_function(answers, probabilities[:,1] > threshold))
-            x_values.append(numpy.mean(masses))
-        plot(x_values, y_values, label="threshold = %0.2f" % threshold)
-
-    pylab.title("Correlation with results of " + classifier_name)
-    pylab.xlabel(var_name)
-    pylab.ylabel(score_function.__name__)
-    if y_limits is not None:
-        pylab.ylim(y_limits)
-    if show_legend:
-        pylab.legend(loc="lower right")
-    if draw_separately:
-        pylab.show()
 
 
-def plotMassEfficiencyCorrelation(answers, predictionsProbabilities,
-                                  masses, classifierName):
-    """
-    Just a particular case of previous roccfunction
-    Splits all the events by mass into 20 bins of equal size, 
-    computes efficiency for each bin and draws a plot
-    - answers - array of 0 and 1
-    - predictionProbabilities - array of probabilities given by classifier
-    - masses - array of masses
-    """
-    plotScoreVariableCorrelation(answers, predictionsProbabilities, masses,
-                             classifierName, var_name= 'mass', score_function= Efficiency )
-
-
-def SplitIntoArrayBins(binsNumber, mainVariable, *arrays):
-    """Returns the generator for bin data
-    Example:
-    list( SplitIntoArrayBins(4, range(40), range(5,45)) )
-    """
-    jointArray = rec.fromarrays([mainVariable] + list(arrays))
-    jointArray.sort()
-    for binIndex in range(binsNumber):
-        first = len(jointArray) * binIndex / binsNumber 
-        afterLast = len(jointArray) * (binIndex + 1) / binsNumber 
-        jointPart = jointArray[first:afterLast]
-        yield list([jointPart["f" + str(i)] for i in range(len(arrays) + 1)])
-
-
-def SplitIntoRecBins(binsNumber, mainVariable, *arrays):
-    """Returns the list of bin data
-    Each entry is recarray, which has fields f0, f1, f2
-    corresponding to input a-rray (f0 - main variable)
-    """
-    jointArray = rec.fromarrays([mainVariable] + list(arrays))
-    jointArray.sort()
-    for binIndex in range(binsNumber):
-        first = len(jointArray) * binIndex / binsNumber 
-        afterLast = len(jointArray) * (binIndex + 1) / binsNumber 
-        yield jointArray[first:afterLast]
-
-
-def slidingEfficiencyArray(answers, prediction_probas):
+def slidingEfficiencyArray(answers, prediction_proba):
     """Returns two arrays,
     if threshold == second array[i]
     then efficiency == first array[i] (approximately)
     """
-    assert len(answers) == len(prediction_probas), "different size of arrays"
-    predictionProbabilities = prediction_probas[:,1]
-    indices = numpy.argsort(predictionProbabilities)
+    assert len(answers) == len(prediction_proba), "different size of arrays"
+    signal_probabilities = prediction_proba[:, 1]
+    indices = numpy.argsort(signal_probabilities)
     ans = answers[indices]
-    probs = predictionProbabilities[indices]
+    probs = signal_probabilities[indices]
     AsSig = len(ans)
     IsSig = numpy.sum(ans)
     IsSigAsSig = numpy.sum(ans)
     precision = numpy.zeros(len(ans))
     for i in range(len(ans)):
         AsSig -= 1
-        if(ans[i]):
+        if ans[i]:
             IsSigAsSig -= 1
         precision[i] = IsSigAsSig * 1.0 / (IsSig + 0.0001)
     return precision, probs
@@ -348,51 +225,53 @@ def slidingEfficiencyArray(answers, prediction_probas):
 def getQuantilesOnTargets(sortedArray, targets):
     return numpy.minimum(numpy.searchsorted(sortedArray, targets), len(sortedArray) - 1)
 
+
 def getQuantiles(sortedArray, n):
     """Get the positions, at which array values 
     becomes greater then quantiles (well, this is what really quantiles is,
     though numpy quantiles are a bit different thing)
     """
-    targets = [0.0 + i * 1.0 / n for i in range(0, n+1)]
+    targets = [i * 1.0 / n for i in range(0, n + 1)]
     return getQuantilesOnTargets(sortedArray, targets)
 
 
 def getQuantilesOfTargetsPrecise(sortedArray, targets):
-    #print 'targets', targets, len(targets)
+    """
+    Dumb implementation of previous function
+    """
     if len(targets) == 0:
         return
     currentTarget = 0
     for i in range(len(sortedArray)):
-        while(targets[currentTarget] <= sortedArray[i]):
+        while (targets[currentTarget] <= sortedArray[i]):
             yield i
             currentTarget += 1
-            if(currentTarget >= len(targets)):
+            if (currentTarget >= len(targets)):
                 return
     while currentTarget < len(targets):
-        yield len(sortedArray) 
-        currentTarget += 1      
+        yield len(sortedArray)
+        currentTarget += 1
 
 
-def getProbabilityQuantiles(answers, prediction_probas, n, isFunctionGrowing = True):
+def getProbabilityQuantiles(answers, prediction_probas, n):
     precision, cuts = slidingEfficiencyArray(answers, prediction_probas)
-
     assert numpy.all(cuts == numpy.sort(cuts)), 'Something wrong with cuts - not monotonic '
     indices = list(getQuantiles(cuts, n))
-
     return precision[indices]
+
 
 def interpolate(y_array, x):
     """Assuming we have a function, that has at point i value y_array[i]
     Then it returns piecewise-linear interpolation of it at point x"""
-    if x >= len(y_array) - 1.001:
+    if x >= len(y_array) - 1.0001:
         return y_array[-1]
     if x <= 0:
         return y_array[0]
-    n = int(floor(x))
+    n = int(math.floor(x))
     t = x - n
-    return y_array[n] * (1 - t) + y_array[n+1] * t
+    return y_array[n] * (1.0 - t) + y_array[n + 1] * t
 
-# TODO use this function
+
 def massive_interpolate(y_array, x):
     """The same as interpolate, but x is array now
     returns array of the same length as x
@@ -400,75 +279,79 @@ def massive_interpolate(y_array, x):
     y_array = numpy.array(y_array)
     x = numpy.minimum(x, len(y_array) - 1.0001)
     x = numpy.maximum(x, 0.0001)
-    n = numpy.array(numpy.int(numpy.floor(x)), dtype=numpy.int)
+    n = numpy.floor(x).astype(numpy.int)
     t = x - n
-    return y_array.take(n) * (1.0 - t) + y_array.take(n+1) * t
+    return y_array.take(n) * (1.0 - t) + y_array.take(n + 1) * t
 
 
-def correctionFunction(answers, predictedProbabilities, steps = 10):
-    quantiles = getProbabilityQuantiles(answers, predictedProbabilities, steps, False)
-    #print 'steps, quantiles = ', steps, quantiles
-    return lambda x: interpolate(quantiles, x * (len(quantiles) - 1) )
+def correctionFunction(answers, predict_proba, steps=10):
+    quantiles = getProbabilityQuantiles(answers, predict_proba, steps)
+    return lambda x: interpolate(quantiles, x * (len(quantiles) - 1))
 
 
-def plotFunction(lmb, segment=None):
-    if segment is None:
-        segment = [0,1]
-    xpoints = numpy.arange(segment[0], segment[1], (segment[1] - segment[0] * 0.01))
-    plot(xpoints, [lmb(x) for x in xpoints])
+def massiveCorrectionFunction(answers, predict_proba, steps=10):
+    quantiles = getProbabilityQuantiles(answers, predict_proba, steps)
+    return lambda x: massive_interpolate(quantiles, x * (len(quantiles) - 1))
+
 
 def testQuantiles():
     y = numpy.array(range(100)) * 0.0101
     targets = [0.005 + 0.099 * i for i in range(10)]
-    y = y*y*y
+    y = y ** 3
     quantiles = list(getQuantilesOnTargets(y, targets))
     for i, target in zip(quantiles, targets):
-        assert y[i-1] <= target <= y[i], 'quantiles are wrong'
+        assert y[i - 1] <= target <= y[i], 'quantiles are wrong'
     print 'quantiles are ok'
-    
+
+
+def plotFunction(lmb, segment=None):
+    if segment is None:
+        segment = [0, 1]
+    x_points = numpy.arange(segment[0], segment[1], (segment[1] - segment[0] * 0.01))
+    pylab.plot(x_points, [lmb(x) for x in x_points])
+
 
 def testCorrectionFunctionIteration():
     l = 100
     answers1 = numpy.zeros(l)
     answers2 = numpy.zeros(l) + 1
     answers = numpy.concatenate((answers1, answers2))
-    probs1  = numpy.random.rand(l) * numpy.random.rand(l)
-    probs2  = - numpy.random.rand(l) * numpy.random.rand(l) + 1.0
-    probs = numpy.zeros( (len(probs1) + len(probs2), 2))
-    probs[:,1] = numpy.concatenate((probs1, probs2))
-    probs[:,0] = 1 - probs[:,1]
-    
-    #plot(sort(probs1), sort(probs2))
-    
+    probs1 = numpy.random.rand(l) * numpy.random.rand(l)
+    probs2 = - numpy.random.rand(l) * numpy.random.rand(l) + 1.0
+    probs = numpy.zeros((len(probs1) + len(probs2), 2))
+    probs[:, 1] = numpy.concatenate((probs1, probs2))
+    probs[:, 0] = 1 - probs[:, 1]
+
     precisions, cuts = slidingEfficiencyArray(answers, probs)
-    
+
     lmb = correctionFunction(answers, probs, 20)
     newCuts = list([lmb(x) for x in cuts])
 
     mse = mean_squared_error(precisions, newCuts)
-    
-    maxMse = 0.001
-    if mse >= maxMse:
+
+    max_mse = 0.001
+    if mse >= max_mse:
         # the second graph should look like approximation of the first one
-        plot(cuts, precisions)
+        pylab.plot(cuts, precisions)
         plotFunction(lmb)
         pylab.show()
-        # this two graphs should coincide
-        plot(newCuts, precisions)
+        # these two plots should coincide
+        pylab.plot(newCuts, precisions)
         plotFunction(lambda x: x)
         pylab.show()
-        plot(precisions)
-        plot(newCuts)
+        pylab.plot(precisions)
+        pylab.plot(newCuts)
         pylab.show()
-        
-    assert mse < maxMse, "unexpectedly big deviation of mse " + str(mse)
+
+    assert mse < max_mse, "unexpectedly big deviation of mse " + str(mse)
+
 
 def testCorrectionFunction():
     for i in range(10):
         testCorrectionFunctionIteration()
-    print 'Correction function is ok'
-    
-    
+    print 'correction function is ok'
+
+
 testQuantiles()
 testCorrectionFunction()
 
@@ -477,51 +360,42 @@ def efficiencyPlotData(answers, prediction_probas):
     precisions, cuts = slidingEfficiencyArray(answers, prediction_probas)
     return cuts, precisions
 
-def efficiencyPlotData2(answers, prediction_probas, cuts = None, scoreFunc = Recall):
+
+def efficiencyPlotData2(answers, prediction_probas, cuts=None, scoreFunc=Recall):
     """All the same like precisionPlotData, but 10 times slower.
     Can compute not only recall, but other score functions as well"""
     if cuts is None:
         cuts = numpy.array(range(100)) * 0.01
     precisions = []
     for cut in cuts:
-        precisions.append(scoreFunc(answers, prediction_probas[:,1] > cut) )
+        precisions.append(scoreFunc(answers, prediction_probas[:, 1] > cut))
     return cuts, precisions
-    
-def TestEfficiencyPlotFunctions():
-    for i in range(5):
-        length =  (i + 1) * 100
-        getRand = lambda : numpy.random.rand(length)
+
+
+def testEfficiencyPlotFunctions():
+    for i in range(2):
+        length = (i + 1) * 100
+        getRand = lambda: numpy.random.rand(length)
         predict_probas = numpy.zeros((length, 2))
-        predict_probas[:,1] = getRand() * getRand() 
-        predict_probas[:,0] = 1 - predict_probas[:,1]
-        
+        predict_probas[:, 1] = getRand() * getRand()
+        predict_probas[:, 0] = 1 - predict_probas[:, 1]
+
         res = getRand() * 0.4 + 0.2
-        answers = predict_probas[:,1] > res
+        answers = predict_probas[:, 1] > res
         cuts, precisions = efficiencyPlotData(answers, predict_probas)
-        _, precisions2 = efficiencyPlotData2(answers, predict_probas, cuts = cuts)
+        _, precisions2 = efficiencyPlotData2(answers, predict_probas, cuts=cuts)
         mse = mean_squared_error(precisions, precisions2)
         maxMse = 1e-8
         if mse >= maxMse:
-            plot(cuts, precisions)
-            plot(cuts, precisions2)
+            pylab.plot(cuts, precisions)
+            pylab.plot(cuts, precisions2)
             pylab.show()
         assert mse < maxMse, "Something wrong with mse of efficiency functions, mse = " + str(mse)
-    print "EfficiencyPlotData functions are ok"
-    
-TestEfficiencyPlotFunctions()
-
-# <codecell>
-
-# execution time comparison
-#%timeit efficiencyPlotData(numpy.random.rand(1000) > 0.5, numpy.random.rand(1000))
-#%timeit efficiencyPlotData2(numpy.random.rand(1000) > 0.5, numpy.random.rand(1000))
-
-# <codecell>
+    print "efficiencyPlotData functions are ok"
 
 
+testEfficiencyPlotFunctions()
 
-def computeEfficiency(cut, answers, predictionProbas):
-    return recall_score(answers, predictionProbas[:,1] > cut)
 
 
 def computeBDTCut(target_efficiency, answers, prediction_probas):
@@ -532,52 +406,31 @@ def computeBDTCut(target_efficiency, answers, prediction_probas):
     """
     assert len(answers) == len(prediction_probas), "different size"
 
-    indices = (answers == 1)
+    indices = (answers > 0.5)
     signal_probas = prediction_probas[indices, 1]
     return numpy.percentile(signal_probas, 100 - target_efficiency * 100)
 
 
-def computeLocalEfficiencies(globalCut, knnIndices, answers, prediction_proba):
+def computeLocalEfficiencies(globalCut, knnIndices, answers, prediction_proba, smoothing_width=0.0):
     """Fast implementation in numpy"""
     assert len(answers) == len(prediction_proba), 'different size'
-    predictions = prediction_proba[:, 1] > globalCut
+    predictions = sigmoidFunction(prediction_proba[:, 1] - globalCut, smoothing_width)
     neigh_predictions = numpy.take(predictions, knnIndices)
     return neigh_predictions.mean(axis=1)
 
 
-def ComputeLocalEfficienciesDumb(globalCut, knnIndices, answers, prediction_proba):
-    """Slow, but obvious realization"""
-    assert len(answers) == len(prediction_proba), 'different size'
-    result = numpy.zeros(len(answers))
-    predictions = prediction_proba[:, 1] > globalCut
-
-    for i in range(len(knnIndices)):
-        neighbours = knnIndices[i]
-        result[i] = numpy.sum(predictions[neighbours]) * 1.0 / len(neighbours)
-    return result
-
-
-def plotVsMass(mass, values, is_signal):
-    assert len(mass) == len(values), 'different size'
-    assert len(mass) == len(is_signal), 'different size'
-    
-    plot(mass[is_signal], values[is_signal], ',', label='signal')
-    isBG = (is_signal == False)
-    plot(mass[isBG], values[isBG], ',', label='bg')
-
-
 def sigmoidFunction(x, width):
-    """
-    Sigmoid function is smoothing oh Heaviside function, the lesser width,
-     the closer we are to Heaviside function
+    """Sigmoid function is smoothing oh Heaviside function, the lesser width,
+       the closer we are to Heaviside function
     Parameters:
     * x - array of values
-    * width is float
+    * width is float, if width == 0, this is simply heaviside function
     """
     if abs(width) > 0.0001:
         return 1.0 / (1.0 + numpy.exp(-x / width))
     else:
         return (x > 0) * 1.0
+
 
 def generateSample(size, featuresNumber, distance=2.0):
     """
@@ -588,8 +441,8 @@ def generateSample(size, featuresNumber, distance=2.0):
     X = numpy.zeros((size, featuresNumber))
     y = numpy.zeros(size)
     signal_indices, bg_indices = train_test_split(range(size), test_size=0.5)
-    X[signal_indices,:] = numpy.random.normal(distance / 2, 1, (len(signal_indices), featuresNumber))
-    X[bg_indices,:]  = numpy.random.normal(-distance / 2, 1, (len(bg_indices), featuresNumber))
+    X[signal_indices, :] = numpy.random.normal(distance / 2., 1, (len(signal_indices), featuresNumber))
+    X[bg_indices, :] = numpy.random.normal(-distance / 2., 1, (len(bg_indices), featuresNumber))
 
     y[signal_indices] = 1
     y[bg_indices] = 0
@@ -598,36 +451,45 @@ def generateSample(size, featuresNumber, distance=2.0):
     X = pandas.DataFrame(X, columns=columns)
     return X, y
 
-def computeMseVariation(answer, prediction_proba, mass, binner):
-    cuts = [computeBDTCut(target_eff, answer, prediction_proba) for target_eff in [(i+1.0)/11 for i in range(10)]]
-    bins_data = binner.split_into_bins(mass, answer, prediction_proba)
-    result = 0
-    for cut in cuts:
-        efficiencies = []
-        for bin_masses, bin_answer, bin_proba in bins_data:
-            efficiencies.append(computeEfficiency(cut, bin_answer, bin_proba))
-        result += numpy.std(efficiencies) ** 2
-    return math.sqrt(result * 1.0 / binner.bins_number())
 
 
 
-def trainClassifiers(classifiers_dict, trainX, trainY):
-    for name, classifier in classifiers_dict.iteritems():
-        start_time = time.time()
-        classifier.fit(trainX, trainY)
-        print "Classifier %10s is learnt in %0.2f seconds" % (name, time.time() - start_time)
+def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, knn=50):
+    """For each event returns the knn closest signal events.
+    Parameters:
+        *uniform_variables* is list of names of variables,
+        using which we want to compute the distance
+
+        *dataframe* should contain these variables
+
+        *is_signal* is boolean numpy.array
+    Returns:
+        ndarray of shape (len(dataframe), knn),
+        each row contains indices of closest signal events
+    """
+    assert len(dataframe) == len(is_signal), "Different lengths"
+    signal_indices = numpy.where(is_signal)[0]
+    uniforming_features_of_signal = dataframe.ix[is_signal, uniform_variables]
+    neighbours = NearestNeighbors(n_neighbors=knn, algorithm='kd_tree').fit(uniforming_features_of_signal)
+    _, knn_signal_indices = neighbours.kneighbors(dataframe[uniform_variables])
+    return numpy.take(signal_indices, knn_signal_indices)
 
 
-def getClassifiersPredictionProba(classifiers_dict, testX):
-    return {name: classifier.predict_proba(testX) for name, classifier in classifiers_dict.iteritems()}
+def testComputeSignalKnnIndices(n_events=100):
+    df = pandas.DataFrame(numpy.random.rand(n_events, 10))
+    is_signal = numpy.random.rand(n_events) > 0.5
+    signal_indices = numpy.where(is_signal)[0]
+    unif_columns = df.columns[:1]
+    knn_indices = computeSignalKnnIndices(unif_columns, df, is_signal, 10)
+    distances = MinkowskiDistance(p=2).pairwise(df[unif_columns])
+    for i, neighbours in enumerate(knn_indices):
+        assert numpy.all(is_signal[neighbours]), "returned indices are not signal"
+        not_neighbours = [x for x in signal_indices if not x in neighbours]
+        minr = numpy.min(distances[i, not_neighbours])
+        maxr = numpy.max(distances[i, neighbours])
+        assert minr >= maxr, "distances are set wrongly!"
+    print "computeSignalKnnIndices is ok"
 
 
-def getClassifiersStagedPredictionProba(classifiers_dict, testX):
-    result = {}
-    for name, classifier in classifiers_dict.iteritems():
-        try:
-            result[name] = list(classifier.staged_predict_proba(testX))
-        except AttributeError:
-            print "Classifier %s doesn't provide staged_predict_proba" % name
-    return result
+testComputeSignalKnnIndices()
 
