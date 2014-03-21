@@ -201,6 +201,7 @@ def plotScoreVariableCorrelationSide2SideByPredictProba(predict_proba_dict, test
         pylab.subplot(1, len(predict_proba_dict), i)
         plotScoreVariableCorrelation(testY, predict_proba, testX[var_name], classifier_name=name, var_name=var_name,
                                      score_function=score_function, **kwargs)
+        pylab.title(name)
     pylab.show()
 
 

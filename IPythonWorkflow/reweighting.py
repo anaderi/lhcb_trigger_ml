@@ -28,14 +28,14 @@ class ReweightClassifier(BaseEstimator, ClassifierMixin):
         self.debug_dict = defaultdict(list)
         y = numpy.array(y > 0.5)
         knn_all_indices = commonutils.computeSignalKnnIndices(self.uniform_variables, X,
-                                                              is_signal=(y > -1), knn=self.knn)
+                                                              is_signal=(y > -1), n_neighbors=self.knn)
         self.debug_dict['knn_all_indices'] = knn_all_indices
         weights = 1.0 / (numpy.take(y * 1.0, knn_all_indices).mean(axis=1) + 1e-8)
         bg_weight = numpy.mean(weights[y])
         weights[~y] = bg_weight
         weights /= numpy.sum(weights)
 
-        knn_indices = commonutils.computeSignalKnnIndices(self.uniform_variables, X, is_signal=y, knn=self.knn)
+        knn_indices = commonutils.computeSignalKnnIndices(self.uniform_variables, X, is_signal=y, n_neighbors=self.knn)
         X_train = self.get_train_variables(X)
 
         self.debug_dict['knn_indices'] = knn_indices

@@ -454,7 +454,7 @@ def generateSample(size, featuresNumber, distance=2.0):
 
 
 
-def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, knn=50):
+def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, n_neighbors=50):
     """For each event returns the knn closest signal events.
     Parameters:
         *uniform_variables* is list of names of variables,
@@ -470,7 +470,7 @@ def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, knn=50):
     assert len(dataframe) == len(is_signal), "Different lengths"
     signal_indices = numpy.where(is_signal)[0]
     uniforming_features_of_signal = dataframe.ix[is_signal, uniform_variables]
-    neighbours = NearestNeighbors(n_neighbors=knn, algorithm='kd_tree').fit(uniforming_features_of_signal)
+    neighbours = NearestNeighbors(n_neighbors=n_neighbors, algorithm='kd_tree').fit(uniforming_features_of_signal)
     _, knn_signal_indices = neighbours.kneighbors(dataframe[uniform_variables])
     return numpy.take(signal_indices, knn_signal_indices)
 
