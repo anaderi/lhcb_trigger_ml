@@ -5,15 +5,16 @@ import numpy
 import numpy as np
 from numpy.lib._compiled_base import bincount
 from sklearn.base import BaseEstimator, clone
-from sklearn.ensemble.weight_boosting import ClassifierMixin, AdaBoostClassifier
+from sklearn.ensemble.weight_boosting import ClassifierMixin
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays, column_or_1d
 
-__author__ = 'Alex Rogozhnikov'
-
 from commonutils import computeLocalEfficiencies, computeBDTCut, sigmoidFunction, \
     generateSample, computeSignalKnnIndices
+
+__author__ = 'Alex Rogozhnikov'
+
 
 
 class uBoostBDT:
@@ -99,20 +100,12 @@ class uBoostBDT:
             Classification error for each estimator in the boosted
             ensemble.
 
-        `feature_importances_` : array of shape = [n_features]
-            The feature importances if supported by the ``base_estimator``.
-
         Reference
         ----------
         .. [1] Justin Stevens, Mike Williams 'uBoost: A boosting method for producing uniform
             selection efficiencies from multivariate classifiers'
         """
-        # AdaBoostClassifier.__init__(self,
-        #                             base_estimator=base_estimator,
-        #                             n_estimators=n_estimators,
-        #                             learning_rate=learning_rate,
-        #                             algorithm='SAMME',
-        #                             random_state=random_state)
+
         self.base_estimator = base_estimator
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
@@ -177,7 +170,6 @@ class uBoostBDT:
         else:
             # Normalize existing weights
             sample_weight = numpy.copy(sample_weight) / sample_weight.sum()
-            # Check that the sample weights sum is positive
 
         # Clear any previous fit results
         self.estimators_ = []
@@ -236,8 +228,8 @@ class uBoostBDT:
             # Instances incorrectly classified
             incorrect = y_predict != y
 
-            # Error fraction, TODO delete mean
-            estimator_error = np.mean(np.average(incorrect, weights=sample_weight, axis=0))
+            # Error fraction
+            estimator_error = np.average(incorrect, weights=sample_weight)
             self.estimator_errors_[iboost] = estimator_error
 
             # Stop if classification is perfect
@@ -263,8 +255,6 @@ class uBoostBDT:
             predict_proba = self.score_to_proba(cumulative_score)
 
             global_cut = computeBDTCut(self.target_efficiency, y, predict_proba)
-            # print iboost, global_cut, self.target_efficiency
-            # print sum(predict_proba[:, 1] >= global_cut), self.target_efficiency * sum(y)
             self.bdt_cuts_.append(global_cut)
             local_efficiencies = computeLocalEfficiencies(global_cut, self.knn_indices,
                                                           y, predict_proba, self.smoothing)
@@ -341,14 +331,63 @@ class uBoostBDT:
 class uBoostClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, uniform_variables=None,
                  n_neighbors=50,
-                 efficiency_steps=100,
-                 random_state=None,
+                 efficiency_steps=20,
                  n_estimators=40,
                  base_estimator=DecisionTreeClassifier(max_depth=1),
                  bagging=True,
                  train_variables=None,
                  boost_only_signal=True,
-                 smoothing=None):
+                 smoothing=None,
+                 random_state=None):
+        """uBoost classifier, am algorithm of boosting targeted to obtain
+        flat efficiency in signal along some variables. See [1] for details.
+
+        Parameters
+        ----------
+        uniform_variables: list of strings, names of variables, along which flatness is desired
+
+        n_neighbours: int, (default=50) the number of neighbours,
+            which are used to compute local efficiency
+
+        n_estimators : integer, optional (default=50)
+            The maximum number of estimators at which boosting is terminated.
+            In case of perfect fit, the learning procedure is stopped early.
+
+        efficiency_steps: integer, optional (default=20),
+            How many uBoostBDTs should be trained (each with its own target_efficiency)
+
+        base_estimator : object, optional (default=DecisionTreeClassifier)
+            The base estimator from which the boosted ensemble is built.
+            Support for sample weighting is required, as well as proper `classes_`
+            and `n_classes_` attributes.
+
+        bagging: float or bool (default=True), bagging usually speeds up the convergence
+            and prevents overfitting (see http://en.wikipedia.org/wiki/Bootstrap_aggregating)
+            if True, usual bootstrap aggregating is used (sampling with replacement at each iteration, size=len(X))
+            if float, used sampling with replacement, the size of generated set is bagging * len(X)
+            if False, usual boosting is used
+
+        train_variables: list of strings, names of variables used in fit/predict.
+            if None, all the variables are used (including uniform_variables)
+
+        boost_only_signal: bool (default=True),
+            if True, only weights of signal are changed depending on local efficiency (as in uBoost)
+            if False, both weights of signal and background are changed
+
+        smoothing: float, default=(0.), used to smooth computing of local efficiencies
+            0.0 corresponds to usual uBoost
+
+        random_state : int, RandomState instance or None, optional (default=None)
+            If int, random_state is the seed used by the random number generator;
+            If RandomState instance, random_state is the random number generator;
+            If None, the random number generator is the RandomState instance used
+            by `np.random`.
+
+        Reference
+        ----------
+        .. [1] Justin Stevens, Mike Williams 'uBoost: A boosting method for producing uniform
+            selection efficiencies from multivariate classifiers'
+        """
         self.uniform_variables = uniform_variables
         self.knn = n_neighbors
         self.efficiency_steps = efficiency_steps
@@ -394,7 +433,8 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
 
     def predict(self, X):
         return numpy.argmax(self.predict_proba(X), axis=1)
-    # TODO think of using score other predictions
+
+    # TODO think of using score predictions
     def predict_proba(self, X):
         X_train_vars = self.get_train_variables(X)
 
@@ -451,9 +491,8 @@ def test_uboost_classifier():
                                      bdt_classifier.bdt_cuts_)]
 
         assert bdt_classifier.bdt_cut == bdt_classifier.bdt_cuts_[-1], 'something wrong with computed cuts'
-        for filter_lower, filter_upper in zip(staged_filtered_lower, staged_filtered_upper )[10:]:
-            # TODO why not precise
-            assert filter_lower - 5 <= sum(trainY) * target_efficiency <= filter_upper + 5, "stage cut is set wrongly"
+        for filter_lower, filter_upper in zip(staged_filtered_lower, staged_filtered_upper)[10:]:
+            assert filter_lower - 1 <= sum(trainY) * target_efficiency <= filter_upper + 1, "stage cut is set wrongly"
 
     uboost_classifier = uBoostClassifier(uniform_variables=uniform_variables, n_neighbors=20, efficiency_steps=3,
                                          n_estimators=20)
