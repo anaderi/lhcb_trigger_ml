@@ -1,9 +1,11 @@
 from collections import defaultdict
+
 import numpy
+import math
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.ensemble.forest import RandomForestClassifier
-from sklearn.neighbors.unsupervised import NearestNeighbors
 from sklearn.tree.tree import DecisionTreeClassifier
+
 import commonutils
 
 
@@ -47,14 +49,17 @@ class ReweightClassifier(BaseEstimator, ClassifierMixin):
 
             # here we compute local efficiency as mean probability of signal among knn
             local_efficiencies = numpy.take(predict_probas[:, 1], knn_indices).mean(axis=1)
-            mse = numpy.var(numpy.log(local_efficiencies))
+            global_cut = commonutils.computeBDTCut(0.5, y, predict_probas)
+            local_efficiencies = commonutils.computeLocalEfficiencies(global_cut, knn_indices, y, predict_probas,
+                                                                      smoothing_width=0.01)
+            mse = math.sqrt(numpy.var(numpy.log(local_efficiencies)))
 
             weights *= numpy.exp(- local_efficiencies * y * self.learning_rate * mse)
             bg_weight = numpy.mean(weights[y])
             weights[~y] = bg_weight
             weights /= numpy.sum(weights)
-            self.debug_dict['weights'].append(weights)
-            self.debug_dict['local_efficiencies'].append(local_efficiencies)
+            self.debug_dict['weights'].append(weights.copy())
+            self.debug_dict['local_efficiencies'].append(local_efficiencies.copy())
             self.debug_dict['estimators'].append(estimator)
 
         self.trained_estimator = estimator
@@ -84,13 +89,13 @@ class ReweightClassifier(BaseEstimator, ClassifierMixin):
         return self.trained_estimator.predict_proba(X)
 
 
-def TestReweightClassifier():
+def testReweightClassifier():
     trainX, trainY = commonutils.generateSample(4000, 5, 2.0)
     testX, testY = commonutils.generateSample(4000, 5, 2.0)
 
     reweighter = ReweightClassifier(uniform_variables=trainX.columns[:1],
                             base_estimator=RandomForestClassifier(n_estimators=10),
-                            iterations=10, learning_rate=10000)
+                            iterations=10, learning_rate=100)
     reweighter.fit(trainX, trainY)
     reweighter.predict(testX)
     reweighter.predict_proba(testX)
@@ -98,4 +103,4 @@ def TestReweightClassifier():
     print "reweighting is ok"
 
 
-TestReweightClassifier()
+testReweightClassifier()

@@ -2,7 +2,6 @@ from collections import defaultdict
 import math
 
 import numpy
-import numpy as np
 from numpy.lib._compiled_base import bincount
 from sklearn.base import BaseEstimator, clone
 from sklearn.ensemble.weight_boosting import ClassifierMixin
@@ -173,8 +172,8 @@ class uBoostBDT:
 
         # Clear any previous fit results
         self.estimators_ = []
-        self.estimator_weights_ = np.zeros(self.n_estimators, dtype=np.float)
-        self.estimator_errors_ = np.ones(self.n_estimators, dtype=np.float)
+        self.estimator_weights_ = numpy.zeros(self.n_estimators, dtype=numpy.float)
+        self.estimator_errors_ = numpy.ones(self.n_estimators, dtype=numpy.float)
         # BDT cuts, which correspond to global efficiency == target_efficiency on each iteration
         self.bdt_cuts_ = []
 
@@ -229,7 +228,7 @@ class uBoostBDT:
             incorrect = y_predict != y
 
             # Error fraction
-            estimator_error = np.average(incorrect, weights=sample_weight)
+            estimator_error = numpy.average(incorrect, weights=sample_weight)
             self.estimator_errors_[iboost] = estimator_error
 
             # Stop if classification is perfect
@@ -240,13 +239,13 @@ class uBoostBDT:
             # Stop if the error is at least as bad as random guessing <-- I've deleted that
 
             # Boost weight using multi-class AdaBoost SAMME alg
-            estimator_weight = self.learning_rate * (np.log((1. - estimator_error) / estimator_error))
+            estimator_weight = self.learning_rate * (numpy.log((1. - estimator_error) / estimator_error))
             self.estimator_weights_[iboost] = estimator_weight
 
             # Default SAMME -- boosting only positive weights
-            # sample_weight *= np.exp(estimator_weight * incorrect * ((sample_weight > 0) | (estimator_weight < 0)))
+            # sample_weight *= numpy.exp(estimator_weight * incorrect * ((sample_weight > 0) | (estimator_weight < 0)))
 
-            sample_weight *= np.exp(estimator_weight * incorrect)
+            sample_weight *= numpy.exp(estimator_weight * incorrect)
             sample_weight += 1e-30
             sample_weight /= numpy.sum(sample_weight)
 
@@ -273,8 +272,8 @@ class uBoostBDT:
                 return
             sample_weight /= sample_weight_sum
 
-            self.debug_dict['weights'].append(sample_weight)
-            self.debug_dict['local_efficiencies'].append(local_efficiencies)
+            self.debug_dict['weights'].append(sample_weight.copy())
+            self.debug_dict['local_efficiencies'].append(local_efficiencies.copy())
 
 
     def get_train_vars(self, X):
@@ -301,8 +300,8 @@ class uBoostBDT:
     @staticmethod
     def score_to_proba(score):
         """Compute class probability estimates from decision scores. """
-        proba = np.ones((score.shape[0], 2), dtype=np.float64)
-        proba[:, 1] = 1.0 / (1.0 + np.exp(-score.ravel()))
+        proba = numpy.ones((score.shape[0], 2), dtype=numpy.float64)
+        proba[:, 1] = 1.0 / (1.0 + numpy.exp(-score.ravel()))
         proba[:, 0] -= proba[:, 1]
         return proba
 
@@ -381,7 +380,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
             If int, random_state is the seed used by the random number generator;
             If RandomState instance, random_state is the random number generator;
             If None, the random number generator is the RandomState instance used
-            by `np.random`.
+            by `numpy.random`.
 
         Reference
         ----------
@@ -410,7 +409,8 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
             raise ValueError("Please set uniformVariables")
         if len(self.uniform_variables) == 0:
             raise ValueError("The set of uniform variables cannot be empty")
-        assert len(X) == len(y), "different size"
+        if len(X) != len(y):
+            raise ValueError("Different size of X and y")
 
         X_train_vars = self.get_train_variables(X)
 
@@ -437,8 +437,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
     # TODO think of using score predictions
     def predict_proba(self, X):
         X_train_vars = self.get_train_variables(X)
-
-        signal_proba = np.zeros(len(X))
+        signal_proba = numpy.zeros(len(X))
         result = numpy.zeros([len(X), 2])
         for efficiency, classifier in zip(self.target_efficiencies, self.classifiers):
             signal_proba += sigmoidFunction(classifier.predict_proba(X_train_vars)[:, 1] - classifier.bdt_cut,
