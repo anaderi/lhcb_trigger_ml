@@ -8,56 +8,8 @@ from sklearn.tree.tree import DecisionTreeClassifier
 from commonutils import generateSample
 import commonutils
 
-# class BinomialDeviance(LossFunction):
-#     """Binomial deviance loss function for binary classification.
-#
-#     Binary classification is a special case; here, we only need to
-#     fit one tree instead of ``n_classes`` trees.
-#     """
-#     def __init__(self, n_classes):
-#         if n_classes != 2:
-#             raise ValueError("{0:s} requires 2 classes.".format(
-#                 self.__class__.__name__))
-#         # we only need to fit one tree for binary clf.
-#         super(BinomialDeviance, self).__init__(1)
-#
-#     def init_estimator(self):
-#         return LogOddsEstimator()
-#
-#     def __call__(self, y, pred):
-#         """Compute the deviance (= 2 * negative log-likelihood). """
-#         # logaddexp(0, v) == log(1.0 + exp(v))
-#         pred = pred.ravel()
-#         return -2.0 * np.mean((y * pred) - np.logaddexp(0.0, pred))
-#
-#     def negative_gradient(self, y, pred, **kargs):
-#         """Compute the residual (= negative gradient). """
-#         return y - 1.0 / (1.0 + np.exp(-pred.ravel()))
-#
-#     def _update_terminal_region(self, tree, terminal_regions, leaf, X, y,
-#                                 residual, pred):
-#         """Make a single Newton-Raphson step.
-#
-#         our node estimate is given by:
-#
-#             sum(y - prob) / sum(prob * (1 - prob))
-#
-#         we take advantage that: y - prob = residual
-#         """
-#         terminal_region = np.where(terminal_regions == leaf)[0]
-#         residual = residual.take(terminal_region, axis=0)
-#         y = y.take(terminal_region, axis=0)
-#
-#         numerator = residual.sum()
-#         denominator = np.sum((y - residual) * (1 - y + residual))
-#
-#         if denominator == 0.0:
-#             tree.value[leaf, 0, 0] = 0.0
-#         else:
-#             tree.value[leaf, 0, 0] = numerator / denominator
 
-
-
+# TODO move computing of knn_indices to fit function of classifier ot transmit it as fit parameter
 class KnnLossFunction(LossFunction):
     def __init__(self, n_classes, coefficients_matrix, initial_weights=None):
         if n_classes != 2:

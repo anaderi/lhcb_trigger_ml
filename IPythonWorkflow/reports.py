@@ -121,8 +121,7 @@ def plotScoreVariableCorrelation(answers, prediction_proba, correlation_values,
         pylab.legend(loc="lower right")
 
 
-def plotMassEfficiencyCorrelation(answers, prediction_proba,
-                                  masses, classifier_name):
+def plotMassEfficiencyCorrelation(answers, prediction_proba, masses, classifier_name):
     """
     Just a particular case of previous function
     Splits all the events by mass into 20 bins of equal size,
@@ -131,8 +130,8 @@ def plotMassEfficiencyCorrelation(answers, prediction_proba,
     - predictionProbabilities - array of probabilities given by classifier
     - masses - array of masses
     """
-    plotScoreVariableCorrelation(answers, prediction_proba, masses,
-                                 classifier_name, var_name='mass', score_function=Efficiency, y_limits=(0, 1))
+    plotScoreVariableCorrelation(answers, prediction_proba, masses, classifier_name,
+                                 var_name='mass', score_function=Efficiency, y_limits=(0, 1))
 
 
 def plotLearningCurves(answers, staged_proba_dict, step=1, metrics=roc_auc_score):

@@ -95,7 +95,7 @@ def splitOnTestAndTrain(signalDataFrame, bgDataFrame,
 
 def my_train_test_split(*arrays, **kw_args):
     """
-    Does the same thin as train_test_split, but preserves columns in dataframes
+    Does the same thin as train_test_split, but preserves columns in DataFrames
     Uses the same parameters: test_size. train_size, random_state
     """
     assert len(arrays) > 0, "at least one array should be given"
@@ -199,7 +199,6 @@ def testBinner():
 testBinner()
 
 
-
 def slidingEfficiencyArray(answers, prediction_proba):
     """Returns two arrays,
     if threshold == second array[i]
@@ -210,54 +209,19 @@ def slidingEfficiencyArray(answers, prediction_proba):
     indices = numpy.argsort(signal_probabilities)
     ans = answers[indices]
     probs = signal_probabilities[indices]
-    AsSig = len(ans)
-    IsSig = numpy.sum(ans)
-    IsSigAsSig = numpy.sum(ans)
-    precision = numpy.zeros(len(ans))
-    for i in range(len(ans)):
-        AsSig -= 1
-        if ans[i]:
-            IsSigAsSig -= 1
-        precision[i] = IsSigAsSig * 1.0 / (IsSig + 0.0001)
-    return precision, probs
+
+    IsSig = numpy.sum(ans) + 1e-6
+    IsSigAsSig = numpy.sum(ans) - numpy.cumsum(ans)
+
+    return IsSigAsSig / IsSig, probs
 
 
-def getQuantilesOnTargets(sortedArray, targets):
-    return numpy.minimum(numpy.searchsorted(sortedArray, targets), len(sortedArray) - 1)
-
-
-def getQuantiles(sortedArray, n):
-    """Get the positions, at which array values 
-    becomes greater then quantiles (well, this is what really quantiles is,
-    though numpy quantiles are a bit different thing)
-    """
-    targets = [i * 1.0 / n for i in range(0, n + 1)]
-    return getQuantilesOnTargets(sortedArray, targets)
-
-
-def getQuantilesOfTargetsPrecise(sortedArray, targets):
-    """
-    Dumb implementation of previous function
-    """
-    if len(targets) == 0:
-        return
-    currentTarget = 0
-    for i in range(len(sortedArray)):
-        while (targets[currentTarget] <= sortedArray[i]):
-            yield i
-            currentTarget += 1
-            if (currentTarget >= len(targets)):
-                return
-    while currentTarget < len(targets):
-        yield len(sortedArray)
-        currentTarget += 1
-
-
-def getProbabilityQuantiles(answers, prediction_probas, n):
-    precision, cuts = slidingEfficiencyArray(answers, prediction_probas)
-    assert numpy.all(cuts == numpy.sort(cuts)), 'Something wrong with cuts - not monotonic '
-    indices = list(getQuantiles(cuts, n))
-    return precision[indices]
+def computeEfficiencyAtCuts(answers, predictions_proba, cuts):
+    """A bit unprecise, for each cut this function computes the efficiency"""
+    efficiencies, thresholds = slidingEfficiencyArray(answers, predictions_proba)
+    indices = numpy.searchsorted(thresholds, cuts)
+    indices = numpy.clip(indices, 0, len(thresholds) - 1)
+    return efficiencies[indices]
 
 
 def interpolate(y_array, x):
@@ -277,38 +241,33 @@ def massive_interpolate(y_array, x):
     returns array of the same length as x
     """
     y_array = numpy.array(y_array)
-    x = numpy.minimum(x, len(y_array) - 1.0001)
-    x = numpy.maximum(x, 0.0001)
+    x = numpy.clip(x, 0.0001, len(y_array) - 1.0001)
     n = numpy.floor(x).astype(numpy.int)
     t = x - n
     return y_array.take(n) * (1.0 - t) + y_array.take(n + 1) * t
 
 
 def correctionFunction(answers, predict_proba, steps=10):
-    quantiles = getProbabilityQuantiles(answers, predict_proba, steps)
-    return lambda x: interpolate(quantiles, x * (len(quantiles) - 1))
+    cuts = [i * 1.0 / steps for i in range(0, steps + 1)]
+    values = numpy.array([recall_score(answers, predict_proba[:, 1] > cut) for cut in cuts])
+    return lambda x: interpolate(values, x * (len(values) - 1))
 
 
 def massiveCorrectionFunction(answers, predict_proba, steps=10):
-    quantiles = getProbabilityQuantiles(answers, predict_proba, steps)
-    return lambda x: massive_interpolate(quantiles, x * (len(quantiles) - 1))
+    cuts = [i * 1.0 / steps for i in range(0, steps + 1)]
+    values = computeEfficiencyAtCuts(answers, predict_proba, cuts)
+    return lambda x: massive_interpolate(values, x * (len(values) - 1))
 
 
-def testQuantiles():
-    y = numpy.array(range(100)) * 0.0101
-    targets = [0.005 + 0.099 * i for i in range(10)]
-    y = y ** 3
-    quantiles = list(getQuantilesOnTargets(y, targets))
-    for i, target in zip(quantiles, targets):
-        assert y[i - 1] <= target <= y[i], 'quantiles are wrong'
-    print 'quantiles are ok'
+def testCorrectionFunctions(size=1000):
+    ans = numpy.random.random(size) > 0.5
+    probs = numpy.random.random((size, 2))
+    correctionFunction(ans, probs, 10)
+    massiveCorrectionFunction(ans, probs, 10)
 
 
-def plotFunction(lmb, segment=None):
-    if segment is None:
-        segment = [0, 1]
-    x_points = numpy.arange(segment[0], segment[1], (segment[1] - segment[0] * 0.01))
-    pylab.plot(x_points, [lmb(x) for x in x_points])
+testCorrectionFunctions()
+
 
 
 def testCorrectionFunctionIteration():
@@ -324,20 +283,22 @@ def testCorrectionFunctionIteration():
 
     precisions, cuts = slidingEfficiencyArray(answers, probs)
 
-    lmb = correctionFunction(answers, probs, 20)
-    newCuts = list([lmb(x) for x in cuts])
+    lmb = massiveCorrectionFunction(answers, probs, 20)
+    newCuts = lmb(cuts)
+        # list([lmb(x) for x in cuts])
 
     mse = mean_squared_error(precisions, newCuts)
-
+    # todo rewrite plotting for massive interpolation
     max_mse = 0.001
+    x_range = numpy.arange(0, 1, 0.01)
     if mse >= max_mse:
         # the second graph should look like approximation of the first one
         pylab.plot(cuts, precisions)
-        plotFunction(lmb)
+        pylab.plot(x_range, lmb(x_range))
         pylab.show()
         # these two plots should coincide
         pylab.plot(newCuts, precisions)
-        plotFunction(lambda x: x)
+        pylab.plot(x_range, x_range)
         pylab.show()
         pylab.plot(precisions)
         pylab.plot(newCuts)
@@ -352,7 +313,7 @@ def testCorrectionFunction():
     print 'correction function is ok'
 
 
-testQuantiles()
+# testQuantiles()
 testCorrectionFunction()
 
 
@@ -452,8 +413,6 @@ def generateSample(size, featuresNumber, distance=2.0):
     return X, y
 
 
-
-
 def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, n_neighbors=50):
     """For each event returns the knn closest signal events.
     Parameters:
@@ -475,6 +434,16 @@ def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, n_neighbors
     return numpy.take(signal_indices, knn_signal_indices)
 
 
+def computeKnnIndicesOfSameClass(uniform_variables, trainX, trainY, n_neighbours=50):
+    """Works as previous function, but returns the neighbours of the same class as element"""
+    assert len(trainX) == len(trainY), "different size"
+    is_signal = trainY > 0.5
+    signal_knn = computeSignalKnnIndices(uniform_variables, trainX, is_signal, n_neighbours)
+    bg_knn = computeSignalKnnIndices(uniform_variables, trainX, ~is_signal, n_neighbours)
+    bg_knn[is_signal, :] = signal_knn[is_signal, :]
+    return bg_knn
+
+
 def testComputeSignalKnnIndices(n_events=100):
     df = pandas.DataFrame(numpy.random.rand(n_events, 10))
     is_signal = numpy.random.rand(n_events) > 0.5
@@ -488,6 +457,11 @@ def testComputeSignalKnnIndices(n_events=100):
         minr = numpy.min(distances[i, not_neighbours])
         maxr = numpy.max(distances[i, neighbours])
         assert minr >= maxr, "distances are set wrongly!"
+
+    knn_all_indices = computeKnnIndicesOfSameClass(unif_columns, df, is_signal, 10)
+    for i, neighbours in enumerate(knn_all_indices):
+        assert numpy.all(is_signal[neighbours] == is_signal[i]), "returned indices are not signal/bg"
+
     print "computeSignalKnnIndices is ok"
 
 
