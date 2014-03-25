@@ -12,16 +12,16 @@ and some functions to import data from ROOT files, these one need ROOT and pytho
 There is also procedure to generate toy Monte-Carlo (generates new set of events based on the set of events we already have with same distribution) and special notebook 'ToyMonteCarlo' to demonstrate and analyze its results. 
 
 ###Getting this to work
-To run the UniformingClassifiersExample notebook, only IPython and some python libraries is needed.
+To run most the notebooks, only IPython and some python libraries are needed.
 
-To run other example notebooks on some machine, you should have
-* CERN ROOT, make sure you have it by typing 'root' in the console
+To run example notebooks on some machine, one should have
 * IPython, see ipython.org/install.html
 * Some python libraries that can be installed using any package manager for python
   (apt-get will work too, but Ubuntu repo contains quite old versions of libraries),
   better use pip: 
   pip-installer.org 
   
+
 The libraries you need are
 * numpy 
 * scipy
@@ -36,6 +36,8 @@ IPython can be installed via pip as well
  <pre> sudo pip install ipython</pre>
  To run IPython, there is shell script in IpythonWorkflow/ subfolder
 
+In order to work with ROOT files, you need CERN ROOT, make sure you have it by typing 'root' in the console
+
+
 ###Roadway:
-uBoost implementation in python will be added soon.
 We are going to publish notebook on some server to provide easy access from any machine.
