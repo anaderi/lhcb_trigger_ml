@@ -49,9 +49,9 @@ class ReweightClassifier(BaseEstimator, ClassifierMixin):
 
             # here we compute local efficiency as mean probability of signal among knn
             local_efficiencies = numpy.take(predict_probas[:, 1], knn_indices).mean(axis=1)
-            global_cut = commonutils.computeBDTCut(0.5, y, predict_probas)
-            local_efficiencies = commonutils.computeLocalEfficiencies(global_cut, knn_indices, y, predict_probas,
-                                                                      smoothing_width=0.01)
+            # global_cut = commonutils.computeBDTCut(0.5, y, predict_probas)
+            # local_efficiencies = commonutils.computeLocalEfficiencies(global_cut, knn_indices, y, predict_probas,
+            #                                                           smoothing_width=0.01)
             mse = math.sqrt(numpy.var(numpy.log(local_efficiencies)))
 
             weights *= numpy.exp(- local_efficiencies * y * self.learning_rate * mse)
