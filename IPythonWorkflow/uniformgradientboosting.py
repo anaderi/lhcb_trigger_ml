@@ -6,7 +6,7 @@ import numpy
 from sklearn.ensemble.weight_boosting import AdaBoostClassifier
 from sklearn.tree.tree import DecisionTreeClassifier
 from commonutils import generateSample
-
+import commonutils
 
 # class BinomialDeviance(LossFunction):
 #     """Binomial deviance loss function for binary classification.
@@ -55,7 +55,7 @@ from commonutils import generateSample
 #             tree.value[leaf, 0, 0] = 0.0
 #         else:
 #             tree.value[leaf, 0, 0] = numerator / denominator
-import commonutils
+
 
 
 class KnnLossFunction(LossFunction):
@@ -64,12 +64,12 @@ class KnnLossFunction(LossFunction):
             raise NotImplementedError("Only 2 classes supported!")
         LossFunction.__init__(self, 1)
         self.coefficients_matrix = coefficients_matrix
-        self.coefficients_matrix_t = coefficients_matrix.transpose()
+        self.coefficients_matrix_t = sparse.csr_matrix(coefficients_matrix.transpose())
         if initial_weights is None:
             initial_weights = numpy.ones(coefficients_matrix.shape[0])
         else:
             assert len(initial_weights) == coefficients_matrix.shape[0], "Different size"
-        self.initial_weights = initial_weights
+        self.initial_weights = numpy.array(initial_weights)
 
     def __call__(self, y, pred):
         """Computing the loss itself"""
@@ -99,7 +99,7 @@ class KnnLossFunction(LossFunction):
         # terminal_region = numpy.where(terminal_regions == leaf)[0]
         y_signed = 2 * y - 1
         z = self.coefficients_matrix.dot((terminal_regions == leaf) * y_signed)
-        alpha = sum(self.update_exponents * z) / (sum(self.update_exponents * z * z) + 1e-10)
+        alpha = numpy.sum(self.update_exponents * z) / (numpy.sum(self.update_exponents * z * z) + 1e-10)
         tree.value[leaf, 0, 0] = alpha
 
 
@@ -109,12 +109,15 @@ class PairwiseKnnLossFunction(KnnLossFunction):
         knn_signal = commonutils.computeSignalKnnIndices(uniform_variables, trainX, is_signal, knn)
         knn_bg = commonutils.computeSignalKnnIndices(uniform_variables, trainX, ~is_signal, knn)
         knn_bg[is_signal, :] = knn_signal[is_signal, :]
-        coefficients_matrix = sparse.csr_matrix(len(trainX) * knn, len(trainX))
-        for i in range(len(knn_bg)):
-            for j in range(knn):
-                row = i * knn + j
-                coefficients_matrix[row, i] += 1
-                coefficients_matrix[row, knn_bg[i, j]] += 1
+
+        rows = xrange(len(trainX) * knn)
+        columns1 = numpy.repeat(numpy.arange(0, len(trainX)), knn)
+        columns2 = knn_bg.flatten()
+        data = numpy.ones(len(rows))
+
+        coefficients_matrix = sparse.csr_matrix((data, (rows, columns1)), shape=[len(trainX) * knn, len(trainX)]) + \
+            sparse.csr_matrix((data, (rows, columns2)), shape=[len(trainX) * knn, len(trainX)])
+
         KnnLossFunction.__init__(self, 2, coefficients_matrix)
 
 
@@ -124,10 +127,10 @@ class SimpleKnnLossFunction(KnnLossFunction):
         knn_signal = commonutils.computeSignalKnnIndices(uniform_variables, trainX, is_signal, knn)
         knn_bg = commonutils.computeSignalKnnIndices(uniform_variables, trainX, ~is_signal, knn)
         knn_bg[is_signal, :] = knn_signal[is_signal, :]
-        coefficients_matrix = sparse.csr_matrix(len(trainX), len(trainX))
-        for i in range(len(knn_bg)):
-            for j in range(knn):
-                coefficients_matrix[i, knn_bg[i, j]] += 1
+        ind_ptr = numpy.arange(0, len(trainX) * knn + 1, knn)
+        column_indices = knn_bg.flatten()
+        data = numpy.ones(len(trainX) * knn)
+        coefficients_matrix = sparse.csr_matrix((data, column_indices, ind_ptr), shape=(len(trainX), len(trainX)))
         KnnLossFunction.__init__(self, 2, coefficients_matrix)
 
 
@@ -203,13 +206,20 @@ def testGradientBoosting():
     base_estimator = DecisionTreeClassifier(min_samples_split=20, max_depth=None)
     n_estimators = 40
     samples = 2000
+    samples_min = 200
 
-    classifier = MyGradientBoostingClassifier(min_samples_split=20,
-                                              loss=KnnLossFunction(2, sparse.eye(1000, samples)),
-                                              max_depth=None, learning_rate=.2, n_estimators=n_estimators)
-    classifier.fit(trainX[:samples], trainY[:samples])
-    classifier.predict(testX)
-    print classifier.score(testX, testY)
+    loss2 = SimpleKnnLossFunction(trainX, trainY, uniform_variables)
+    print MyGradientBoostingClassifier(min_samples_split=20, loss=loss2, max_depth=None, learning_rate=.2,
+        n_estimators=n_estimators).fit(trainX, trainY).score(testX, testY),
+
+    loss3 = PairwiseKnnLossFunction(trainX[:samples_min], trainY[:samples_min], uniform_variables)
+    print MyGradientBoostingClassifier(min_samples_split=20, loss=loss3, max_depth=None, learning_rate=.2,
+        n_estimators=n_estimators).fit(trainX[:samples_min], trainY[:samples_min]).score(testX, testY),
+
+    print MyGradientBoostingClassifier(min_samples_split=20, loss=KnnLossFunction(2, sparse.eye(1000, samples)),
+                                       max_depth=None, learning_rate=.2, n_estimators=n_estimators)\
+        .fit(trainX[:samples], trainY[:samples]).score(testX, testY),
+
     print AdaBoostClassifier(n_estimators=n_estimators, base_estimator=base_estimator).fit(trainX, trainY)\
         .score(testX, testY)
 

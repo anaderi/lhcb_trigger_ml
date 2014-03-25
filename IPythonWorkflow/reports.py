@@ -140,7 +140,7 @@ def plotLearningCurves(answers, staged_proba_dict, step=1, metrics=roc_auc_score
     'metrics' is evaluated after each 'step' iterations"""
     for classifier_name, staged_probas in staged_proba_dict.iteritems():
         roc = [metrics(answers, prediction_proba[:, 1]) for prediction_proba in staged_probas[::step]]
-        pylab.plot(roc, label=classifier_name)
+        pylab.plot(range(len(staged_probas))[::step], roc, label=classifier_name)
     pylab.legend(loc="lower right")
     pylab.xlabel("stage")
     pylab.ylabel("ROC AUC")
