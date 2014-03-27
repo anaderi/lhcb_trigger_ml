@@ -13,7 +13,8 @@ class ReweightClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, uniform_variables, knn=50, iterations=10,
                  base_estimator=DecisionTreeClassifier(max_depth=6),
                  train_variables=None, learning_rate=10, efficiencies_as_sum=True):
-        """
+        """This classifier tries to obtain flat efficiency in signal by
+        changing the weights of training sample.
 
         :type base_estimator: BaseEstimator
         """
