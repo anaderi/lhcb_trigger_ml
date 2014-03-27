@@ -18,7 +18,6 @@ def getRandom(candidates, all_weights):
        canidates are indices of weights array
     very simple (but in this case quite efficient) implementation
     """
-    numpy.
     weights = all_weights[candidates]
     p = numpy.random.random() * sum(weights)
     for i in range(len(candidates)):
