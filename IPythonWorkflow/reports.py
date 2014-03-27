@@ -9,6 +9,7 @@ from sklearn.utils.validation import check_arrays
 from commonutils import computeBDTCut, Binner
 import time
 import math
+from matplotlib import cm
 
 __author__ = 'Alex Rogozhnikov'
 
@@ -213,13 +214,19 @@ def plotScoreVariableCorrelationSide2Side(classifiers_dict, testX, testY, var_na
 
 
 
-def plotEfficiency2D(var_name1, var_name2, X, y, probas_dict, target_efficiency, order=None, n_bins=30):
-    """This function plots the efficiency on 2D plot"""
+def plotEfficiency2D(var_name1, var_name2, testX, testY, probas_dict, target_efficiency, order=None, n_bins=30):
+    """This function plots the efficiency on 2D plot
+    - var_name1 is name of first variable
+    - var_name2 is name of second variable
+    - target_efficiency: float between zero and one,
+        the global cut is chosen to give this efficiency
+    - order is list of strings, names of classifiers to compare
+    """
     if order is None:
         order = probas_dict.keys()
-    is_signal = y > 0.5
-    var_1 = X[var_name1][is_signal]
-    var_2 = X[var_name2][is_signal]
+    is_signal = testY > 0.5
+    var_1 = testX[var_name1][is_signal]
+    var_2 = testX[var_name2][is_signal]
 
     x_limits = numpy.arange(0, 1, 1.0 / (n_bins + 1))
     y_limits = numpy.arange(0, 1, 1.0 / (n_bins + 1))
@@ -230,15 +237,13 @@ def plotEfficiency2D(var_name1, var_name2, X, y, probas_dict, target_efficiency,
     bins_ids_x = numpy.searchsorted(x_limits, var_1)
     bins_ids_y = numpy.searchsorted(y_limits, var_2)
 
-    debug_string = ""
 
     fig = pylab.figure(figsize=(5 + 5 * len(order), 7))
     for i, name in enumerate(order):
         predict_proba = probas_dict[name]
-        cut = computeBDTCut(target_efficiency, y, predict_proba)
+        cut = computeBDTCut(target_efficiency, testY, predict_proba)
         passed_cut = predict_proba[is_signal, 1] >= cut
         local_efficiencies = numpy.zeros((n_bins, n_bins))
-        globalEfficiency = sum(passed_cut) * 1.0 / len(passed_cut)
 
         for bin_id_x in range(n_bins):
             for bin_id_y in range(n_bins):

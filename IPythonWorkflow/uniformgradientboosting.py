@@ -76,14 +76,26 @@ class PairwiseKnnLossFunction(KnnLossFunction):
 class SimpleKnnLossFunction(KnnLossFunction):
     def __init__(self, trainX, trainY, uniform_variables, knn=5):
         is_signal = trainY > 0.5
-        knn_signal = commonutils.computeSignalKnnIndices(uniform_variables, trainX, is_signal, knn)
-        knn_bg = commonutils.computeSignalKnnIndices(uniform_variables, trainX, ~is_signal, knn)
-        knn_bg[is_signal, :] = knn_signal[is_signal, :]
+        knn_indices = commonutils.computeKnnIndicesOfSameClass(uniform_variables, trainX, is_signal, knn)
         ind_ptr = numpy.arange(0, len(trainX) * knn + 1, knn)
-        column_indices = knn_bg.flatten()
+        column_indices = knn_indices.flatten()
         data = numpy.ones(len(trainX) * knn)
         coefficients_matrix = sparse.csr_matrix((data, column_indices, ind_ptr), shape=(len(trainX), len(trainX)))
         KnnLossFunction.__init__(self, 2, coefficients_matrix)
+
+
+class RandomKnnLossFunction(KnnLossFunction):
+    def __init__(self, trainX, trainY, uniform_variables, rows, knn=5):
+        is_signal = trainY > 0.5
+        knn_indices = commonutils.computeKnnIndicesOfSameClass(uniform_variables, trainX, is_signal, knn)
+        selected_originals = numpy.random.randint(0, len(trainX), rows)
+        selected_knns = knn_indices[selected_originals, :]
+        # TODO implement
+        # for row in rows:
+
+
+
+
 
 
 class MyGradientBoostingClassifier(GradientBoostingClassifier):
