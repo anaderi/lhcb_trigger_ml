@@ -211,3 +211,48 @@ def plotScoreVariableCorrelationSide2Side(classifiers_dict, testX, testY, var_na
     plotScoreVariableCorrelationSide2SideByPredictProba(predict_proba_dict, testX, testY, var_name,
                                           score_function=score_function, **kwargs)
 
+
+
+def plotEfficiency2D(var_name1, var_name2, X, y, probas_dict, target_efficiency, order=None, n_bins=30):
+    """This function plots the efficiency on 2D plot"""
+    if order is None:
+        order = probas_dict.keys()
+    is_signal = y > 0.5
+    var_1 = X[var_name1][is_signal]
+    var_2 = X[var_name2][is_signal]
+
+    x_limits = numpy.arange(0, 1, 1.0 / (n_bins + 1))
+    y_limits = numpy.arange(0, 1, 1.0 / (n_bins + 1))
+
+    x_means = 0.5 * (x_limits[1:] + x_limits[:-1])
+    y_means = 0.5 * (y_limits[1:] + y_limits[:-1])
+
+    bins_ids_x = numpy.searchsorted(x_limits, var_1)
+    bins_ids_y = numpy.searchsorted(y_limits, var_2)
+
+    debug_string = ""
+
+    fig = pylab.figure(figsize=(5 + 5 * len(order), 7))
+    for i, name in enumerate(order):
+        predict_proba = probas_dict[name]
+        cut = computeBDTCut(target_efficiency, y, predict_proba)
+        passed_cut = predict_proba[is_signal, 1] >= cut
+        local_efficiencies = numpy.zeros((n_bins, n_bins))
+        globalEfficiency = sum(passed_cut) * 1.0 / len(passed_cut)
+
+        for bin_id_x in range(n_bins):
+            for bin_id_y in range(n_bins):
+                indices = (bins_ids_x == bin_id_x) & (bins_ids_y == bin_id_y)
+                bin_passed_cut = passed_cut[indices]
+                bin_efficiency = sum(bin_passed_cut) / (len(bin_passed_cut) + 1e-5)
+                local_efficiencies[bin_id_x, bin_id_y] = bin_efficiency
+
+        ax = fig.add_subplot(1, len(order), i)
+        p = ax.pcolor(x_means, y_means, local_efficiencies, cmap=cm.Blues, vmin=0.0, vmax=1.0)
+        ax.set_xlabel(var_name1)
+        ax.set_ylabel(var_name2)
+        ax.set_title(name)
+        fig.colorbar(p, ax=ax)
+    pylab.show()
+
+

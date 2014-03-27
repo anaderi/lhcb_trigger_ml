@@ -12,7 +12,7 @@ import commonutils
 class ReweightClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, uniform_variables, knn=50, iterations=10,
                  base_estimator=DecisionTreeClassifier(max_depth=6),
-                 train_variables=None, learning_rate=10):
+                 train_variables=None, learning_rate=10, efficiencies_as_sum=True):
         """
 
         :type base_estimator: BaseEstimator
@@ -23,6 +23,7 @@ class ReweightClassifier(BaseEstimator, ClassifierMixin):
         self.iterations = iterations
         self.train_variables = train_variables
         self.learning_rate = learning_rate
+        self.efficiencies_as_sum = efficiencies_as_sum
 
     def fit(self, X, y):
         assert len(X) == len(y), 'different length'
@@ -47,11 +48,14 @@ class ReweightClassifier(BaseEstimator, ClassifierMixin):
             estimator.fit(X_train, y, sample_weight=weights)
             predict_probas = estimator.predict_proba(X_train)
 
-            # here we compute local efficiency as mean probability of signal among knn
-            local_efficiencies = numpy.take(predict_probas[:, 1], knn_indices).mean(axis=1)
-            # global_cut = commonutils.computeBDTCut(0.5, y, predict_probas)
-            # local_efficiencies = commonutils.computeLocalEfficiencies(global_cut, knn_indices, y, predict_probas,
-            #                                                           smoothing_width=0.01)
+
+            if self.efficiencies_as_sum:
+                # here we compute local efficiency as mean probability of signal among knn
+                local_efficiencies = numpy.take(predict_probas[:, 1], knn_indices).mean(axis=1)
+            else:
+                global_cut = commonutils.computeBDTCut(0.5, y, predict_probas)
+                local_efficiencies = commonutils.computeLocalEfficiencies(global_cut, knn_indices, y, predict_probas,
+                                                                          smoothing_width=0.01)
             mse = math.sqrt(numpy.var(numpy.log(local_efficiencies)))
 
             weights *= numpy.exp(- local_efficiencies * y * self.learning_rate * mse)
