@@ -428,7 +428,7 @@ def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, n_neighbors
     """
     assert len(dataframe) == len(is_signal), "Different lengths"
     signal_indices = numpy.where(is_signal)[0]
-    uniforming_features_of_signal = dataframe.ix[is_signal, uniform_variables]
+    uniforming_features_of_signal = numpy.array(dataframe.ix[is_signal, uniform_variables])
     neighbours = NearestNeighbors(n_neighbors=n_neighbors, algorithm='kd_tree').fit(uniforming_features_of_signal)
     _, knn_signal_indices = neighbours.kneighbors(dataframe[uniform_variables])
     return numpy.take(signal_indices, knn_signal_indices)
@@ -466,4 +466,10 @@ def testComputeSignalKnnIndices(n_events=100):
 
 
 testComputeSignalKnnIndices()
+
+signalDF  = pandas.read_csv('datasets/dalitzplot/signal.csv', sep='\t')
+bgDF      = pandas.read_csv('datasets/dalitzplot/bkgd.csv', sep='\t')
+trainX, trainY, testX, testY = splitOnTestAndTrain(signalDF, bgDF)
+computeKnnIndicesOfSameClass(["M2AB", "M2AC"], trainX, trainY)
+
 

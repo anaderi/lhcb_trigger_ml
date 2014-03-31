@@ -9,7 +9,6 @@ from commonutils import generateSample
 import commonutils
 
 
-# TODO move computing of knn_indices to fit function of classifier ot transmit it as fit parameter
 class KnnLossFunction(LossFunction):
     def __init__(self, uniform_variables):
         """KnnLossFunction is a base class to be inherited by other loss functions,
@@ -69,6 +68,10 @@ class KnnLossFunction(LossFunction):
         z = self.A.dot((terminal_regions == leaf) * y_signed)
         alpha = numpy.sum(self.update_exponents * z) / (numpy.sum(self.update_exponents * z * z) + 1e-10)
         tree.value[leaf, 0, 0] = alpha
+
+
+# Descendants of KnnLossFunction - particular cases, each has its own
+# algorithm of generating A and w
 
 
 class PairwiseKnnLossFunction(KnnLossFunction):
@@ -135,7 +138,7 @@ class RandomKnnLossFunction(KnnLossFunction):
         knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, knn_max)
         selected_originals = numpy.random.randint(0, len(trainX), self.n_rows)
         selected_knns = knn_indices[selected_originals, :]
-        groups_indices = numpy.zeros(self.n_rows, self.knn)
+        groups_indices = numpy.zeros((self.n_rows, self.knn), dtype=numpy.int)
         for i, event_neighs in enumerate(selected_knns):
             indices = numpy.random.permutation(knn_max)[:self.knn]
             groups_indices[i] = event_neighs[indices]
@@ -144,12 +147,13 @@ class RandomKnnLossFunction(KnnLossFunction):
         column_indices = groups_indices.flatten()
         data = numpy.ones(self.n_rows * self.knn)
         A = sparse.csr_matrix((data, column_indices, ind_ptr), shape=(self.n_rows, len(trainX)))
-        w = numpy.ones(len(trainX))
+        w = numpy.ones(self.n_rows)
         return A, w
 
 
 class AdaLossFunction(KnnLossFunction):
     def __init__(self):
+        """Good old Ada loss, implemented as version of KnnLostFunction """
         KnnLossFunction.__init__(self, None)
 
     def compute_parameters(self, trainX, trainY):
@@ -164,8 +168,9 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
                  subsample=1.0, min_samples_split=2, min_samples_leaf=1,
                  max_depth=3, init=None, random_state=None,
                  max_features=None, verbose=0, train_variables=None):
-
         """
+        GradientBoosting from sklearn, which is modified to work with KnnLossFunction and it's versions.
+        Subsampling is not supported at the moment.
         :param loss: LossFunction or string
         """
         self.train_variables = train_variables
@@ -255,6 +260,7 @@ def testGradient(loss, size=1000):
 
 testGradient(AdaLossFunction())
 
+
 def testGradientBoosting():
     # Generating some samples correlated with first variable
     distance = 0.6
@@ -269,8 +275,9 @@ def testGradientBoosting():
     loss2 = SimpleKnnLossFunction(uniform_variables)
     loss3 = PairwiseKnnLossFunction(uniform_variables, knn=10)
     loss4 = AdaLossFunction()
+    loss5 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
 
-    for loss in [loss2, loss3, loss4]:
+    for loss in [loss2, loss3, loss4, loss5]:
         print MyGradientBoostingClassifier(min_samples_split=20, loss=loss, max_depth=5, learning_rate=.2,
             n_estimators=n_estimators, train_variables=None).fit(trainX[:samples], trainY[:samples]).score(testX, testY),
 
