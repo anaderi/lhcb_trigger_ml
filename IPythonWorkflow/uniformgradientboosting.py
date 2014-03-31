@@ -1,10 +1,15 @@
+from time import time
 import scipy.sparse as sparse
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.ensemble._gradient_boosting import _random_sample_mask
 from sklearn.ensemble.gradient_boosting import LossFunction, LOSS_FUNCTIONS, MultinomialDeviance, MeanEstimator, \
     LogOddsEstimator, BinomialDeviance
 import numpy
 from sklearn.ensemble.weight_boosting import AdaBoostClassifier
+from sklearn.tree._tree import DTYPE, TREE_LEAF
 from sklearn.tree.tree import DecisionTreeClassifier
+from sklearn.utils.random import check_random_state
+from sklearn.utils.validation import check_arrays, column_or_1d
 from commonutils import generateSample
 import commonutils
 
@@ -185,6 +190,118 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
             return X[self.train_variables]
 
     def fit(self, X, y):
+        """Fit the gradient boosting model.
+
+        Parameters
+        ----------
+        X : array-like, shape = [n_samples, n_features]
+            Training vectors, where n_samples is the number of samples
+            and n_features is the number of features.
+
+        y : array-like, shape = [n_samples]
+            Target values (integers in classification, real numbers in
+            regression)
+            For classification, labels must correspond to classes
+            ``0, 1, ..., n_classes_-1``
+
+        Returns
+        -------
+        self : object
+            Returns self.
+        """
+        y = column_or_1d(y, warn=True)
+        self.classes_, y = numpy.unique(y, return_inverse=True)
+        self.n_classes_ = len(self.classes_)
+
+        assert self.n_classes_ == 2, "at this moment only two-class classification is supported"
+
+        self._check_params()
+        # fitting the loss if it needs
+        if isinstance(self.loss_, KnnLossFunction):
+            self.loss_.fit(X, y)
+        X = self.get_train_variables(X)
+
+
+        # Check input
+        X, = check_arrays(X, dtype=DTYPE, sparse_format="dense", check_ccontiguous=True)
+        n_samples, n_features = X.shape
+        self.n_features = n_features
+        random_state = check_random_state(self.random_state)
+
+        # pull frequently used parameters into local scope
+        subsample = self.subsample
+        do_oob = subsample < 1.0
+
+        # allocate model state data structures
+        self.estimators_ = numpy.empty((self.n_estimators, self.loss_.K), dtype=numpy.object)
+        self.train_score_ = numpy.zeros((self.n_estimators,), dtype=numpy.float64)
+
+        sample_mask = numpy.ones((n_samples,), dtype=numpy.bool)
+        n_inbag = max(1, int(subsample * n_samples))
+
+        if self.verbose:
+            # header fields and line format str
+            header_fields = ['Iter', 'Train Loss']
+            verbose_fmt = ['{iter:>10d}', '{train_score:>16.4f}']
+            if do_oob:
+                header_fields.append('OOB Improve')
+                verbose_fmt.append('{oob_impr:>16.4f}')
+            header_fields.append('Remaining Time')
+            verbose_fmt.append('{remaining_time:>16s}')
+            verbose_fmt = ' '.join(verbose_fmt)
+            # print the header line
+            print(('%10s ' + '%16s ' *
+                   (len(header_fields) - 1)) % tuple(header_fields))
+            # plot verbose info each time i % verbose_mod == 0
+            verbose_mod = 1
+            start_time = time()
+
+        # fit initial model
+        self.init_.fit(X, y)
+
+        # init predictions
+        y_pred = self.init_.predict(X)
+
+        # perform boosting iterations
+        for i in range(self.n_estimators):
+
+            # subsampling
+            if do_oob:
+                sample_mask = _random_sample_mask(n_samples, n_inbag, random_state)
+
+            # fit next stage of trees
+            y_pred = self._fit_stage(i, X, y, y_pred, sample_mask, random_state)
+
+            self.train_score_[i] = self.loss_(y, y_pred)
+
+            if self.verbose > 0:
+                if (i + 1) % verbose_mod == 0:
+                    remaining_time = ((self.n_estimators - (i + 1)) *
+                                      (time() - start_time) / float(i + 1))
+                    if remaining_time > 60:
+                        remaining_time = '{0:.2f}m'.format(remaining_time / 60.0)
+                    else:
+                        remaining_time = '{0:.2f}s'.format(remaining_time)
+                    print(verbose_fmt.format(iter=i + 1,
+                                             train_score=self.train_score_[i],
+                                             remaining_time=remaining_time))
+                if self.verbose == 1 and ((i + 1) // (verbose_mod * 10) > 0):
+                    # adjust verbose frequency (powers of 10)
+                    verbose_mod *= 10
+
+        return self
+
+
+    def _check_params(self):
+        """Check validity of parameters and raise ValueError if not valid. """
+        # everything connected with loss was moved to self.fit
+        if self.n_estimators <= 0:
+            raise ValueError("n_estimators must be greater than 0")
+        if self.learning_rate <= 0.0:
+            raise ValueError("learning_rate must be greater than 0")
+        if not (0.0 < self.alpha and self.alpha < 1.0):
+            raise ValueError("alpha must be in (0.0, 1.0)")
+
         # we enable to pass simply LossFunction object
         if isinstance(self.loss, LossFunction):
             self.loss_ = self.loss
@@ -211,22 +328,6 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
             self.init_ = self.init
         else:
             self.init_ = self.loss_.init_estimator()
-
-        # fitting the loss id it needs
-        if isinstance(self.loss_, KnnLossFunction):
-            self.loss_.fit(X, y)
-
-        return GradientBoostingClassifier.fit(self, self.get_train_variables(X), y)
-
-    def _check_params(self):
-        """Check validity of parameters and raise ValueError if not valid. """
-        # evrything connected with loss was moved to self.fit
-        if self.n_estimators <= 0:
-            raise ValueError("n_estimators must be greater than 0")
-        if self.learning_rate <= 0.0:
-            raise ValueError("learning_rate must be greater than 0")
-        if not (0.0 < self.alpha and self.alpha < 1.0):
-            raise ValueError("alpha must be in (0.0, 1.0)")
 
     def predict(self, X):
         return GradientBoostingClassifier.predict(self, self.get_train_variables(X))
@@ -269,8 +370,8 @@ def testGradientBoosting():
     # We will try to get uniform distribution along this variable
     uniform_variables = ['column0']
     base_estimator = DecisionTreeClassifier(min_samples_split=20, max_depth=5)
-    n_estimators = 40
-    samples = 2000
+    n_estimators = 20
+    samples = 1000
 
     loss2 = SimpleKnnLossFunction(uniform_variables)
     loss3 = PairwiseKnnLossFunction(uniform_variables, knn=10)
@@ -278,7 +379,7 @@ def testGradientBoosting():
     loss5 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
 
     for loss in [loss2, loss3, loss4, loss5]:
-        print MyGradientBoostingClassifier(min_samples_split=20, loss=loss, max_depth=5, learning_rate=.2,
+        print MyGradientBoostingClassifier(min_samples_split=20, loss=loss, max_depth=5, learning_rate=.2, subsample=0.7,
             n_estimators=n_estimators, train_variables=None).fit(trainX[:samples], trainY[:samples]).score(testX, testY),
 
     print AdaBoostClassifier(n_estimators=n_estimators, base_estimator=base_estimator)\
