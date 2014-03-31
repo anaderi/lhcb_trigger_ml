@@ -1,14 +1,13 @@
 import random
+import math
+import numpy
+import pandas
 from sklearn.neighbors import NearestNeighbors
 
 __author__ = 'Alex Rogozhnikov'
 
 # This module contains procedures to generate Toy Monte-Carlo
 # by using modified SMOTE approach
-
-import math
-import numpy
-import pandas
 
 
 def getRandom(candidates, all_weights):
@@ -18,7 +17,9 @@ def getRandom(candidates, all_weights):
        canidates are indices of weights array
     very simple (but in this case quite efficient) implementation
     """
+    # TODO numpy.choice for later versions of numpy
     weights = all_weights[candidates]
+
     p = numpy.random.random() * sum(weights)
     for i in range(len(candidates)):
         p -= weights[i]
