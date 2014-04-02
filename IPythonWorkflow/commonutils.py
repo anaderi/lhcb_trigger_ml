@@ -467,9 +467,9 @@ def testComputeSignalKnnIndices(n_events=100):
 
 testComputeSignalKnnIndices()
 
-signalDF  = pandas.read_csv('datasets/dalitzplot/signal.csv', sep='\t')
-bgDF      = pandas.read_csv('datasets/dalitzplot/bkgd.csv', sep='\t')
-trainX, trainY, testX, testY = splitOnTestAndTrain(signalDF, bgDF)
-computeKnnIndicesOfSameClass(["M2AB", "M2AC"], trainX, trainY)
+# signalDF  = pandas.read_csv('datasets/dalitzplot/signal.csv', sep='\t')
+# bgDF      = pandas.read_csv('datasets/dalitzplot/bkgd.csv', sep='\t')
+# trainX, trainY, testX, testY = splitOnTestAndTrain(signalDF, bgDF)
+# computeKnnIndicesOfSameClass(["M2AB", "M2AC"], trainX, trainY)
 
 

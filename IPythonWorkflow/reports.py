@@ -1,6 +1,6 @@
 # This module contains functions to build reports:
 # training, getting predictions, building various plots
-
+from collections import OrderedDict
 
 import numpy
 import pylab
@@ -64,13 +64,14 @@ def trainClassifiers(classifiers_dict, trainX, trainY):
 
 
 def getClassifiersPredictionProba(classifiers_dict, testX):
-    return {name: classifier.predict_proba(testX) for name, classifier in classifiers_dict.iteritems()}
+    return OrderedDict([(name, classifier.predict_proba(testX))
+                        for name, classifier in classifiers_dict.iteritems()])
 
 
 def getClassifiersStagedPredictionProba(classifiers_dict, testX):
     """Returns dictionary:
         {classifier_name: staged_predict_proba of classifier} """
-    result = {}
+    result = OrderedDict()
     for name, classifier in classifiers_dict.iteritems():
         try:
             result[name] = list(classifier.staged_predict_proba(testX))
@@ -82,7 +83,8 @@ def getClassifiersStagedPredictionProba(classifiers_dict, testX):
 def getStageOfStagedProbaDict(stage, staged_predict_proba_dict):
     """Returns the predict_proba_dict, corresponding to 'stage' iteration
     of every classifier"""
-    return {name: predictions[stage] for name, predictions in staged_predict_proba_dict.iteritems()}
+    return OrderedDict([(name, predictions[stage])
+                        for name, predictions in staged_predict_proba_dict.iteritems()])
 
 
 def plotScoreVariableCorrelation(answers, prediction_proba, correlation_values,
@@ -223,7 +225,8 @@ def plotEfficiency2D(var_name1, var_name2, testX, testY, probas_dict, target_eff
     - order is list of strings, names of classifiers to compare
     """
     if order is None:
-        order = probas_dict.keys()
+        order = [key for key in probas_dict]
+
     is_signal = testY > 0.5
     var_1 = testX[var_name1][is_signal]
     var_2 = testX[var_name2][is_signal]
@@ -252,7 +255,7 @@ def plotEfficiency2D(var_name1, var_name2, testX, testY, probas_dict, target_eff
                 bin_efficiency = sum(bin_passed_cut) / (len(bin_passed_cut) + 1e-5)
                 local_efficiencies[bin_id_x, bin_id_y] = bin_efficiency
 
-        ax = fig.add_subplot(1, len(order), i)
+        ax = fig.add_subplot(1, len(order), i + 1)
         p = ax.pcolor(x_means, y_means, local_efficiencies, cmap=cm.Blues, vmin=0.0, vmax=1.0)
         ax.set_xlabel(var_name1)
         ax.set_ylabel(var_name2)
