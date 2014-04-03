@@ -15,7 +15,6 @@ from sklearn.metrics import precision_score, recall_score, f1_score, mean_square
 from sklearn.neighbors.dist_metrics import MinkowskiDistance
 from sklearn.neighbors.unsupervised import NearestNeighbors
 from IPython.core.getipython import get_ipython
-from sklearn.utils.validation import check_arrays
 
 
 Precision = precision_score
@@ -259,17 +258,6 @@ def massiveCorrectionFunction(answers, predict_proba, steps=10):
     return lambda x: massive_interpolate(values, x * (len(values) - 1))
 
 
-def testCorrectionFunctions(size=1000):
-    ans = numpy.random.random(size) > 0.5
-    probs = numpy.random.random((size, 2))
-    correctionFunction(ans, probs, 10)
-    massiveCorrectionFunction(ans, probs, 10)
-
-
-testCorrectionFunctions()
-
-
-
 def testCorrectionFunctionIteration():
     l = 100
     answers1 = numpy.zeros(l)
@@ -285,10 +273,8 @@ def testCorrectionFunctionIteration():
 
     lmb = massiveCorrectionFunction(answers, probs, 20)
     newCuts = lmb(cuts)
-        # list([lmb(x) for x in cuts])
 
     mse = mean_squared_error(precisions, newCuts)
-    # todo rewrite plotting for massive interpolation
     max_mse = 0.001
     x_range = numpy.arange(0, 1, 0.01)
     if mse >= max_mse:
@@ -308,54 +294,53 @@ def testCorrectionFunctionIteration():
 
 
 def testCorrectionFunction():
-    for i in range(10):
+    for i in range(5):
         testCorrectionFunctionIteration()
     print 'correction function is ok'
 
 
-# testQuantiles()
 testCorrectionFunction()
 
-
-def efficiencyPlotData(answers, prediction_probas):
-    precisions, cuts = slidingEfficiencyArray(answers, prediction_probas)
-    return cuts, precisions
-
-
-def efficiencyPlotData2(answers, prediction_probas, cuts=None, scoreFunc=Recall):
-    """All the same like precisionPlotData, but 10 times slower.
-    Can compute not only recall, but other score functions as well"""
-    if cuts is None:
-        cuts = numpy.array(range(100)) * 0.01
-    precisions = []
-    for cut in cuts:
-        precisions.append(scoreFunc(answers, prediction_probas[:, 1] > cut))
-    return cuts, precisions
-
-
-def testEfficiencyPlotFunctions():
-    for i in range(2):
-        length = (i + 1) * 100
-        getRand = lambda: numpy.random.rand(length)
-        predict_probas = numpy.zeros((length, 2))
-        predict_probas[:, 1] = getRand() * getRand()
-        predict_probas[:, 0] = 1 - predict_probas[:, 1]
-
-        res = getRand() * 0.4 + 0.2
-        answers = predict_probas[:, 1] > res
-        cuts, precisions = efficiencyPlotData(answers, predict_probas)
-        _, precisions2 = efficiencyPlotData2(answers, predict_probas, cuts=cuts)
-        mse = mean_squared_error(precisions, precisions2)
-        maxMse = 1e-8
-        if mse >= maxMse:
-            pylab.plot(cuts, precisions)
-            pylab.plot(cuts, precisions2)
-            pylab.show()
-        assert mse < maxMse, "Something wrong with mse of efficiency functions, mse = " + str(mse)
-    print "efficiencyPlotData functions are ok"
-
-
-testEfficiencyPlotFunctions()
+# TODO delete
+# def efficiencyPlotData(answers, prediction_probas):
+#     precisions, cuts = slidingEfficiencyArray(answers, prediction_probas)
+#     return cuts, precisions
+#
+#
+# def efficiencyPlotData2(answers, prediction_probas, cuts=None, scoreFunc=Recall):
+#     """All the same like precisionPlotData, but 10 times slower.
+#     Can compute not only recall, but other score functions as well"""
+#     if cuts is None:
+#         cuts = numpy.array(range(100)) * 0.01
+#     precisions = []
+#     for cut in cuts:
+#         precisions.append(scoreFunc(answers, prediction_probas[:, 1] > cut))
+#     return cuts, precisions
+#
+#
+# def testEfficiencyPlotFunctions():
+#     for i in range(2):
+#         length = (i + 1) * 100
+#         getRand = lambda: numpy.random.rand(length)
+#         predict_probas = numpy.zeros((length, 2))
+#         predict_probas[:, 1] = getRand() * getRand()
+#         predict_probas[:, 0] = 1 - predict_probas[:, 1]
+#
+#         res = getRand() * 0.4 + 0.2
+#         answers = predict_probas[:, 1] > res
+#         cuts, precisions = efficiencyPlotData(answers, predict_probas)
+#         _, precisions2 = efficiencyPlotData2(answers, predict_probas, cuts=cuts)
+#         mse = mean_squared_error(precisions, precisions2)
+#         maxMse = 1e-8
+#         if mse >= maxMse:
+#             pylab.plot(cuts, precisions)
+#             pylab.plot(cuts, precisions2)
+#             pylab.show()
+#         assert mse < maxMse, "Something wrong with mse of efficiency functions, mse = " + str(mse)
+#     print "efficiencyPlotData functions are ok"
+#
+#
+# testEfficiencyPlotFunctions()
 
 
 
@@ -428,6 +413,9 @@ def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, n_neighbors
     """
     assert len(dataframe) == len(is_signal), "Different lengths"
     signal_indices = numpy.where(is_signal)[0]
+    for variable in uniform_variables:
+        if variable not in dataframe.columns:
+            raise ValueError("Dataframe is missing %s column" % variable)
     uniforming_features_of_signal = numpy.array(dataframe.ix[is_signal, uniform_variables])
     neighbours = NearestNeighbors(n_neighbors=n_neighbors, algorithm='kd_tree').fit(uniforming_features_of_signal)
     _, knn_signal_indices = neighbours.kneighbors(dataframe[uniform_variables])
@@ -463,6 +451,7 @@ def testComputeSignalKnnIndices(n_events=100):
         assert numpy.all(is_signal[neighbours] == is_signal[i]), "returned indices are not signal/bg"
 
     print "computeSignalKnnIndices is ok"
+
 
 
 testComputeSignalKnnIndices()

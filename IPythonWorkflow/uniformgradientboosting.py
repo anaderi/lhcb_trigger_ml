@@ -175,7 +175,8 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
                  max_features=None, verbose=0, train_variables=None):
         """
         GradientBoosting from sklearn, which is modified to work with KnnLossFunction and it's versions.
-        Subsampling is not supported at the moment.
+        Train variables are variables used in training trees.
+
         :param loss: LossFunction or string
         """
         self.train_variables = train_variables
