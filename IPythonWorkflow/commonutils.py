@@ -352,9 +352,11 @@ def computeBDTCut(target_efficiency, answers, prediction_probas):
     """
     assert len(answers) == len(prediction_probas), "different size"
 
-    indices = (answers > 0.5)
-    signal_probas = prediction_probas[indices, 1]
-    return numpy.percentile(signal_probas, 100 - target_efficiency * 100)
+    signal_probas = prediction_probas[answers > 0.5, 1]
+    percentiles = 100 - target_efficiency * 100
+    if isinstance(percentiles, numpy.ndarray):
+        percentiles = list(percentiles)
+    return numpy.percentile(signal_probas, percentiles)
 
 
 def computeLocalEfficiencies(globalCut, knnIndices, answers, prediction_proba, smoothing_width=0.0):

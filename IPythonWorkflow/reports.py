@@ -3,9 +3,10 @@
 from collections import OrderedDict
 
 import numpy
+import pandas
 import pylab
 from sklearn.metrics.metrics import roc_auc_score, recall_score, roc_curve, auc
-from sklearn.utils.validation import check_arrays
+from sklearn.utils.validation import check_arrays, column_or_1d
 from commonutils import computeBDTCut, Binner
 import time
 import math
@@ -89,8 +90,7 @@ def getStageOfStagedProbaDict(stage, staged_predict_proba_dict):
 
 def plotScoreVariableCorrelation(answers, prediction_proba, correlation_values,
                                  classifier_name="", var_name="", score_function=Efficiency,
-                                 bins_number=20, thresholds=None, y_limits=None,
-                                 show_legend=False):
+                                 bins_number=20, thresholds=None, ylim=None, show_legend=False):
     """
     Different score functions available: Efficiency, Precision, Recall, F1Score,
     and other things from sklearn.metrics
@@ -118,8 +118,8 @@ def plotScoreVariableCorrelation(answers, prediction_proba, correlation_values,
     pylab.title("Correlation with results of " + classifier_name)
     pylab.xlabel(var_name)
     pylab.ylabel(score_function.__name__)
-    if y_limits is not None:
-        pylab.ylim(y_limits)
+    if ylim is not None:
+        pylab.ylim(ylim)
     if show_legend:
         pylab.legend(loc="lower right")
 
@@ -134,7 +134,7 @@ def plotMassEfficiencyCorrelation(answers, prediction_proba, masses, classifier_
     - masses - array of masses
     """
     plotScoreVariableCorrelation(answers, prediction_proba, masses, classifier_name,
-                                 var_name='mass', score_function=Efficiency, y_limits=(0, 1))
+                                 var_name='mass', score_function=Efficiency, ylim=(0, 1))
 
 
 def plotLearningCurves(answers, staged_proba_dict, step=1, metrics=roc_auc_score):
@@ -176,80 +176,117 @@ def plotRocCurves(answers, predict_proba_dict, is_big_plot=True):
     pylab.show()
 
 
-def computeMseVariation(answer, prediction_proba, mass, binner):
+def compute1DMseVariation(answers, prediction_proba, mass, binner, target_efficiencies=None):
     """Computes 'non-flatness' of predictions, the lesser output, the better
-    :param answer: numpy.array
+    :param answers: numpy.array
     :param prediction_proba: numpy.ndarray
     :param mass: numpy.array
     :param binner: Binner
     """
-    cuts = [computeBDTCut(target_eff, answer, prediction_proba) for target_eff in [(i + 1.0) / 11 for i in range(10)]]
-    bins_data = binner.split_into_bins(mass, answer, prediction_proba)
-    result = 0
-    for cut in cuts:
-        efficiencies = []
-        for bin_masses, bin_answer, bin_proba in bins_data:
-            efficiency = recall_score(bin_answer, bin_proba[:, 1] > cut)
-            efficiencies.append(efficiency)
-        result += numpy.std(efficiencies) ** 2
-    return math.sqrt(result * 1.0 / binner.bins_number())
+    if target_efficiencies is None:
+        target_efficiencies = [(i + 1.0) / 11 for i in range(10)]
+
+    bin_indices = binner.get_bins(mass)
+    return computeMseVariationOnBins(answers > 0.5, prediction_proba,
+                                     bin_indices=bin_indices, target_efficiencies=target_efficiencies)
 
 
-def compute2DPassedCut(global_cut, predict_proba, var_name1, var_name2, testX, testY,
-                       n_bins=30, x_limits=None, y_limits=None):
-    is_signal = testY > 0.5
-
-    var_1 = testX[var_name1][is_signal]
-    var_2 = testX[var_name2][is_signal]
-
-    if x_limits is None:
-        x_limits = numpy.min(var_1), numpy.max(var_1)
-    if y_limits is None:
-        y_limits = numpy.min(var_2), numpy.max(var_2)
-
-    x_lims = numpy.linspace(x_limits[0], x_limits[1], n_bins + 1)[1:-1]
-    y_lims = numpy.linspace(y_limits[0], y_limits[1], n_bins + 1)[1:-1]
-
-    # x_means = 0.5 * (x_lims[1:] + x_lims[:-1])
-    # y_means = 0.5 * (y_lims[1:] + y_lims[:-1])
-
-    bins_ids_x = numpy.searchsorted(x_lims, var_1)
-    bins_ids_y = numpy.searchsorted(y_lims, var_2)
-
-    passed_cut = predict_proba[:, 1] > global_cut
-
-    passed = numpy.zeros((n_bins, n_bins))
-    total = numpy.zeros((n_bins, n_bins))
-
-    for bin_id_x in range(n_bins):
-        x_indices = (bins_ids_x == bin_id_x)
-        x_passed = passed_cut[x_indices]
-        x_bin_ids_y  = bins_ids_y[x_indices]
-        for bin_id_y in range(n_bins):
-            xy_indices =  (x_bin_ids_y == bin_id_y)
-            total[bin_id_x, bin_id_y] = numpy.sum(xy_indices)
-            passed[bin_id_x, bin_id_y] = numpy.sum(x_passed[xy_indices])
-
-    passed2 = numpy.zeros((n_bins, n_bins))
-    total2 = numpy.zeros((n_bins, n_bins))
-    # for bin_id_x in range(n_bins):
-    #     for bin_id_y in range(n_bins):
-    #         indices = (bins_ids_x == bin_id_x) & (bins_ids_y == bin_id_y)
-    #         total2[bin_id_x, bin_id_y] = numpy.sum(indices)
-    #         passed2[bin_id_x, bin_id_y] = numpy.sum(passed_cut[indices])
-    #
-    # assert numpy.all(passed == passed2)
-    # assert numpy.all(total == total2)
-
-    return passed, total, x_lims, y_lims
+def computeNdimentionalBinIndices(X, var_names, bin_limits):
+    """For arbitrary number of variables computes the indices of data,
+    the indices are unique numbers of bin from zero to \prod_j (len(bin_limits[j])+1)
+    Example:
+        var_names = ["M2AB", "M2AC"]
+        bin_limits = [numpy.linspace(0, 1, 20), numpy.linspace(0, 1, 20)]
+    """
+    assert len(var_names) == len(bin_limits), "Different size of arrays"
+    bin_indices = numpy.zeros(len(X), dtype=numpy.int)
+    for var_name, bin_limits_axis in zip(var_names, bin_limits):
+        bin_indices *= (len(bin_limits_axis) + 1)
+        bin_indices += numpy.searchsorted(bin_limits_axis, X[var_name])
+    return bin_indices
 
 
-def compute2DMseVariationAtEfficiency(answers, predict_proba, testX, var_name_1, var_name_2, target_efficiency,
-                                      n_bins=30):
-    global_cut = computeBDTCut(target_efficiency, answers, predict_proba)
-    passed, total, _, _ = compute2DPassedCut(global_cut, predict_proba, var_name_1, var_name_2, testX, answers, n_bins)
-    efficiencies = passed / (total + 1e-6)
-    return math.sqrt(numpy.sum(total * (efficiencies - target_efficiency) ** 2))
+def computeLocalEfficienciesOfBins(answers, prediction_proba, bin_indices, n_total_bins, cut):
+    assert len(answers) == len(prediction_proba) == len(bin_indices), "different size"
+    is_signal = answers > 0.5
+    # n_bins = numpy.max(bin_indices) + 1
+    bin_total = numpy.bincount(bin_indices[is_signal], minlength=n_total_bins) + 1e-6
+
+    passed_cut = prediction_proba[:, 1] > cut
+    bin_passed_cut = numpy.bincount(bin_indices[is_signal & passed_cut], minlength=n_total_bins)
+    return bin_passed_cut / bin_total
+
+
+def computeMseVariationOnBins(is_signal, prediction_proba, bin_indices, target_efficiencies):
+    """
+    An efficient function to compute MSE
+    """
+    assert len(prediction_proba) == len(bin_indices) == len(is_signal), "different size"
+    n_bins = numpy.max(bin_indices) + 1
+    bin_total = numpy.bincount(bin_indices[is_signal], minlength=n_bins) + 1e-6
+    signal_prediction_proba = prediction_proba[is_signal, :]
+    signal_answers = numpy.ones(len(signal_prediction_proba), dtype=numpy.int)
+    result = 0.
+    cuts = computeBDTCut(numpy.array(target_efficiencies), signal_answers, signal_prediction_proba)
+    for cut, efficiency in zip(cuts, target_efficiencies):
+        passed_cut = signal_prediction_proba[:, 1] > cut
+        bin_passed_cut = numpy.bincount(bin_indices[is_signal][passed_cut], minlength=n_bins)
+        bin_efficiency = bin_passed_cut / bin_total
+        result += numpy.sum(bin_total * (bin_efficiency - efficiency) ** 2)
+
+    return math.sqrt(result / len(target_efficiencies) / len(signal_prediction_proba)) * 10
+
+
+def computeNdimensionalMseVariation(answers, predict_proba, X, var_names, efficiencies, n_bins=30, bin_limits=None):
+    if bin_limits is None:
+        bin_limits = []
+        for var_name in var_names:
+            var_data = X[var_name]
+            bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
+    bin_indices = computeNdimentionalBinIndices(X, var_names, bin_limits)
+    return computeMseVariationOnBins(answers > .5, predict_proba, bin_indices, efficiencies)
+
+
+def computeStagedMseVariation(answers, testX, var_names, staged_predict_proba, stages, target_efficiencies, n_bins=30):
+    is_signal = answers > 0.5
+
+    bin_limits = []
+    for var_name in var_names:
+        var_data = testX[var_name]
+        bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
+
+    bin_indices = computeNdimentionalBinIndices(testX, var_names, bin_limits)
+
+    results = []
+    for stage in stages:
+        predict_probas = getStageOfStagedProbaDict(stage, staged_predict_proba)
+        stage_variations = []
+        for name, predict_proba in predict_probas.iteritems():
+            stage_variations.append(computeMseVariationOnBins(is_signal, predict_proba, bin_indices=bin_indices,
+                                          target_efficiencies=target_efficiencies))
+        results.append(stage_variations)
+    return pandas.DataFrame(results, columns=staged_predict_proba.keys(), index=stages)
+
+
+
+def testCompureMseAndBins(size=500):
+    columns = ['var1', 'var2']
+    X = pandas.DataFrame(numpy.random.random((size, 2)), columns=columns)
+    y = numpy.random.random(size) > 0.5
+    proba = numpy.random.random((size, 2))
+    computeNdimensionalMseVariation(y, proba, X, columns, [0.3, 0.5, 0.7])
+    n_bins = 5
+    x_limits = numpy.linspace(0, 1, n_bins + 1)[1:-1]
+    bins = computeNdimentionalBinIndices(X, columns, [x_limits, x_limits])
+    assert numpy.all(0 <= bins) and numpy.all(bins < n_bins * n_bins), "whooops"
+
+    effs = computeLocalEfficienciesOfBins(y, proba, bins, n_bins * n_bins, .3)
+    # print numpy.mean(effs)
+    # todo continue testing
+
+
+
+testCompureMseAndBins()
 
 
 def plotScoreVariableCorrelationSide2SideByPredictProba(predict_proba_dict, testX, testY, var_name,
@@ -266,7 +303,6 @@ def plotScoreVariableCorrelationSide2SideByPredictProba(predict_proba_dict, test
 
 def plotScoreVariableCorrelationSide2Side(classifiers_dict, testX, testY, var_name,
                                           score_function=Efficiency, **kwargs):
-    assert len(testX) == len(testY), "Different size of arrays"
     predict_proba_dict = getClassifiersPredictionProba(classifiers_dict, testX)
     plotScoreVariableCorrelationSide2SideByPredictProba(predict_proba_dict, testX, testY, var_name,
                                           score_function=score_function, **kwargs)
@@ -298,13 +334,12 @@ def plotEfficiency2D(var_name1, var_name2, testX, testY, probas_dict, target_eff
     for i, name in enumerate(order):
         predict_proba = probas_dict[name]
         cut = computeBDTCut(target_efficiency, testY, predict_proba)
-        passed, total, _, _ = compute2DPassedCut(cut, predict_proba, var_name1, var_name2, testX, testY,
-                       n_bins=n_bins, x_limits=xlim, y_limits=ylim)
-        local_efficiencies = passed / (total + 1e-8)
+        bin_indices = computeNdimentionalBinIndices(testX, [var_name1, var_name2], [x_limits[1:-1], y_limits[1:-1]])
+
+        local_efficiencies = computeLocalEfficienciesOfBins(testY, predict_proba, cut=cut,
+                bin_indices=bin_indices, n_total_bins=n_bins ** 2).reshape((n_bins, n_bins))
 
         ax = fig.add_subplot(1, len(order), i + 1)
-        assert local_efficiencies.shape[0] + 1 == len(x_limits) and local_efficiencies.shape[1] + 1 == len(y_limits), \
-            "inconstistent sizes"
         p = ax.pcolor(x_limits, y_limits, local_efficiencies, cmap=cm.get_cmap("Blues"), vmin=0.0, vmax=1.0)
         ax.set_xlabel(var_name1)
         ax.set_ylabel(var_name2)
