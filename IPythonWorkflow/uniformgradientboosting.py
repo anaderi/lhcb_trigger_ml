@@ -79,17 +79,51 @@ class KnnLossFunction(LossFunction):
 # algorithm of generating A and w
 
 
-class PairwiseKnnLossFunction(KnnLossFunction):
-    def __init__(self, uniform_variables, knn):
-        """ A is rectangular matrix, in each row we have only two '1's,
-        all other elements are zeros, these two '1's are placed in the columns, corresponding to neighbours"""
+class SimpleKnnLossFunction(KnnLossFunction):
+    def __init__(self, uniform_variables, knn=5, distinguish_classes=True, diagonal=0.):
+        """A matrix is square, each row corresponds to a single event in train dataset,
+        in each row we put ones to the closest neighbours of that event.
+
+        If distinguish_classes==True, only events of the same class are chosen.
+        """
         self.knn = knn
+        self.distinguish_classes = distinguish_classes
+        self.diagonal = diagonal
+        KnnLossFunction.__init__(self, uniform_variables)
+
+    def compute_parameters(self, trainX, trainY):
+        is_signal = trainY > 0.5
+        if not self.distinguish_classes:
+            is_signal = numpy.ones(len(trainY), dtype=numpy.bool)
+        knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, self.knn)
+        ind_ptr = numpy.arange(0, len(trainX) * self.knn + 1, self.knn)
+        column_indices = knn_indices.flatten()
+        data = numpy.ones(len(trainX) * self.knn)
+        A = sparse.csr_matrix(sparse.csr_matrix((data, column_indices, ind_ptr), shape=(len(trainX), len(trainX))) +
+            self.diagonal * sparse.eye(len(trainX), len(trainY)))
+        w = numpy.ones(len(trainX))
+        return A, w
+
+
+class PairwiseKnnLossFunction(KnnLossFunction):
+    def __init__(self, uniform_variables, knn, exclude_self=True, penalize_large_preds=True):
+        """ A is rectangular matrix, in each row we have only two '1's,
+        all other elements are zeros, these two '1's are placed in the columns, corresponding to neighbours
+        exclude_self: bool, exclude self from knn?
+        """
+        self.knn = knn
+        self.exclude_self = exclude_self
+        self.penalize_large_preds = penalize_large_preds
         KnnLossFunction.__init__(self, uniform_variables)
 
     def compute_parameters(self, trainX, trainY):
         is_signal = trainY > 0.5
         knn = self.knn
-        knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, knn)
+        if self.exclude_self:
+            knn_indices = \
+                commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, knn+1)[:, 1:]
+        else:
+            knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, knn)
 
         rows = xrange(len(trainX) * knn)
         columns1 = numpy.repeat(numpy.arange(0, len(trainX)), knn)
@@ -98,43 +132,24 @@ class PairwiseKnnLossFunction(KnnLossFunction):
 
         A = sparse.csr_matrix((data, (rows, columns1)), shape=[len(trainX) * knn, len(trainX)]) + \
             sparse.csr_matrix((data, (rows, columns2)), shape=[len(trainX) * knn, len(trainX)])
-        w = numpy.ones(len(trainX) * knn)
+
+        if self.penalize_large_preds:
+            penalty1 = - sparse.eye(len(trainX), len(trainX))
+            penalty2 = sparse.eye(len(trainX), len(trainX))
+            A = sparse.vstack((A, penalty1, penalty2), format="csr")
+        w = numpy.ones(A.shape[0])
         return A, w
-
-
-
-class SimpleKnnLossFunction(KnnLossFunction):
-    def __init__(self, uniform_variables, knn=5, distinguish_classes=True):
-        """A matrix is square, each row corresponds to a single event in train dataset,
-        in each row we put ones to the closest neighbours of that event.
-
-        If distinguish_classes==True, only events of the same class are chosen.
-        """
-        self.knn = knn
-        self.distinguish_classes = distinguish_classes
-        KnnLossFunction.__init__(self, uniform_variables)
-
-    def compute_parameters(self, trainX, trainY):
-        is_signal = trainY > 0.5
-
-        knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, self.knn)
-        ind_ptr = numpy.arange(0, len(trainX) * self.knn + 1, self.knn)
-        column_indices = knn_indices.flatten()
-        data = numpy.ones(len(trainX) * self.knn)
-        A = sparse.csr_matrix((data, column_indices, ind_ptr), shape=(len(trainX), len(trainX)))
-        w = numpy.ones(len(trainX))
-        return A, w
-
 
 
 class RandomKnnLossFunction(KnnLossFunction):
-    def __init__(self, uniform_variables, n_rows, knn=5, knn_factor=3):
-        """A very general loss,
+    def __init__(self, uniform_variables, n_rows, knn=5, knn_factor=3, large_preds_penalty=1.):
+        """A general loss,
         at each iteration it takes some random event from train dataset,
         and selects randomly knn of its knn*knn_factor neighbours, the process is repeated 'n_rows' times"""
         self.n_rows = n_rows
         self.knn = knn
         self.knn_factor = knn_factor
+        self.large_preds_penalty = large_preds_penalty
         KnnLossFunction.__init__(self, uniform_variables)
 
     def compute_parameters(self, trainX, trainY):
@@ -152,7 +167,13 @@ class RandomKnnLossFunction(KnnLossFunction):
         column_indices = groups_indices.flatten()
         data = numpy.ones(self.n_rows * self.knn)
         A = sparse.csr_matrix((data, column_indices, ind_ptr), shape=(self.n_rows, len(trainX)))
-        w = numpy.ones(self.n_rows)
+
+        if self.large_preds_penalty > 0:
+            penalty1 = - self.large_preds_penalty * sparse.eye(len(trainX), len(trainX))
+            penalty2 = self.large_preds_penalty * sparse.eye(len(trainX), len(trainX))
+            A = sparse.vstack((A, penalty1, penalty2), format="csr")
+
+        w = numpy.ones(A.shape[0])
         return A, w
 
 

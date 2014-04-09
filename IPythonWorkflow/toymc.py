@@ -64,7 +64,7 @@ def countProbabilities(weights, knn):
 
 
 
-def generateToyMonteCarlo(inputDF, size, knn=4, symmetrize=True, power=2.0, reweight_iterations=6):
+def generateToyMonteCarlo(inputDF, size, knn=4, symmetrize=True, power=2.0, reweight_iterations=5):
     """
     Generates set of events with the same distribution as in inputDF
     Referred as SMOTE in the ML papers
@@ -172,10 +172,13 @@ def generateToyMonteCarloWithSpecialFeatures(inputDF, size, clusterization_featu
     return result
 
 
-def testToyMonteCarlo():
-    df = pandas.DataFrame(numpy.random.rand(10, 100))
+def testToyMonteCarlo(size=100):
+    df = pandas.DataFrame(numpy.random.rand(10, size))
     res = generateToyMonteCarloWithSpecialFeatures(df, 200)
     assert isinstance(res, pandas.DataFrame), "something wrong with MonteCarlo"
     print "toyMC is ok"
 
 testToyMonteCarlo()
+
+import cProfile
+cProfile.run("testToyMonteCarlo(2000)")

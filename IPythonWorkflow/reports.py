@@ -217,10 +217,8 @@ def computeLocalEfficienciesOfBins(answers, prediction_proba, bin_indices, n_tot
     return bin_passed_cut / bin_total
 
 
-def computeMseVariationOnBins(is_signal, prediction_proba, bin_indices, target_efficiencies):
-    """
-    An efficient function to compute MSE
-    """
+def computeMseVariationOnBins(is_signal, prediction_proba, bin_indices, target_efficiencies, power=2.):
+    """ An efficient function to compute MSE """
     assert len(prediction_proba) == len(bin_indices) == len(is_signal), "different size"
     n_bins = numpy.max(bin_indices) + 1
     bin_total = numpy.bincount(bin_indices[is_signal], minlength=n_bins) + 1e-6
@@ -230,11 +228,12 @@ def computeMseVariationOnBins(is_signal, prediction_proba, bin_indices, target_e
     cuts = computeBDTCut(numpy.array(target_efficiencies), signal_answers, signal_prediction_proba)
     for cut, efficiency in zip(cuts, target_efficiencies):
         passed_cut = signal_prediction_proba[:, 1] > cut
+        mean_efficiency = numpy.sum(passed_cut) * 1. / len(passed_cut)
         bin_passed_cut = numpy.bincount(bin_indices[is_signal][passed_cut], minlength=n_bins)
         bin_efficiency = bin_passed_cut / bin_total
-        result += numpy.sum(bin_total * (bin_efficiency - efficiency) ** 2)
-
-    return math.sqrt(result / len(target_efficiencies) / len(signal_prediction_proba)) * 10
+        result += numpy.sum(bin_total * numpy.abs(bin_efficiency - mean_efficiency) ** power)
+    # Minkowski distance trick
+    return 10 * (result / len(target_efficiencies) / len(signal_prediction_proba)) ** (1. / power)
 
 
 def computeNdimensionalMseVariation(answers, predict_proba, X, var_names, efficiencies, n_bins=30, bin_limits=None):
@@ -247,7 +246,8 @@ def computeNdimensionalMseVariation(answers, predict_proba, X, var_names, effici
     return computeMseVariationOnBins(answers > .5, predict_proba, bin_indices, efficiencies)
 
 
-def computeStagedMseVariation(answers, testX, var_names, staged_predict_proba, stages, target_efficiencies, n_bins=30):
+def computeStagedMseVariation(answers, testX, var_names, staged_predict_proba, stages, target_efficiencies,
+                              n_bins=30, power=2.):
     is_signal = answers > 0.5
 
     bin_limits = []
@@ -263,13 +263,13 @@ def computeStagedMseVariation(answers, testX, var_names, staged_predict_proba, s
         stage_variations = []
         for name, predict_proba in predict_probas.iteritems():
             stage_variations.append(computeMseVariationOnBins(is_signal, predict_proba, bin_indices=bin_indices,
-                                          target_efficiencies=target_efficiencies))
+                                          target_efficiencies=target_efficiencies, power=power))
         results.append(stage_variations)
     return pandas.DataFrame(results, columns=staged_predict_proba.keys(), index=stages)
 
 
 
-def testCompureMseAndBins(size=500):
+def testComputeMseAndBins(size=500):
     columns = ['var1', 'var2']
     X = pandas.DataFrame(numpy.random.random((size, 2)), columns=columns)
     y = numpy.random.random(size) > 0.5
@@ -285,8 +285,7 @@ def testCompureMseAndBins(size=500):
     # todo continue testing
 
 
-
-testCompureMseAndBins()
+testComputeMseAndBins()
 
 
 def plotScoreVariableCorrelationSide2SideByPredictProba(predict_proba_dict, testX, testY, var_name,
