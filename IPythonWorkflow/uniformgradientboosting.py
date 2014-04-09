@@ -93,9 +93,11 @@ class SimpleKnnLossFunction(KnnLossFunction):
 
     def compute_parameters(self, trainX, trainY):
         is_signal = trainY > 0.5
+        if self.distinguish_classes:
+            knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, self.knn)
         if not self.distinguish_classes:
             is_signal = numpy.ones(len(trainY), dtype=numpy.bool)
-        knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, self.knn)
+            knn_indices = commonutils.computeSignalKnnIndices(self.uniform_variables, trainX, is_signal, self.knn)
         ind_ptr = numpy.arange(0, len(trainX) * self.knn + 1, self.knn)
         column_indices = knn_indices.flatten()
         data = numpy.ones(len(trainX) * self.knn)
@@ -186,6 +188,11 @@ class AdaLossFunction(KnnLossFunction):
         return sparse.eye(len(trainX), len(trainX)), numpy.ones(len(trainX))
 
 
+class DistanceBasedKnnFunction(KnnLossFunction):
+    def __init__(self, knn=30, distance_dependence=False):
+        raise NotImplementedError()
+    def compute_parameters(self, trainX, trainY):
+        return sparse.eye(len(trainX), len(trainX)), numpy.ones(len(trainX))
 
 
 
