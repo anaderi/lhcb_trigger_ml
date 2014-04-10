@@ -6,6 +6,8 @@ from sklearn.ensemble.gradient_boosting import LossFunction, LOSS_FUNCTIONS, Mul
     LogOddsEstimator, BinomialDeviance
 import numpy
 from sklearn.ensemble.weight_boosting import AdaBoostClassifier
+from sklearn.metrics.pairwise import pairwise_distances
+from sklearn.neighbors.unsupervised import NearestNeighbors
 from sklearn.tree._tree import DTYPE, TREE_LEAF
 from sklearn.tree.tree import DecisionTreeClassifier
 from sklearn.utils.random import check_random_state
@@ -189,10 +191,60 @@ class AdaLossFunction(KnnLossFunction):
 
 
 class DistanceBasedKnnFunction(KnnLossFunction):
-    def __init__(self, knn=30, distance_dependence=False):
-        raise NotImplementedError()
+    def __init__(self, uniform_variables, knn=None, distance_dependence=None, large_preds_penalty=0.,
+                 row_normalize=False):
+        """If knn is None, the matrix will be filled, otherwise it will be sparse
+        with knn as number of nonzero cells,
+        distance dependence is function, that takes distance between i-th and j-th
+        events and returns a_ij
+        """
+        self.knn = knn
+        self.distance_dependence = distance_dependence
+        self.large_pred_penalty = large_preds_penalty
+        self.row_normalize = row_normalize
+        KnnLossFunction.__init__(self, uniform_variables)
     def compute_parameters(self, trainX, trainY):
-        return sparse.eye(len(trainX), len(trainX)), numpy.ones(len(trainX))
+        for variable in self.uniform_variables:
+            if variable not in trainX.columns:
+                raise ValueError("Dataframe is missing %s column" % variable)
+
+        if self.knn is None:
+            A = pairwise_distances(trainX[self.uniform_variables])
+            A = self.distance_dependence(A)
+            A *= (trainY[:, numpy.newaxis] == trainY[numpy.newaxis, :])
+        else:
+            is_signal = trainY > 0.5
+            # computing knn indices of same type
+            uniforming_features_of_signal = numpy.array(trainX.ix[is_signal, self.uniform_variables])
+            neighbours = NearestNeighbors(n_neighbors=self.knn, algorithm='kd_tree').fit(uniforming_features_of_signal)
+            signal_distances, knn_signal_indices = neighbours.kneighbors(uniforming_features_of_signal)
+            knn_signal_indices = numpy.where(is_signal)[0].take(knn_signal_indices)
+
+            uniforming_features_of_bg = numpy.array(trainX.ix[~is_signal, self.uniform_variables])
+            neighbours = NearestNeighbors(n_neighbors=self.knn, algorithm='kd_tree').fit(uniforming_features_of_bg)
+            bg_distances, knn_bg_indices = neighbours.kneighbors(uniforming_features_of_bg)
+            knn_bg_indices = numpy.where(~is_signal)[0].take(knn_bg_indices)
+
+            signal_distances = self.distance_dependence(signal_distances.flatten())
+            bg_distances = self.distance_dependence(bg_distances.flatten())
+
+            signal_ind_ptr = numpy.arange(0, sum(is_signal) * self.knn + 1, self.knn)
+            bg_ind_ptr = numpy.arange(0, sum(~is_signal) * self.knn + 1, self.knn)
+            signal_column_indices = knn_signal_indices.flatten()
+            bg_column_indices = knn_bg_indices.flatten()
+
+            A_sig = sparse.csr_matrix(sparse.csr_matrix((signal_distances, signal_column_indices, signal_ind_ptr),
+                                                        shape=(sum(is_signal), len(trainX))))
+            A_bg = sparse.csr_matrix(sparse.csr_matrix((bg_distances, bg_column_indices, bg_ind_ptr),
+                                                       shape=(sum(~is_signal), len(trainX))))
+
+            A = sparse.vstack((A_sig, A_bg), format='csr')
+
+        if self.row_normalize:
+            from sklearn.preprocessing import normalize
+            A = normalize(A, norm='l1', axis=1)
+
+        return A, numpy.ones(A.shape[0])
 
 
 
@@ -406,8 +458,9 @@ def testGradientBoosting():
     loss3 = PairwiseKnnLossFunction(uniform_variables, knn=10)
     loss4 = AdaLossFunction()
     loss5 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
+    loss6 = DistanceBasedKnnFunction(uniform_variables, knn=10, distance_dependence=lambda r: numpy.exp(-r))
 
-    for loss in [loss2, loss3, loss4, loss5]:
+    for loss in [loss2, loss3, loss4, loss5, loss6]:
         print MyGradientBoostingClassifier(min_samples_split=20, loss=loss, max_depth=5, learning_rate=.2, subsample=0.7,
             n_estimators=n_estimators, train_variables=None).fit(trainX[:samples], trainY[:samples]).score(testX, testY),
 
