@@ -190,6 +190,15 @@ class AdaLossFunction(KnnLossFunction):
         return sparse.eye(len(trainX), len(trainX)), numpy.ones(len(trainX))
 
 
+def FlatnessLossFunction(LossFunction):
+    def __init__(self, uniform_variables):
+        self.uniform_variables = uniform_variables
+        LossFunction.__init__(self, 1)
+
+    def __call__(self):
+        pass
+
+
 class DistanceBasedKnnFunction(KnnLossFunction):
     def __init__(self, uniform_variables, knn=None, distance_dependence=None, large_preds_penalty=0.,
                  row_normalize=False):
@@ -459,8 +468,10 @@ def testGradientBoosting():
     loss4 = AdaLossFunction()
     loss5 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
     loss6 = DistanceBasedKnnFunction(uniform_variables, knn=10, distance_dependence=lambda r: numpy.exp(-r))
+    loss7 = DistanceBasedKnnFunction(uniform_variables, knn=None, distance_dependence=lambda r: numpy.exp(-r))
 
-    for loss in [loss2, loss3, loss4, loss5, loss6]:
+
+    for loss in [loss2, loss3, loss4, loss5, loss6, loss7]:
         print MyGradientBoostingClassifier(min_samples_split=20, loss=loss, max_depth=5, learning_rate=.2, subsample=0.7,
             n_estimators=n_estimators, train_variables=None).fit(trainX[:samples], trainY[:samples]).score(testX, testY),
 

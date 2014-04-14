@@ -1,8 +1,10 @@
 import random
 import math
 import numpy
+from numpy.random.mtrand import randint
 import pandas
 from sklearn.neighbors import NearestNeighbors
+import time
 
 __author__ = 'Alex Rogozhnikov'
 
@@ -82,52 +84,90 @@ def generateToyMonteCarlo(inputDF, size, knn=4, symmetrize=True, power=2.0, rewe
         result is generated toy MonteCarlo,
         n_copied_from_original - number of elements that were taken from original dataframe without any modification
     """
+    t = time.time()
+
     inputDF = pandas.DataFrame(inputDF)
-    if len(inputDF) <= 2:
+    input_length = len(inputDF)
+
+
+    if input_length <= 2:
         # print "unable to generate new events with only one-two given"
         return inputDF, len(inputDF)
 
     if knn is None:
-        knn = int(math.pow(len(inputDF), 0.33)) / 2
+        knn = int(math.pow(input_length, 0.33)) / 2
         knn = max(knn, 2)
         knn = min(knn, 25)
-        knn = min(knn, len(inputDF))
+        knn = min(knn, input_length)
 
     assert knn > 0, "knn should be positive"
+
+    numpiedDF = inputDF.values
 
     neighbours_helper = NearestNeighbors(n_neighbors=knn, algorithm='ball_tree')
     neighbours_helper.fit(inputDF)
     neighbours = neighbours_helper.kneighbors(inputDF, return_distance=False)
     two_side_neighbours = {}
+    # print "-1", time.time() - t
     for i, neighbours_i in enumerate(neighbours):
         two_side_neighbours[i] = list(neighbours_i[1:])
+    # print "0", time.time() - t
     if symmetrize:
         for i in range(len(neighbours)):
             for n in neighbours[i]:
                 two_side_neighbours[n].append(i)
+    # print "1", time.time() - t
 
     weights = numpy.zeros(len(neighbours)) + 1
     for _ in range(reweight_iterations):
         probs = countProbabilities(weights, two_side_neighbours)
         weights *= (probs ** -0.5)
+    # print "2", time.time() - t
 
-    new_events = []
-    input_length = len(inputDF)
+
+    # generating indices and weights
+    k_1 = randint(0, input_length, size)
+    t_1 = 0.5 * numpy.random.random(size) ** power
+    t_2 = 1. - t_1
+
+    k_2 = numpy.zeros(size, dtype=numpy.int)
     for i in range(size):
-        k = random.randint(0, input_length - 1)
-        neighs = two_side_neighbours[k]
+        neighs = two_side_neighbours[k_1[i]]
         selected_neigh = getRandom(neighs, weights)
-        # from 0 to 1/2
-        t = 0.5 * random.random() ** power
+        k_2[i] = selected_neigh
+    # print "3", time.time() - t
 
-        new_event = (1.0 - t) * inputDF.irow(k) + t * inputDF.irow(selected_neigh)
-        new_events.append(new_event)
+    # first = t_1[:, numpy.newaxis] * inputDF.irow(k_1)
+    # second = t_2[:, numpy.newaxis] * inputDF.irow(k_2)
 
-    result = pandas.DataFrame(new_events)
-    result.set_index([range(len(result))], inplace=True)
+    # first.set_index([numpy.arange(size)], inplace=True)
+    # second.set_index([numpy.arange(size)], inplace=True)
 
-    return result, 0
+    # x = first.add(second)
 
+    # print "4", time.time() - t
+    first = numpy.multiply(t_1[:, numpy.newaxis], numpiedDF[k_1, :])
+    second = numpy.multiply(t_2[:, numpy.newaxis], numpiedDF[k_2, :])
+
+    # print "5", time.time() - t
+
+    return pandas.DataFrame(numpy.add(first, second), columns=inputDF.columns), 0
+
+
+    # for i in range(size):
+    #     k = random.randint(0, input_length - 1)
+    #     neighs = two_side_neighbours[k]
+    #     selected_neigh = getRandom(neighs, weights)
+    #     # from 0 to 1/2
+    #     t = 0.5 * random.random() ** power
+    #
+    #     new_event = (1.0 - t) * inputDF.irow(k) + t * inputDF.irow(selected_neigh)
+    #     new_events.append(new_event)
+    #
+    # result = pandas.DataFrame(new_events)
+    # result.set_index([range(len(result))], inplace=True)
+    #
+    # return result, 0
 
 
 
@@ -154,7 +194,7 @@ def generateToyMonteCarloWithSpecialFeatures(inputDF, size, clusterization_featu
     else:
         grouped = inputDF.groupby(clusterization_features)
         toyMC_parts = []
-        print "Groups: ", len(grouped)
+        print "Generating ..."
         for group_vals, df in grouped:
             toyMC_part, n_copied = generateToyMonteCarlo(df[stayed_features],  int(len(df) * size_coeff), knn=None)
             copied += n_copied
@@ -173,12 +213,12 @@ def generateToyMonteCarloWithSpecialFeatures(inputDF, size, clusterization_featu
 
 
 def testToyMonteCarlo(size=100):
-    df = pandas.DataFrame(numpy.random.rand(10, size))
-    res = generateToyMonteCarloWithSpecialFeatures(df, 200)
+    df = pandas.DataFrame(numpy.random.rand(size, 40))
+    res = generateToyMonteCarloWithSpecialFeatures(df, 5000)
     assert isinstance(res, pandas.DataFrame), "something wrong with MonteCarlo"
     print "toyMC is ok"
 
-testToyMonteCarlo()
+testToyMonteCarlo(1000)
 
-import cProfile
-cProfile.run("testToyMonteCarlo(2000)")
+# import cProfile
+# cProfile.run("testToyMonteCarlo(30000)")
