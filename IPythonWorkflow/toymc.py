@@ -104,7 +104,7 @@ def generateToyMonteCarlo(inputDF, size, knn=4, symmetrize=True, power=2.0, rewe
 
     numpiedDF = inputDF.values
 
-    neighbours_helper = NearestNeighbors(n_neighbors=knn, algorithm='ball_tree')
+    neighbours_helper = NearestNeighbors(n_neighbors=knn, algorithm='ball_tree', )
     neighbours_helper.fit(inputDF)
     neighbours = neighbours_helper.kneighbors(inputDF, return_distance=False)
     two_side_neighbours = {}
@@ -153,7 +153,8 @@ def generateToyMonteCarlo(inputDF, size, knn=4, symmetrize=True, power=2.0, rewe
 
     return pandas.DataFrame(numpy.add(first, second), columns=inputDF.columns), 0
 
-
+    # new_events = []
+    #
     # for i in range(size):
     #     k = random.randint(0, input_length - 1)
     #     neighs = two_side_neighbours[k]
@@ -213,12 +214,12 @@ def generateToyMonteCarloWithSpecialFeatures(inputDF, size, clusterization_featu
 
 
 def testToyMonteCarlo(size=100):
-    df = pandas.DataFrame(numpy.random.rand(size, 40))
+    df = pandas.DataFrame(numpy.random.random((size, 40)))
     res = generateToyMonteCarloWithSpecialFeatures(df, 5000)
     assert isinstance(res, pandas.DataFrame), "something wrong with MonteCarlo"
     print "toyMC is ok"
 
-testToyMonteCarlo(1000)
+# testToyMonteCarlo(10000)
 
-# import cProfile
-# cProfile.run("testToyMonteCarlo(30000)")
+import cProfile
+cProfile.run("testToyMonteCarlo(10000)")

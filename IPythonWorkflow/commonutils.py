@@ -12,7 +12,7 @@ import pylab
 import io
 from sklearn.cross_validation import train_test_split
 from sklearn.metrics import precision_score, recall_score, f1_score, mean_squared_error
-from sklearn.neighbors.dist_metrics import MinkowskiDistance
+from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.neighbors.unsupervised import NearestNeighbors
 from IPython.core.getipython import get_ipython
 
@@ -440,7 +440,8 @@ def testComputeSignalKnnIndices(n_events=100):
     signal_indices = numpy.where(is_signal)[0]
     unif_columns = df.columns[:1]
     knn_indices = computeSignalKnnIndices(unif_columns, df, is_signal, 10)
-    distances = MinkowskiDistance(p=2).pairwise(df[unif_columns])
+    distances = pairwise_distances(df[unif_columns])
+    # distances = MinkowskiDistance(p=2).pairwise(df[unif_columns])
     for i, neighbours in enumerate(knn_indices):
         assert numpy.all(is_signal[neighbours]), "returned indices are not signal"
         not_neighbours = [x for x in signal_indices if not x in neighbours]

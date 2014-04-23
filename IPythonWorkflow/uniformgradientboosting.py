@@ -1,4 +1,6 @@
+from collections import defaultdict
 from time import time
+import itertools
 import scipy.sparse as sparse
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble._gradient_boosting import _random_sample_mask
@@ -14,6 +16,7 @@ from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays, column_or_1d
 from commonutils import generateSample
 import commonutils
+import reports
 
 
 class KnnLossFunction(LossFunction):
@@ -189,16 +192,6 @@ class AdaLossFunction(KnnLossFunction):
     def compute_parameters(self, trainX, trainY):
         return sparse.eye(len(trainX), len(trainX)), numpy.ones(len(trainX))
 
-
-def FlatnessLossFunction(LossFunction):
-    def __init__(self, uniform_variables):
-        self.uniform_variables = uniform_variables
-        LossFunction.__init__(self, 1)
-
-    def __call__(self):
-        pass
-
-
 class DistanceBasedKnnFunction(KnnLossFunction):
     def __init__(self, uniform_variables, knn=None, distance_dependence=None, large_preds_penalty=0.,
                  row_normalize=False):
@@ -256,6 +249,149 @@ class DistanceBasedKnnFunction(KnnLossFunction):
         return A, numpy.ones(A.shape[0])
 
 
+class FlatnessLossFunction(LossFunction):
+    def __init__(self, uniform_variables, bins=10, on_signal=True, power=2., ada_coefficient=1.):
+        """
+        This loss function contains separately penalty for non-flatness and ada_coefficient.
+        The penalty for non-flatness is using bins.
+
+        :param uniform_variables: the vars, along which we want to obtain uniformity
+        :param bins: the number of bins along each axis
+        :param on_signal: if True, we penalize non-uniformity in signal, else -- in bg
+        :param power: the loss contains the difference | F - F_bin |^p, where p is power
+        :param ada_coefficient: coefficient of ada_loss added to this one. The greater the coefficient,
+            the less we tend to uniformity.
+        """
+        self.uniform_variables = uniform_variables
+        self.bins = bins
+        self.on_signal = on_signal
+        self.power = power
+        self.ada_coefficient = ada_coefficient
+        LossFunction.__init__(self, 1)
+
+    def fit(self, X, y):
+        indices_dict = self.computeIndicesInBin(X, y)
+        # cleaning the bins - deleting tiny or empty bins, canonizing
+        self.bin_indices = []
+        occurences = numpy.zeros(len(X))
+        for bin, indices in indices_dict.iteritems():
+            if len(indices) < 5:
+                # ignoring very small bins
+                continue
+            np_indices = numpy.array(indices)
+            self.bin_indices.append(np_indices)
+            occurences[np_indices] += 1
+
+        needed_indices = (y > 0.5) == self.on_signal
+        out_of_bins = numpy.sum((occurences == 0) & needed_indices)
+        if out_of_bins > 0.005 * len(X):
+            print "warning: %i events are out of all bins" % out_of_bins
+
+        event_weights = 1. / (occurences + 1e-10)
+        self.bin_weights = numpy.zeros(len(self.bin_indices))
+        for i, bin_indices in enumerate(self.bin_indices):
+            self.bin_weights[i] = numpy.sum(event_weights[bin_indices])
+
+        self.bin_weights *= len(X) / numpy.sum(self.bin_weights)
+        return self
+
+    def computeIndicesInBin(self, X, y):
+        """Returns a dictinary, each value is a list with indices inside this bin,
+        template method, may be overriden in descendants"""
+        bin_limits = []
+        for var in self.uniform_variables:
+            bin_limits.append(numpy.linspace(numpy.min(X[var][y > .5]), numpy.max(X[var][y > .5]), self.bins + 1)[1:-1])
+        bin_indices = reports.computeNdimentionalBinIndices(X, self.uniform_variables, bin_limits)
+        n_bins = numpy.prod([len(limits) + 1 for limits in bin_limits])
+
+        bin_limits2 = []
+        for axis_limits in bin_limits:
+            bin_limits2.append((axis_limits[1:] + axis_limits[:-1]) / 2.)
+        bin_indices2 = reports.computeNdimentionalBinIndices(X, self.uniform_variables, bin_limits2) + n_bins
+        assert len(X) == len(y) == len(bin_indices) == len(bin_indices2), "different size"
+        n_bins += numpy.prod([len(limits) + 1 for limits in bin_limits2])
+
+        indices_in_bin = defaultdict(list)
+        for i, bin in itertools.chain(enumerate(bin_indices), enumerate(bin_indices2)):
+            if (y[i] > 0.5) == self.on_signal:
+                indices_in_bin[bin].append(i)
+
+        return indices_in_bin
+
+    def __call__(self, y, pred):
+        # computing the common distribution of signal
+        # taking only signal by now
+        # this is approximate computation!
+        pred = numpy.ravel(pred)
+        needed_indices = (y > 0.5) == self.on_signal
+        sorted_pred = numpy.sort(pred[needed_indices])
+        loss = 0
+
+        for bin_weight, indices_in_bin in zip(self.bin_weights, self.bin_indices):
+            probs_in_bin = numpy.take(pred, indices_in_bin)
+            probs_in_bin = numpy.sort(probs_in_bin)
+            positions = numpy.searchsorted(sorted_pred, probs_in_bin)
+            global_effs = positions / float(len(sorted_pred))
+            local_effs = (numpy.arange(0, len(probs_in_bin)) + 0.5) / len(probs_in_bin)
+            bin_loss = numpy.sum((global_effs - local_effs) ** self.power)
+            loss += bin_loss * bin_weight
+
+        # Ada loss now
+        loss += self.ada_coefficient * numpy.sum(numpy.exp(-y * pred))
+        return loss
+
+    def negative_gradient(self, y, y_pred, **kw_args):
+        gradient = numpy.zeros(len(y))
+        needed_indices = (y > 0.5) == self.on_signal
+        n_needed = numpy.sum(needed_indices)
+        y_pred = numpy.ravel(y_pred)
+        # sorted_pred = numpy.sort(y_pred[needed_indices])
+        global_efficiencies = numpy.zeros(len(y), dtype=numpy.float)
+        global_efficiencies[numpy.where(needed_indices)[0][y_pred[needed_indices].argsort()]] = \
+            (numpy.arange(0, n_needed) + 0.5) / float(n_needed)
+
+        for bin_weight, indices_in_bin in zip(self.bin_weights, self.bin_indices):
+            preds_in_bin = numpy.take(y_pred, indices_in_bin)
+            sort_indices = preds_in_bin.argsort()
+            indices_in_bin = indices_in_bin[sort_indices]
+            preds_in_bin = preds_in_bin[sort_indices]
+
+            # positions = numpy.searchsorted(sorted_pred, preds_in_bin)
+            # global_effs = positions / float(len(sorted_pred))
+            global_effs = global_efficiencies[indices_in_bin]
+            local_effs = (numpy.arange(0, len(preds_in_bin)) + 0.5) / len(preds_in_bin)
+
+            bin_gradient = self.power * numpy.abs(global_effs - local_effs) ** (self.power - 1) \
+                           * numpy.sign(local_effs - global_effs)
+
+            # TODO multiply by derivative of F_global
+            gradient[indices_in_bin] += bin_weight * bin_gradient
+
+        assert numpy.all(gradient[~needed_indices] == 0)
+        # ada loss
+        y_signed = 2 * y - 1
+        gradient += self.ada_coefficient * y_signed * numpy.exp(- y_signed * y_pred)
+        return gradient
+
+    # def update_terminal_regions(self, tree, X, y, residual, y_pred, sample_mask, learning_rate=1.0, k=0):
+    #     # nothing here
+    #     pass
+
+    def _update_terminal_region(self, tree, terminal_regions, leaf, X, y, residual, pred):
+        # terminal_region = numpy.where(terminal_regions == leaf)[0]
+        tree.value[leaf, 0, 0] = numpy.clip(tree.value[leaf, 0, 0], -10, 10)
+        # TODO think of uniformity
+        # print tree.value[leaf, 0, 0]
+
+        # tree.value[leaf, 0, 0] = numpy.median(y.take(terminal_region, axis=0) -
+        #                                    pred.take(terminal_region, axis=0))
+
+    def init_estimator(self, X=None, y=None):
+        return LogOddsEstimator()
+
+
+
+
 
 class MyGradientBoostingClassifier(GradientBoostingClassifier):
     def __init__(self, loss='deviance', learning_rate=0.1, n_estimators=100,
@@ -307,7 +443,7 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
 
         self._check_params()
         # fitting the loss if it needs
-        if isinstance(self.loss_, KnnLossFunction):
+        if isinstance(self.loss_, KnnLossFunction) or isinstance(self.loss_, FlatnessLossFunction):
             self.loss_.fit(X, y)
         X = self.get_train_variables(X)
 
@@ -340,8 +476,7 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
             verbose_fmt.append('{remaining_time:>16s}')
             verbose_fmt = ' '.join(verbose_fmt)
             # print the header line
-            print(('%10s ' + '%16s ' *
-                   (len(header_fields) - 1)) % tuple(header_fields))
+            print(('%10s ' + '%16s ' * (len(header_fields) - 1)) % tuple(header_fields))
             # plot verbose info each time i % verbose_mod == 0
             verbose_mod = 1
             start_time = time()
@@ -468,11 +603,12 @@ def testGradientBoosting():
     loss4 = AdaLossFunction()
     loss5 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
     loss6 = DistanceBasedKnnFunction(uniform_variables, knn=10, distance_dependence=lambda r: numpy.exp(-r))
-    loss7 = DistanceBasedKnnFunction(uniform_variables, knn=None, distance_dependence=lambda r: numpy.exp(-r))
+    # loss7 = DistanceBasedKnnFunction(uniform_variables, knn=None, distance_dependence=lambda r: numpy.exp(-r))
+    loss8 = FlatnessLossFunction(uniform_variables, ada_coefficient=1)
 
 
-    for loss in [loss2, loss3, loss4, loss5, loss6, loss7]:
-        print MyGradientBoostingClassifier(min_samples_split=20, loss=loss, max_depth=5, learning_rate=.2, subsample=0.7,
+    for loss in [loss2, loss3, loss4, loss5, loss6, loss8]:
+        print MyGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2, subsample=0.7,
             n_estimators=n_estimators, train_variables=None).fit(trainX[:samples], trainY[:samples]).score(testX, testY),
 
     print AdaBoostClassifier(n_estimators=n_estimators, base_estimator=base_estimator)\
@@ -481,3 +617,15 @@ def testGradientBoosting():
     print 'uniform gradient boosting is ok'
 
 testGradientBoosting()
+
+
+
+def testFlatnessLossFunction(size=1000):
+    trainX, trainY = generateSample(size, 10)
+    uniform_variables = trainX.columns[0]
+    train_variables = trainX.columns[1:]
+    loss = FlatnessLossFunction(uniform_variables)
+    classifier = MyGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2, subsample=0.7,
+                                              n_estimators=20, train_variables=train_variables)
+    classifier.fit(trainX, trainY)
+    print classifier.score()

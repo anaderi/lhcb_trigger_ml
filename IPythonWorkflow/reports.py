@@ -1,12 +1,18 @@
 # This module contains functions to build reports:
 # training, getting predictions, building various plots
-from collections import OrderedDict
+try:
+    from collections import OrderedDict
+except:
+    try:
+        from ordereddict import OrderedDict
+    except:
+        OrderedDict = dict
 
 import numpy
 import pandas
 import pylab
-from sklearn.metrics.metrics import roc_auc_score, recall_score, roc_curve, auc
-from sklearn.utils.validation import check_arrays, column_or_1d
+from sklearn.metrics import roc_auc_score, recall_score, roc_curve, auc
+from sklearn.utils.validation import check_arrays
 from commonutils import computeBDTCut, Binner
 import time
 import math
@@ -210,10 +216,10 @@ def computeLocalEfficienciesOfBins(answers, prediction_proba, bin_indices, n_tot
     assert len(answers) == len(prediction_proba) == len(bin_indices), "different size"
     is_signal = answers > 0.5
     # n_bins = numpy.max(bin_indices) + 1
-    bin_total = numpy.bincount(bin_indices[is_signal], minlength=n_total_bins) + 1e-6
+    bin_total = numpy.bincount(bin_indices[is_signal], minlength=n_total_bins) + 1e-10
 
     passed_cut = prediction_proba[:, 1] > cut
-    bin_passed_cut = numpy.bincount(bin_indices[is_signal & passed_cut], minlength=n_total_bins)
+    bin_passed_cut = numpy.bincount(bin_indices[is_signal & passed_cut], minlength=n_total_bins) - 1e-6
     return bin_passed_cut / bin_total
 
 
@@ -309,7 +315,7 @@ def plotScoreVariableCorrelationSide2Side(classifiers_dict, testX, testY, var_na
 
 
 def plotEfficiency2D(var_name1, var_name2, testX, testY, probas_dict, target_efficiency, order=None, n_bins=30,
-                     xlim=None, ylim=None):
+                     xlim=None, ylim=None, draw_difference=True):
     """This function plots the efficiency on 2D plot
     - var_name1 is name of first variable
     - var_name2 is name of second variable
@@ -337,9 +343,14 @@ def plotEfficiency2D(var_name1, var_name2, testX, testY, probas_dict, target_eff
 
         local_efficiencies = computeLocalEfficienciesOfBins(testY, predict_proba, cut=cut,
                 bin_indices=bin_indices, n_total_bins=n_bins ** 2).reshape((n_bins, n_bins))
-
+        if draw_difference:
+            local_efficiencies[local_efficiencies < 0] = target_efficiency
+            local_efficiencies -= target_efficiency
         ax = fig.add_subplot(1, len(order), i + 1)
-        p = ax.pcolor(x_limits, y_limits, local_efficiencies, cmap=cm.get_cmap("Blues"), vmin=0.0, vmax=1.0)
+        if draw_difference:
+            p = ax.pcolor(x_limits, y_limits, local_efficiencies, cmap=cm.get_cmap("RdBu"), vmin=-0.2, vmax=+0.2)
+        else:
+            p = ax.pcolor(x_limits, y_limits, local_efficiencies, cmap=cm.get_cmap("RdBu"), vmin=0.0, vmax=1.0)
         ax.set_xlabel(var_name1)
         ax.set_ylabel(var_name2)
         ax.set_title(name)

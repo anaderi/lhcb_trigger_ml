@@ -7,7 +7,12 @@ from sklearn.base import BaseEstimator, clone
 from sklearn.ensemble.weight_boosting import ClassifierMixin
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.utils.random import check_random_state
-from sklearn.utils.validation import check_arrays, column_or_1d
+from sklearn.utils.validation import check_arrays
+
+try:
+    import cPickle as pickle
+except:
+    import pickle
 
 from commonutils import computeLocalEfficiencies, computeBDTCut, sigmoidFunction, \
     generateSample, computeSignalKnnIndices
@@ -178,8 +183,8 @@ class uBoostBDT:
         self.bdt_cuts_ = []
 
         X_train_variables = self.get_train_vars(X)
+        y = numpy.ravel(y)
         X_train_variables, y = check_arrays(X_train_variables, y, sparse_format="dense")
-        y = column_or_1d(y, warn=True)
 
         # Some dictionary to keep all intermediate weights, efficiencies and so on
         self.debug_dict = defaultdict(list)
@@ -327,6 +332,23 @@ class uBoostBDT:
 
 
 
+def trainPickledClassifier(pickled_classifier, X_train_vars, y, sample_weight, neighbours_matrix):
+    import cPickle as pickle
+    import sys
+    sys.path.insert(0, "/mnt/w76/notebook")
+    print sys.path
+
+    import uboost
+    classifier = pickle.loads(pickled_classifier).fit(X_train_vars, y, sample_weight=sample_weight,
+                                                      neighbours_matrix=neighbours_matrix)
+    return pickle.dumps(classifier)
+
+
+def trainClassifier(classifier, X_train_vars, y, sample_weight, neighbours_matrix):
+    return classifier.fit(X_train_vars, y, sample_weight=sample_weight, neighbours_matrix=neighbours_matrix)
+
+
+
 class uBoostClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, uniform_variables=None,
                  n_neighbors=50,
@@ -337,7 +359,8 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
                  train_variables=None,
                  boost_only_signal=True,
                  smoothing=None,
-                 random_state=None):
+                 random_state=None,
+                 parallel_profile=None):
         """uBoost classifier, am algorithm of boosting targeted to obtain
         flat efficiency in signal along some variables. See [1] for details.
 
@@ -382,6 +405,8 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
             If None, the random number generator is the RandomState instance used
             by `numpy.random`.
 
+        parallel_profile: profile (name of cluster) in IPython to parallelize computations
+
         Reference
         ----------
         .. [1] Justin Stevens, Mike Williams 'uBoost: A boosting method for producing uniform
@@ -397,12 +422,14 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         self.train_variables = train_variables
         self.boost_only_signal = boost_only_signal
         self.smoothing = smoothing
+        self.parallel_profile = parallel_profile
 
     def get_train_variables(self, X):
         if self.train_variables is not None:
             return X[self.train_variables]
         else:
             return X
+
 
     def fit(self, X, y, sample_weight=None):
         if self.uniform_variables is None:
@@ -421,20 +448,35 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         # TODO select some other targets
         self.target_efficiencies = [(i + 1.0) / (self.efficiency_steps + 1.0) for i in range(self.efficiency_steps)]
         self.classifiers = []
+
         for efficiency in self.target_efficiencies:
             classifier = uBoostBDT(uniform_variables=self.uniform_variables, train_variables=None,
                                    target_efficiency=efficiency, n_neighbors=self.knn,
                                    n_estimators=self.n_estimators, base_estimator=self.base_estimator,
                                    random_state=self.random_state, bagging=self.bagging,
                                    boost_only_signal=self.boost_only_signal, smoothing=self.smoothing)
-            classifier.fit(X_train_vars, y, sample_weight=sample_weight, neighbours_matrix=neighbours_matrix)
             self.classifiers.append(classifier)
+
+        if self.parallel_profile is not None:
+            from IPython.parallel import Client
+            client = Client(profile=self.parallel_profile)
+            result = client.load_balanced_view().map_sync(trainPickledClassifier, [pickle.dumps(clf) for clf in self.classifiers],
+                                    [X_train_vars] * self.efficiency_steps, [y] * self.efficiency_steps,
+                                    [sample_weight] * self.efficiency_steps, [neighbours_matrix] * self.efficiency_steps)
+            self.classifiers = [pickle.loads(pickled_class) for pickled_class in result]
+            del client
+        else:
+            self.classifiers = map(trainClassifier, self.classifiers,
+                                   [X_train_vars] * self.efficiency_steps, [y] * self.efficiency_steps,
+                                   [sample_weight] * self.efficiency_steps, [neighbours_matrix] * self.efficiency_steps)
+
+
         return self
 
     def predict(self, X):
         return numpy.argmax(self.predict_proba(X), axis=1)
 
-    # TODO think of using score predictions
+    # TODO think of using score predictions here
     def predict_proba(self, X):
         X_train_vars = self.get_train_variables(X)
         signal_proba = numpy.zeros(len(X))
@@ -495,6 +537,7 @@ def test_uboost_classifier():
 
     uboost_classifier = uBoostClassifier(uniform_variables=uniform_variables, n_neighbors=20, efficiency_steps=3,
                                          n_estimators=20)
+
     bdt_classifier = uBoostBDT(uniform_variables=uniform_variables, n_neighbors=20, n_estimators=20,
                                base_estimator=base_classifier)
 
