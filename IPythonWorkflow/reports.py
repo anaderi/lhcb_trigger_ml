@@ -1,5 +1,6 @@
 # This module contains functions to build reports:
 # training, getting predictions, building various plots
+
 try:
     from collections import OrderedDict
 except:
@@ -59,12 +60,26 @@ def partOfAsSignal(answer, prediction):
 # staged_predict_proba_dict = {classifier_name: it's staged_predict_proba}
 
 
-def trainClassifiers(classifiers_dict, trainX, trainY):
+def trainClassifiers(classifiers_dict, trainX, trainY, parallel_profile=None):
     """Trains all classifiers on the same train data"""
-    for name, classifier in classifiers_dict.iteritems():
+    if parallel_profile is None:
+        for name, classifier in classifiers_dict.iteritems():
+            start_time = time.time()
+            classifier.fit(trainX, trainY)
+            print "Classifier %12s is learnt in %0.2f seconds" % (name, time.time() - start_time)
+    else:
+        from IPython.parallel import Client
+        client = Client(profile=parallel_profile)
         start_time = time.time()
-        classifier.fit(trainX, trainY)
-        print "Classifier %12s is learnt in %0.2f seconds" % (name, time.time() - start_time)
+        cview = client.load_balanced_view()
+        def trainClassifier(classifier, X, y):
+            classifier.fit(X, y)
+            return classifier
+        result = cview.map_sync(trainClassifier, classifiers_dict.iteritems(),
+                                [trainX] * len(classifiers_dict),  [trainY] * len(classifiers_dict))
+        print "We spent %.3f seconds on parallel training" % (time.time() - start_time)
+        for name, classifier in result:
+            classifiers_dict[name] = classifier
 
 
 def getClassifiersPredictionProba(classifiers_dict, testX):
