@@ -72,9 +72,9 @@ def trainClassifiers(classifiers_dict, trainX, trainY, ipc_profile=None):
         client = Client(profile=ipc_profile)
         start_time = time.time()
         cview = client.load_balanced_view()
-        def trainClassifier(classifier, X, y):
-            classifier.fit(X, y)
-            return classifier
+        def trainClassifier(name_classifier, X, y):
+            name_classifier[1].fit(X, y)
+            return name_classifier
         result = cview.map_sync(trainClassifier, classifiers_dict.iteritems(),
                                 [trainX] * len(classifiers_dict),  [trainY] * len(classifiers_dict))
         print "We spent %.3f seconds on parallel training" % (time.time() - start_time)
