@@ -250,7 +250,8 @@ class DistanceBasedKnnFunction(KnnLossFunction):
 
 
 class FlatnessLossFunction(LossFunction):
-    def __init__(self, uniform_variables, bins=10, on_signal=True, power=2., ada_coefficient=1.):
+    def __init__(self, uniform_variables, bins=10, on_signal=True, power=2., ada_coefficient=1.,
+                 allow_negative_gradients=True):
         """
         This loss function contains separately penalty for non-flatness and ada_coefficient.
         The penalty for non-flatness is using bins.
@@ -267,6 +268,7 @@ class FlatnessLossFunction(LossFunction):
         self.on_signal = on_signal
         self.power = power
         self.ada_coefficient = ada_coefficient
+        self.allow_negative_gradients = allow_negative_gradients
         LossFunction.__init__(self, 1)
 
     def fit(self, X, y):
@@ -296,7 +298,7 @@ class FlatnessLossFunction(LossFunction):
         return self
 
     def computeIndicesInBin(self, X, y):
-        """Returns a dictinary, each value is a list with indices inside this bin,
+        """Returns a dictionary, each value is a list with indices inside this bin,
         template method, may be overriden in descendants"""
         bin_limits = []
         for var in self.uniform_variables:
@@ -371,6 +373,10 @@ class FlatnessLossFunction(LossFunction):
         # ada loss
         y_signed = 2 * y - 1
         gradient += self.ada_coefficient * y_signed * numpy.exp(- y_signed * y_pred)
+
+        if not self.allow_negative_gradients:
+            gradient = y_signed * numpy.clip(y_signed * gradient, 0, 1e5)
+
         return gradient
 
     # def update_terminal_regions(self, tree, X, y, residual, y_pred, sample_mask, learning_rate=1.0, k=0):
@@ -383,8 +389,7 @@ class FlatnessLossFunction(LossFunction):
         # TODO think of uniformity
         # print tree.value[leaf, 0, 0]
 
-        # tree.value[leaf, 0, 0] = numpy.median(y.take(terminal_region, axis=0) -
-        #                                    pred.take(terminal_region, axis=0))
+        # tree.value[leaf, 0, 0] = numpy.median(y.take(terminal_region, axis=0) - pred.take(terminal_region, axis=0))
 
     def init_estimator(self, X=None, y=None):
         return LogOddsEstimator()

@@ -3,10 +3,7 @@
 try:
     from collections import OrderedDict
 except:
-    try:
-        from ordereddict import OrderedDict
-    except:
-        OrderedDict = dict
+    from ordereddict import OrderedDict
 
 import numpy
 import pandas
