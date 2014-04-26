@@ -332,16 +332,16 @@ class uBoostBDT:
 
 
 
-def trainPickledClassifier(pickled_classifier, X_train_vars, y, sample_weight, neighbours_matrix):
-    import cPickle as pickle
-    import sys
-    sys.path.insert(0, "/mnt/w76/notebook")
-    print sys.path
-
-    import uboost
-    classifier = pickle.loads(pickled_classifier).fit(X_train_vars, y, sample_weight=sample_weight,
-                                                      neighbours_matrix=neighbours_matrix)
-    return pickle.dumps(classifier)
+# def trainPickledClassifier(pickled_classifier, X_train_vars, y, sample_weight, neighbours_matrix):
+#     import cPickle as pickle
+#     import sys
+#     sys.path.insert(0, "/mnt/w76/notebook")
+#     print sys.path
+#
+#     import uboost
+#     classifier = pickle.loads(pickled_classifier).fit(X_train_vars, y, sample_weight=sample_weight,
+#                                                       neighbours_matrix=neighbours_matrix)
+#     return pickle.dumps(classifier)
 
 
 def trainClassifier(classifier, X_train_vars, y, sample_weight, neighbours_matrix):
@@ -460,7 +460,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         if self.parallel_profile is not None:
             from IPython.parallel import Client
             client = Client(profile=self.parallel_profile)
-            result = client.load_balanced_view().map_sync(trainPickledClassifier, [pickle.dumps(clf) for clf in self.classifiers],
+            result = client.load_balanced_view().map_sync(trainClassifier, self.classifiers,
                                     [X_train_vars] * self.efficiency_steps, [y] * self.efficiency_steps,
                                     [sample_weight] * self.efficiency_steps, [neighbours_matrix] * self.efficiency_steps)
             self.classifiers = [pickle.loads(pickled_class) for pickled_class in result]
