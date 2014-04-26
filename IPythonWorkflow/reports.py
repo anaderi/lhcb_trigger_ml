@@ -60,16 +60,16 @@ def partOfAsSignal(answer, prediction):
 # staged_predict_proba_dict = {classifier_name: it's staged_predict_proba}
 
 
-def trainClassifiers(classifiers_dict, trainX, trainY, parallel_profile=None):
+def trainClassifiers(classifiers_dict, trainX, trainY, ipc_profile=None):
     """Trains all classifiers on the same train data"""
-    if parallel_profile is None:
+    if ipc_profile is None:
         for name, classifier in classifiers_dict.iteritems():
             start_time = time.time()
             classifier.fit(trainX, trainY)
             print "Classifier %12s is learnt in %0.2f seconds" % (name, time.time() - start_time)
     else:
         from IPython.parallel import Client
-        client = Client(profile=parallel_profile)
+        client = Client(profile=ipc_profile)
         start_time = time.time()
         cview = client.load_balanced_view()
         def trainClassifier(classifier, X, y):
