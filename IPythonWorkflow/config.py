@@ -4,6 +4,6 @@
 ipc_cluster = None
 
 try:
-    import config.local
-except:
-    pass
+    import configlocal
+except ImportError:
+    print("No configlocal.py file was found, using default config")

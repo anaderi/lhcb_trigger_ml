@@ -42,4 +42,4 @@ nosetests.xml
 .idea/
 
 # local condiguration file
-config.local.py
+configlocal.py
