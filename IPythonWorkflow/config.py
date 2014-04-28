@@ -4,6 +4,6 @@
 ipc_profile = None
 
 try:
-    import configlocal
+    from configlocal import *
 except ImportError:
     print("No configlocal.py file was found, using default config")
