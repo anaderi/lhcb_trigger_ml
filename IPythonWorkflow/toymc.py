@@ -198,8 +198,8 @@ def generateToyMonteCarloWithSpecialFeatures(inputDF, size, clusterization_featu
                     toyMC_part[col] = group_vals[i]
                 return toyMC_part, n_copied
 
-            with Client(profile="ssh-ipy2.0") as client:
-                results = client.load_balanced_view().map(prepareToyMC, grouped)
+            with Client(profile=ipc_profile) as client:
+                results = client.load_balanced_view().map_sync(prepareToyMC, grouped)
                 toyMC_parts, copied_list = zip(*results)
         copied_list = numpy.array(copied_list)
         copied = copied_list.sum()
