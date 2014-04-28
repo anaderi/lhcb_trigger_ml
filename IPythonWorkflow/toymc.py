@@ -219,6 +219,8 @@ def testToyMonteCarlo(size=100):
     assert isinstance(res, pandas.DataFrame), "something wrong with MonteCarlo"
     print "toyMC is ok"
 
+testToyMonteCarlo(1000)
 
-import cProfile as profile
-profile.run("testToyMonteCarlo(10000)")
+# import cProfile as profile
+# profile.run("testToyMonteCarlo(10000)")
+
