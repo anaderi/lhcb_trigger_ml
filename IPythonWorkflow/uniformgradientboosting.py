@@ -262,6 +262,8 @@ class FlatnessLossFunction(LossFunction):
         :param power: the loss contains the difference | F - F_bin |^p, where p is power
         :param ada_coefficient: coefficient of ada_loss added to this one. The greater the coefficient,
             the less we tend to uniformity.
+        :param allow_negative_gradients: defines whether gradient may different sign from the "sign of class"
+            (i.e. may have negative gradient on signal)
         """
         self.uniform_variables = uniform_variables
         self.bins = bins
@@ -286,15 +288,15 @@ class FlatnessLossFunction(LossFunction):
 
         needed_indices = (y > 0.5) == self.on_signal
         out_of_bins = numpy.sum((occurences == 0) & needed_indices)
-        if out_of_bins > 0.005 * len(X):
+        if out_of_bins > 0.01 * len(X):
             print "warning: %i events are out of all bins" % out_of_bins
 
         event_weights = 1. / (occurences + 1e-10)
         self.bin_weights = numpy.zeros(len(self.bin_indices))
         for i, bin_indices in enumerate(self.bin_indices):
-            self.bin_weights[i] = numpy.sum(event_weights[bin_indices])
-
-        self.bin_weights *= len(X) / numpy.sum(self.bin_weights)
+            self.bin_weights[i] = numpy.sum(event_weights[bin_indices]) / len(bin_indices)
+        # self.bin_weights /= numpy.sum(self.bin_weights)
+        # self.bin_weights *= sum(needed_indices)
         return self
 
     def computeIndicesInBin(self, X, y):
@@ -358,16 +360,17 @@ class FlatnessLossFunction(LossFunction):
             indices_in_bin = indices_in_bin[sort_indices]
             preds_in_bin = preds_in_bin[sort_indices]
 
-            # positions = numpy.searchsorted(sorted_pred, preds_in_bin)
-            # global_effs = positions / float(len(sorted_pred))
             global_effs = global_efficiencies[indices_in_bin]
             local_effs = (numpy.arange(0, len(preds_in_bin)) + 0.5) / len(preds_in_bin)
+
+            print numpy.mean(local_effs)
+            print local_effs
 
             bin_gradient = self.power * numpy.abs(global_effs - local_effs) ** (self.power - 1) \
                            * numpy.sign(local_effs - global_effs)
 
             # TODO multiply by derivative of F_global
-            gradient[indices_in_bin] += bin_weight * bin_gradient
+            gradient[indices_in_bin] += bin_weight * bin_gradient / len(indices_in_bin)
 
         assert numpy.all(gradient[~needed_indices] == 0)
         # ada loss
@@ -587,7 +590,7 @@ def testGradient(loss, size=1000):
 
     n_gradient = loss.negative_gradient(y, pred)
     assert numpy.all(abs(n_gradient + gradient) < 1e-4), "Problem with functional gradient"
-    print "loss is ok"
+    print("loss is ok")
 
 testGradient(AdaLossFunction())
 
@@ -619,7 +622,7 @@ def testGradientBoosting():
     print AdaBoostClassifier(n_estimators=n_estimators, base_estimator=base_estimator)\
         .fit(trainX, trainY).score(testX, testY)
 
-    print 'uniform gradient boosting is ok'
+    print('uniform gradient boosting is ok')
 
 testGradientBoosting()
 
@@ -630,7 +633,7 @@ def testFlatnessLossFunction(size=1000):
     uniform_variables = trainX.columns[0]
     train_variables = trainX.columns[1:]
     loss = FlatnessLossFunction(uniform_variables)
-    classifier = MyGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2, subsample=0.7,
-                                              n_estimators=20, train_variables=train_variables)
+    classifier = MyGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2,
+                                              subsample=0.7, n_estimators=20, train_variables=train_variables)
     classifier.fit(trainX, trainY)
     print classifier.score()
