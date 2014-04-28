@@ -425,11 +425,13 @@ testComputeSignalKnnIndices()
 
 class Sequencer(object):
     def __init__(self, map_result):
+        from threading import Lock
         self.map_result = map_result
         self.executed = False
         self.tasks = []
         self.tasks_executed = []
         self.wait_for_execution()
+        self.lock = Lock()
 
     def wait_for_execution(self):
         # new thread
@@ -438,25 +440,25 @@ class Sequencer(object):
         def threaded_function(sequencer):
             sequencer.map_result.wait()
             sequencer.executed = True
-            if sequencer.map_result.succ
+            if not sequencer.map_result.successful():
+                sequencer.map_result.display_outputs()
+                raise ValueError("The parallel code failed to be executed")
             sequencer._execute_tasks()
-
 
         thread = Thread(target=threaded_function, args=(self, ))
         thread.start()
-        thread.join()
-        if
-        print("execution is finished")
 
-    def then(self, nextTask):
+    def then(self, next_task):
+        self.tasks.append(next_task)
+        self.tasks_executed.append(False)
+        self._execute_tasks()
 
     def _execute_tasks(self):
-        if not self.executed:
-            return
-        for i, (task, task_executed) in enumerate(zip(self.tasks, self.tasks_executed)):
-            if not task_executed:
-                task()
-                self.tasks_executed[i] = True
-
-
+        with self.lock:
+            if not self.executed:
+                return
+            for i, (task, task_executed) in enumerate(zip(self.tasks, self.tasks_executed)):
+                if not task_executed:
+                    task()
+                    self.tasks_executed[i] = True
 
