@@ -192,7 +192,7 @@ def testBinner():
     for x, y in zip(res3, ans3):
         assert set(x[0]) == set(y[0]), "binner doesn't work well with permutations"
 
-    print 'binner is ok'
+    print('binner is ok')
 
 
 testBinner()
@@ -296,52 +296,10 @@ def testCorrectionFunctionIteration():
 def testCorrectionFunction():
     for i in range(5):
         testCorrectionFunctionIteration()
-    print 'correction function is ok'
+    print('correction function is ok')
 
 
 testCorrectionFunction()
-
-# TODO delete
-# def efficiencyPlotData(answers, prediction_probas):
-#     precisions, cuts = slidingEfficiencyArray(answers, prediction_probas)
-#     return cuts, precisions
-#
-#
-# def efficiencyPlotData2(answers, prediction_probas, cuts=None, scoreFunc=Recall):
-#     """All the same like precisionPlotData, but 10 times slower.
-#     Can compute not only recall, but other score functions as well"""
-#     if cuts is None:
-#         cuts = numpy.array(range(100)) * 0.01
-#     precisions = []
-#     for cut in cuts:
-#         precisions.append(scoreFunc(answers, prediction_probas[:, 1] > cut))
-#     return cuts, precisions
-#
-#
-# def testEfficiencyPlotFunctions():
-#     for i in range(2):
-#         length = (i + 1) * 100
-#         getRand = lambda: numpy.random.rand(length)
-#         predict_probas = numpy.zeros((length, 2))
-#         predict_probas[:, 1] = getRand() * getRand()
-#         predict_probas[:, 0] = 1 - predict_probas[:, 1]
-#
-#         res = getRand() * 0.4 + 0.2
-#         answers = predict_probas[:, 1] > res
-#         cuts, precisions = efficiencyPlotData(answers, predict_probas)
-#         _, precisions2 = efficiencyPlotData2(answers, predict_probas, cuts=cuts)
-#         mse = mean_squared_error(precisions, precisions2)
-#         maxMse = 1e-8
-#         if mse >= maxMse:
-#             pylab.plot(cuts, precisions)
-#             pylab.plot(cuts, precisions2)
-#             pylab.show()
-#         assert mse < maxMse, "Something wrong with mse of efficiency functions, mse = " + str(mse)
-#     print "efficiencyPlotData functions are ok"
-#
-#
-# testEfficiencyPlotFunctions()
-
 
 
 def computeBDTCut(target_efficiency, answers, prediction_probas):
@@ -453,7 +411,7 @@ def testComputeSignalKnnIndices(n_events=100):
     for i, neighbours in enumerate(knn_all_indices):
         assert numpy.all(is_signal[neighbours] == is_signal[i]), "returned indices are not signal/bg"
 
-    print "computeSignalKnnIndices is ok"
+    print("computeSignalKnnIndices is ok")
 
 
 
@@ -463,5 +421,42 @@ testComputeSignalKnnIndices()
 # bgDF      = pandas.read_csv('datasets/dalitzplot/bkgd.csv', sep='\t')
 # trainX, trainY, testX, testY = splitOnTestAndTrain(signalDF, bgDF)
 # computeKnnIndicesOfSameClass(["M2AB", "M2AC"], trainX, trainY)
+
+
+class Sequencer(object):
+    def __init__(self, map_result):
+        self.map_result = map_result
+        self.executed = False
+        self.tasks = []
+        self.tasks_executed = []
+        self.wait_for_execution()
+
+    def wait_for_execution(self):
+        # new thread
+        from threading import Thread
+
+        def threaded_function(sequencer):
+            sequencer.map_result.wait()
+            sequencer.executed = True
+            if sequencer.map_result.succ
+            sequencer._execute_tasks()
+
+
+        thread = Thread(target=threaded_function, args=(self, ))
+        thread.start()
+        thread.join()
+        if
+        print("execution is finished")
+
+    def then(self, nextTask):
+
+    def _execute_tasks(self):
+        if not self.executed:
+            return
+        for i, (task, task_executed) in enumerate(zip(self.tasks, self.tasks_executed)):
+            if not task_executed:
+                task()
+                self.tasks_executed[i] = True
+
 
 

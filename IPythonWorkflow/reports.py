@@ -60,8 +60,10 @@ def partOfAsSignal(answer, prediction):
 # staged_predict_proba_dict = {classifier_name: it's staged_predict_proba}
 
 
-def trainClassifiers(classifiers_dict, trainX, trainY, ipc_profile=None):
-    """Trains all classifiers on the same train data"""
+def trainClassifiers(classifiers_dict, trainX, trainY, ipc_profile=None, block=True):
+    """Trains all classifiers on the same train data,
+    if ipc_profile in not None, it is used as a name of ipython cluster to use for parallelization,
+    if block=False, nonblocking mode is used and then() method can be used"""
     if ipc_profile is None:
         for name, classifier in classifiers_dict.iteritems():
             start_time = time.time()
@@ -75,11 +77,15 @@ def trainClassifiers(classifiers_dict, trainX, trainY, ipc_profile=None):
         def trainClassifier(name_classifier, X, y):
             name_classifier[1].fit(X, y)
             return name_classifier
-        result = cview.map_sync(trainClassifier, classifiers_dict.iteritems(),
-                                [trainX] * len(classifiers_dict),  [trainY] * len(classifiers_dict))
-        print "We spent %.3f seconds on parallel training" % (time.time() - start_time)
-        for name, classifier in result:
-            classifiers_dict[name] = classifier
+        if block:
+            result = cview.map_sync(trainClassifier, classifiers_dict.iteritems(),
+                                    [trainX] * len(classifiers_dict),  [trainY] * len(classifiers_dict))
+            print "We spent %.3f seconds on parallel training" % (time.time() - start_time)
+            for name, classifier in result:
+                classifiers_dict[name] = classifier
+        else:
+            pass
+
 
 
 def getClassifiersPredictionProba(classifiers_dict, testX):
