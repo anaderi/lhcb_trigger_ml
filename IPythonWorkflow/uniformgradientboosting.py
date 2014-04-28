@@ -363,9 +363,6 @@ class FlatnessLossFunction(LossFunction):
             global_effs = global_efficiencies[indices_in_bin]
             local_effs = (numpy.arange(0, len(preds_in_bin)) + 0.5) / len(preds_in_bin)
 
-            print numpy.mean(local_effs)
-            print local_effs
-
             bin_gradient = self.power * numpy.abs(global_effs - local_effs) ** (self.power - 1) \
                            * numpy.sign(local_effs - global_effs)
 
