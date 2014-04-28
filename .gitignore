@@ -37,3 +37,6 @@ nosetests.xml
 
 # IPython checkpoints
 .ipynb_checkpoints/
+
+# Everything connected to PyCharm
+.idea
