@@ -39,4 +39,7 @@ nosetests.xml
 .ipynb_checkpoints/
 
 # Everything connected to PyCharm
-.idea
+.idea/
+
+# local condiguration file
+config.local.py
