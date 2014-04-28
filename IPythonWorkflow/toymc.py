@@ -108,26 +108,23 @@ def generateToyMonteCarlo(inputDF, size, knn=4, symmetrize=True, power=2.0, rewe
     neighbours_helper.fit(inputDF)
     neighbours = neighbours_helper.kneighbors(inputDF, return_distance=False)
     two_side_neighbours = {}
-    # print "-1", time.time() - t
+
     for i, neighbours_i in enumerate(neighbours):
         two_side_neighbours[i] = list(neighbours_i[1:])
-    # print "0", time.time() - t
+
     if symmetrize:
         for i in range(len(neighbours)):
             for n in neighbours[i]:
                 two_side_neighbours[n].append(i)
-    # print "1", time.time() - t
 
     weights = numpy.zeros(len(neighbours)) + 1
     for _ in range(reweight_iterations):
         probs = countProbabilities(weights, two_side_neighbours)
         weights *= (probs ** -0.5)
-    # print "2", time.time() - t
-
 
     # generating indices and weights
     k_1 = randint(0, input_length, size)
-    t_1 = 0.5 * numpy.random.random(size) ** power
+    t_1 = 0.6 * numpy.random.random(size) ** power
     t_2 = 1. - t_1
 
     k_2 = numpy.zeros(size, dtype=numpy.int)
@@ -135,21 +132,9 @@ def generateToyMonteCarlo(inputDF, size, knn=4, symmetrize=True, power=2.0, rewe
         neighs = two_side_neighbours[k_1[i]]
         selected_neigh = getRandom(neighs, weights)
         k_2[i] = selected_neigh
-    # print "3", time.time() - t
 
-    # first = t_1[:, numpy.newaxis] * inputDF.irow(k_1)
-    # second = t_2[:, numpy.newaxis] * inputDF.irow(k_2)
-
-    # first.set_index([numpy.arange(size)], inplace=True)
-    # second.set_index([numpy.arange(size)], inplace=True)
-
-    # x = first.add(second)
-
-    # print "4", time.time() - t
     first = numpy.multiply(t_1[:, numpy.newaxis], numpiedDF[k_1, :])
     second = numpy.multiply(t_2[:, numpy.newaxis], numpiedDF[k_2, :])
-
-    # print "5", time.time() - t
 
     return pandas.DataFrame(numpy.add(first, second), columns=inputDF.columns), 0
 
@@ -172,7 +157,8 @@ def generateToyMonteCarlo(inputDF, size, knn=4, symmetrize=True, power=2.0, rewe
 
 
 
-def generateToyMonteCarloWithSpecialFeatures(inputDF, size, clusterization_features=None, integer_features=None):
+def generateToyMonteCarloWithSpecialFeatures(inputDF, size, clusterization_features=None, integer_features=None,
+                                             ipc_profile=None):
     """
     Excluded features - features we absolutely don't take into account
     ClusterizationFeatures - very close to integer ones, usually have some bool or integer values,
@@ -188,22 +174,36 @@ def generateToyMonteCarloWithSpecialFeatures(inputDF, size, clusterization_featu
         clusterization_features = []
     stayed_features = [col for col in inputDF.columns if col not in clusterization_features]
     size_coeff = float(size) / len(inputDF)
-    copied = 0
     copied_groups = 0
     if len(clusterization_features) == 0:
         result, copied = generateToyMonteCarlo(inputDF,  int(len(inputDF) * size_coeff), knn=None)
     else:
         grouped = inputDF.groupby(clusterization_features)
-        toyMC_parts = []
         print "Generating ..."
-        for group_vals, df in grouped:
-            toyMC_part, n_copied = generateToyMonteCarlo(df[stayed_features],  int(len(df) * size_coeff), knn=None)
-            copied += n_copied
-            if n_copied > 0:
-                copied_groups += 1
-            for i, col in enumerate(clusterization_features):
-                toyMC_part[col] = group_vals[i]
-            toyMC_parts.append(toyMC_part)
+        copied_list = []
+        if ipc_profile is None:
+            toyMC_parts = []
+            for group_vals, df in grouped:
+                toyMC_part, n_copied = generateToyMonteCarlo(df[stayed_features],  int(len(df) * size_coeff), knn=None)
+                copied_list.append(n_copied)
+                for i, col in enumerate(clusterization_features):
+                    toyMC_part[col] = group_vals[i]
+                toyMC_parts.append(toyMC_part)
+        else:
+            from IPython.parallel import Client
+            def prepareToyMC(group):
+                group_vals, df = group
+                toyMC_part, n_copied = generateToyMonteCarlo(df[stayed_features],  int(len(df) * size_coeff), knn=None)
+                for i, col in enumerate(clusterization_features):
+                    toyMC_part[col] = group_vals[i]
+                return toyMC_part, n_copied
+
+            with Client(profile="ssh-ipy2.0") as client:
+                results = client.load_balanced_view().map(prepareToyMC, grouped)
+                toyMC_parts, copied_list = zip(*results)
+        copied_list = numpy.array(copied_list)
+        copied = copied_list.sum()
+        copied_groups = numpy.sum(copied_list != 0)
         result = pandas.concat(toyMC_parts)
     for col in integer_features:
         result[col] = result[col].astype(numpy.int)
@@ -219,7 +219,6 @@ def testToyMonteCarlo(size=100):
     assert isinstance(res, pandas.DataFrame), "something wrong with MonteCarlo"
     print "toyMC is ok"
 
-# testToyMonteCarlo(10000)
 
-import cProfile
-cProfile.run("testToyMonteCarlo(10000)")
+import cProfile as profile
+profile.run("testToyMonteCarlo(10000)")
