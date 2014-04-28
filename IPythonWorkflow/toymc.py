@@ -155,6 +155,13 @@ def generateToyMonteCarlo(inputDF, size, knn=4, symmetrize=True, power=2.0, rewe
     #
     # return result, 0
 
+def prepareToyMC(group, clusterization_features, stayed_features, size_coeff):
+    group_vals, df = group
+    toyMC_part, n_copied = generateToyMonteCarlo(df[stayed_features],  int(len(df) * size_coeff), knn=None)
+    for i, col in enumerate(clusterization_features):
+        toyMC_part[col] = group_vals[i]
+    return toyMC_part, n_copied
+
 
 
 def generateToyMonteCarloWithSpecialFeatures(inputDF, size, clusterization_features=None, integer_features=None,
@@ -191,14 +198,11 @@ def generateToyMonteCarloWithSpecialFeatures(inputDF, size, clusterization_featu
                 toyMC_parts.append(toyMC_part)
         else:
             from IPython.parallel import Client
-            def prepareToyMC(group):
-                group_vals, df = group
-                toyMC_part, n_copied = generateToyMonteCarlo(df[stayed_features],  int(len(df) * size_coeff), knn=None)
-                for i, col in enumerate(clusterization_features):
-                    toyMC_part[col] = group_vals[i]
-                return toyMC_part, n_copied
             client = Client(profile=ipc_profile)
-            results = client.load_balanced_view().map_sync(prepareToyMC, grouped)
+            grouped = list(grouped)
+            results = client.load_balanced_view().map_sync(prepareToyMC, grouped,
+                  [clusterization_features] * len(grouped), [stayed_features] * len(grouped),
+                  [size_coeff] * len(grouped))
             toyMC_parts, copied_list = zip(*results)
             del client
         copied_list = numpy.array(copied_list)
