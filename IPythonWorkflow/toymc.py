@@ -197,10 +197,10 @@ def generateToyMonteCarloWithSpecialFeatures(inputDF, size, clusterization_featu
                 for i, col in enumerate(clusterization_features):
                     toyMC_part[col] = group_vals[i]
                 return toyMC_part, n_copied
-
-            with Client(profile=ipc_profile) as client:
-                results = client.load_balanced_view().map_sync(prepareToyMC, grouped)
-                toyMC_parts, copied_list = zip(*results)
+            client = Client(profile=ipc_profile)
+            results = client.load_balanced_view().map_sync(prepareToyMC, grouped)
+            toyMC_parts, copied_list = zip(*results)
+            del client
         copied_list = numpy.array(copied_list)
         copied = copied_list.sum()
         copied_groups = numpy.sum(copied_list != 0)
