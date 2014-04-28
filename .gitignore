@@ -37,6 +37,8 @@ nosetests.xml
 
 # IPython checkpoints
 .ipynb_checkpoints/
+notebook.log
+notebook.log~
 
 # Everything connected to PyCharm
 .idea/
