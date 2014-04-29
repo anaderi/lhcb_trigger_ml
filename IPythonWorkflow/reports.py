@@ -84,7 +84,7 @@ def trainClassifiers(classifiers_dict, trainX, trainY, ipc_profile=None, block=T
             for name, classifier in result:
                 classifiers_dict[name] = classifier
         else:
-            pass
+            raise NotImplementedError()
 
 
 

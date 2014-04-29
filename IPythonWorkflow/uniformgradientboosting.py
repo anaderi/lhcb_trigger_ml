@@ -297,6 +297,7 @@ class FlatnessLossFunction(LossFunction):
             self.bin_weights[i] = numpy.sum(event_weights[bin_indices]) / len(bin_indices)
         # self.bin_weights /= numpy.sum(self.bin_weights)
         # self.bin_weights *= sum(needed_indices)
+        self.debug_dict = defaultdict(list)
         return self
 
     def computeIndicesInBin(self, X, y):
@@ -345,6 +346,7 @@ class FlatnessLossFunction(LossFunction):
         return loss
 
     def negative_gradient(self, y, y_pred, **kw_args):
+        self.debug_dict['pred'].append(numpy.copy(y_pred))
         gradient = numpy.zeros(len(y))
         needed_indices = (y > 0.5) == self.on_signal
         n_needed = numpy.sum(needed_indices)
@@ -367,11 +369,14 @@ class FlatnessLossFunction(LossFunction):
                            * numpy.sign(local_effs - global_effs)
 
             # TODO multiply by derivative of F_global
-            gradient[indices_in_bin] += bin_weight * bin_gradient / len(indices_in_bin)
+            gradient[indices_in_bin] += bin_weight * bin_gradient
 
         assert numpy.all(gradient[~needed_indices] == 0)
+        self.debug_dict['fl_grad'].append(numpy.copy(gradient))
         # ada loss
         y_signed = 2 * y - 1
+        self.debug_dict['ada_grad'].append(y_signed * numpy.exp(- y_signed * y_pred))
+
         gradient += self.ada_coefficient * y_signed * numpy.exp(- y_signed * y_pred)
 
         if not self.allow_negative_gradients:
@@ -386,7 +391,7 @@ class FlatnessLossFunction(LossFunction):
     def _update_terminal_region(self, tree, terminal_regions, leaf, X, y, residual, pred):
         # terminal_region = numpy.where(terminal_regions == leaf)[0]
         tree.value[leaf, 0, 0] = numpy.clip(tree.value[leaf, 0, 0], -10, 10)
-        # TODO think of uniformity
+        # TODO think of real minimization
         # print tree.value[leaf, 0, 0]
 
         # tree.value[leaf, 0, 0] = numpy.median(y.take(terminal_region, axis=0) - pred.take(terminal_region, axis=0))
