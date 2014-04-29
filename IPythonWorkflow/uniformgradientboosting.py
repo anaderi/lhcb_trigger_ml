@@ -400,6 +400,9 @@ class FlatnessLossFunction(LossFunction):
     def init_estimator(self, X=None, y=None):
         return LogOddsEstimator()
 
+    def do_nothing(self):
+        pass
+
 
 
 
