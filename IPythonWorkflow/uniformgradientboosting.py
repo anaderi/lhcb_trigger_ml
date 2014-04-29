@@ -1,6 +1,7 @@
 from collections import defaultdict
 from time import time
 import itertools
+import math
 import scipy.sparse as sparse
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble._gradient_boosting import _random_sample_mask
@@ -376,8 +377,8 @@ class FlatnessLossFunction(LossFunction):
         # ada loss
         y_signed = 2 * y - 1
         self.debug_dict['ada_grad'].append(y_signed * numpy.exp(- y_signed * y_pred))
-
-        gradient += self.ada_coefficient * y_signed * numpy.exp(- y_signed * y_pred)
+        ada_sqrt =  math.sqrt(self.ada_coefficient)
+        gradient = gradient / ada_sqrt + ada_sqrt * y_signed * numpy.exp(- y_signed * y_pred)
 
         if not self.allow_negative_gradients:
             gradient = y_signed * numpy.clip(y_signed * gradient, 0, 1e5)
