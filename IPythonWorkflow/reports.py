@@ -28,12 +28,13 @@ __author__ = 'Alex Rogozhnikov'
 
 def Efficiency(answer, prediction):
     """Efficiency = right classified signal / everything that is really signal
-    Efficiency == recall"""
-    # assert len(answer) == len(prediction), "Different size of arrays"
-    # isSignal = 0.01 + numpy.sum(answer)
-    # isSignalAsSignal = numpy.sum(answer * prediction)
-    # return isSignalAsSignal * 1.0 / isSignal
-    return recall_score(answer, prediction)
+    Efficiency == recall, returns -1 when ill-defined"""
+    assert len(answer) == len(prediction), "Different size of arrays"
+    isSignal =  numpy.sum(answer) - 1e-6
+    isSignalAsSignal = numpy.sum(answer * prediction) + 1e-6
+    return isSignalAsSignal / isSignal
+    # the same, but with notifications
+    # return recall_score(answer, prediction)
 
 
 def BackgroundEfficiency(answer, prediction):
@@ -59,10 +60,11 @@ def partOfAsSignal(answer, prediction):
 # predict_proba_dict = {classifier_name: it's predict_proba}
 # staged_predict_proba_dict = {classifier_name: it's staged_predict_proba}
 
+# Use OrderedDict instead of dict - the first keeps the order of elements
 
 def trainClassifiers(classifiers_dict, trainX, trainY, ipc_profile=None, block=True):
     """Trains all classifiers on the same train data,
-    if ipc_profile in not None, it is used as a name of ipython cluster to use for parallelization,
+    if ipc_profile in not None, it is used as a name of ipython cluster to use for parallel computations,
     if block=False, nonblocking mode is used and then() method can be used"""
     if ipc_profile is None:
         for name, classifier in classifiers_dict.iteritems():

@@ -360,7 +360,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
                  boost_only_signal=True,
                  smoothing=None,
                  random_state=None,
-                 parallel_profile=None):
+                 ipc_profile=None):
         """uBoost classifier, am algorithm of boosting targeted to obtain
         flat efficiency in signal along some variables. See [1] for details.
 
@@ -422,7 +422,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         self.train_variables = train_variables
         self.boost_only_signal = boost_only_signal
         self.smoothing = smoothing
-        self.parallel_profile = parallel_profile
+        self.ipc_profile = ipc_profile
 
     def get_train_variables(self, X):
         if self.train_variables is not None:
@@ -457,9 +457,9 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
                                    boost_only_signal=self.boost_only_signal, smoothing=self.smoothing)
             self.classifiers.append(classifier)
 
-        if self.parallel_profile is not None:
+        if self.ipc_profile is not None:
             from IPython.parallel import Client
-            client = Client(profile=self.parallel_profile)
+            client = Client(profile=self.ipc_profile)
             result = client.load_balanced_view().map_sync(trainClassifier, self.classifiers,
                                     [X_train_vars] * self.efficiency_steps, [y] * self.efficiency_steps,
                                     [sample_weight] * self.efficiency_steps, [neighbours_matrix] * self.efficiency_steps)
@@ -476,7 +476,6 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
     def predict(self, X):
         return numpy.argmax(self.predict_proba(X), axis=1)
 
-    # TODO think of using score predictions here
     def predict_proba(self, X):
         X_train_vars = self.get_train_variables(X)
         signal_proba = numpy.zeros(len(X))
