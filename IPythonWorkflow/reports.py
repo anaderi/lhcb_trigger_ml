@@ -383,7 +383,7 @@ def plotStagedMseCurves(classifiers, testX, testY, uniform_variables,
                         target_efficiencies=None, step=1, power=2., n_bins=15):
     if target_efficiencies is None:
         target_efficiencies = [0.6, 0.7, 0.8, 0.9]
-    if isinstance(classifiers[list(classifiers.keys)[0]], list):
+    if isinstance(classifiers[list(classifiers.keys())[0]], list):
         staged_predict_proba_dict = classifiers
     else:
         staged_predict_proba_dict = getClassifiersStagedPredictionProba(classifiers, testX)
