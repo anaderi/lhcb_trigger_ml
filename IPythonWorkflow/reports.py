@@ -378,16 +378,20 @@ def plotEfficiency2D(var_name1, var_name2, testX, testY, probas_dict, target_eff
 
     pylab.show()
 
-def plotStagedMseCurves(classifiers, testX, testY, uniform_variables, on_signal=True,
+
+def plotStagedMseCurves(classifiers, testX, testY, uniform_variables,
                         target_efficiencies=None, step=1, power=2., n_bins=15):
     if target_efficiencies is None:
         target_efficiencies = [0.6, 0.7, 0.8, 0.9]
-    staged_predict_proba_dict = getClassifiersStagedPredictionProba(classifiers, testX)
-    stages = range(min([len(pred) for name, pred in staged_predict_proba_dict.iteritems()]) )[::step]
+    if isinstance(classifiers[list(classifiers.keys)[0]], list):
+        staged_predict_proba_dict = classifiers
+    else:
+        staged_predict_proba_dict = getClassifiersStagedPredictionProba(classifiers, testX)
+    stages = range(min([len(pred) for name, pred in staged_predict_proba_dict.iteritems()]))[::step]
     mse_df = computeStagedMseVariation(testY, testX, uniform_variables, staged_predict_proba_dict,
-                                               stages, target_efficiencies=target_efficiencies, power=power, n_bins=n_bins)
+                                       stages, target_efficiencies=target_efficiencies, power=power, n_bins=n_bins)
     for column in mse_df.columns:
         pylab.plot(stages, mse_df[column], label=column)
     pylab.ylim(ymin=0)
     pylab.ylabel("MSE"), pylab.xlabel("stage")
-    pylab.legend(loc='lower right')
+    pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=3, fancybox=True, shadow=True)
