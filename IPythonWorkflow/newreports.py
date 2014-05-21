@@ -515,9 +515,6 @@ def computeMseVariationOnBins(prediction_proba, is_signal, bin_indices, target_e
         mean_efficiency = numpy.mean(passed_cut)
         bin_passed_cut = numpy.bincount(bin_indices[is_signal][passed_cut], minlength=n_bins)
         bin_efficiency = bin_passed_cut / bin_total
-        print mean_efficiency
-        print bin_efficiency
-        print
         result += numpy.sum(bin_total * numpy.abs(bin_efficiency - mean_efficiency) ** power)
     # Minkowski distance trick
     return 10 * (result / len(target_efficiencies) / sum(is_signal)) ** (1. / power)
@@ -544,9 +541,6 @@ def computeMseVariationOnGroups(prediction_proba, is_signal, groups, target_effi
     result = 0.
     for cut, efficiencies_at_cut in zip(cuts, efficiencies):
         mean_efficiency = numpy.mean(prediction_proba[is_signal, 1] > cut)
-        print mean_efficiency
-        print efficiencies_at_cut
-        print
         result += numpy.sum(groups_sizes * numpy.abs(numpy.array(efficiencies_at_cut) - mean_efficiency) ** power)
 
     # Minkowski distance trick
