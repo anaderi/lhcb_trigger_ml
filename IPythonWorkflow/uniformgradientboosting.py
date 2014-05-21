@@ -307,13 +307,13 @@ class FlatnessLossFunction(LossFunction):
         bin_limits = []
         for var in self.uniform_variables:
             bin_limits.append(numpy.linspace(numpy.min(X[var][y > .5]), numpy.max(X[var][y > .5]), self.bins + 1)[1:-1])
-        bin_indices = reports.computeNdimentionalBinIndices(X, self.uniform_variables, bin_limits)
+        bin_indices = reports.computeBinIndices(X, self.uniform_variables, bin_limits)
         n_bins = numpy.prod([len(limits) + 1 for limits in bin_limits])
 
         bin_limits2 = []
         for axis_limits in bin_limits:
             bin_limits2.append((axis_limits[1:] + axis_limits[:-1]) / 2.)
-        bin_indices2 = reports.computeNdimentionalBinIndices(X, self.uniform_variables, bin_limits2) + n_bins
+        bin_indices2 = reports.computeBinIndices(X, self.uniform_variables, bin_limits2) + n_bins
         assert len(X) == len(y) == len(bin_indices) == len(bin_indices2), "different size"
         n_bins += numpy.prod([len(limits) + 1 for limits in bin_limits2])
 
