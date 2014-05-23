@@ -286,7 +286,7 @@ class Predictions(object):
         if len(uniform_variables) == 1:
             effs = self._map_on_stages(stages=stages,
                     function=lambda pred: [computeBinEfficiencies(pred, eff) for eff in target_efficiencies])
-            x_limits, = self._compute_bin_centers(uniform_variables, n_bins=n_bins )
+            x_limits, = self._compute_bin_centers(uniform_variables, n_bins=n_bins)
 
             effs = pandas.DataFrame(effs)
             for stage_name, stage in effs.iterrows():
@@ -324,7 +324,7 @@ class Predictions(object):
                         local_efficiencies[local_efficiencies < 0] = target_efficiency
                         local_efficiencies -= target_efficiency
                         ax = pylab.subplot(1, len(stage_data), i + 1)
-                        x_limits, y_limits = self._compute_bin_centers(uniform_variables)
+                        x_limits, y_limits = self._compute_bin_centers(uniform_variables, n_bins=n_bins)
                         p = ax.pcolor(x_limits, y_limits, local_efficiencies, cmap=cm.get_cmap("RdBu"),
                                       vmin=-0.2, vmax=+0.2)
                         ax.set_xlabel(uniform_variables[0]), ax.set_ylabel(uniform_variables[1])
@@ -333,7 +333,7 @@ class Predictions(object):
         return self
 
     def correlation(self, var_name, stages=None, metrics=Efficiency, n_bins=20, thresholds=None, **kwargs):
-        for stage, preds in self._get_stages(stages=stages).iteritems():
+        for stage, preds in pandas.DataFrame(self._get_stages(stages=stages)).iterrows():
             self._strip_figure(len(preds))
             print('stage ' + str(stage))
             for i, (name, predictions) in enumerate(preds.iteritems()):
@@ -724,8 +724,8 @@ def testAll():
     classifiers['forest'] = RandomForestClassifier(n_estimators=20)
 
     classifiers.fit(trainX, trainY).test_on(testX, testY)\
-        .efficiency(trainX.columns[:1]).show() \
-        # .efficiency(trainX.columns[:2]).show()
+        .efficiency(trainX.columns[:1], n_bins=7).show() \
+        .efficiency(trainX.columns[:2], n_bins=12).show()
         # .roc(stages=[10, 15]).show() \
         # .learning_curves().show() \
         # .mse_curves(['column0']).show() \
