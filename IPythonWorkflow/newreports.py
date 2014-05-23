@@ -1,7 +1,6 @@
 # This module contains functions to build reports:
 # training, getting predictions, building various plots
 from warnings import warn
-# from IPython.external.decorators._decorators import deprecated
 
 try:
     from collections import OrderedDict, defaultdict
@@ -11,6 +10,7 @@ except ImportError:
 import numpy
 import pandas
 import pylab
+import math
 from sklearn.metrics import roc_auc_score, recall_score, roc_curve, auc
 from sklearn.utils.validation import check_arrays
 from commonutils import computeBDTCut, Binner
@@ -146,7 +146,8 @@ class Predictions(object):
                 except AttributeError:
                     self.predictions[name] = classifier.predict_proba(X)
 
-    def _check_efficiencies(self, efficiencies):
+    @staticmethod
+    def _check_efficiencies(efficiencies):
         if efficiencies is None:
             return [0.6, 0.7, 0.8, 0.9]
         else:
@@ -161,8 +162,7 @@ class Predictions(object):
                 try:
                     result[name] = classifier.staged_predict_proba(self.X, self.y)
                 except AttributeError:
-                    # maybe raise warning?
-                    pass
+                    pass # maybe raise warning?
             return result
 
     def _get_stages(self, stages):
@@ -190,7 +190,6 @@ class Predictions(object):
                 if (stage + 1) % step != 0:
                     continue
                 result[name].loc[stage] = function(preds)
-
         return result
 
     def _map_on_stages(self, function, stages=None):
@@ -232,7 +231,8 @@ class Predictions(object):
         bin_centers = []
         for var_name in var_names:
             var_data = self.X[var_name]
-            bin_centers.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), 2 * n_bins + 1)[::2])
+            bin_centers.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), 2 * n_bins + 1)[1::2])
+            assert len(bin_centers[-1]) == n_bins
         return bin_centers
 
     def _compute_staged_mse(self, var_names, target_efficiencies=None, step=3, n_bins=20, power=2.):
@@ -285,21 +285,40 @@ class Predictions(object):
 
         if len(uniform_variables) == 1:
             effs = self._map_on_stages(stages=stages,
-                    function=lambda pred: zip([computeBinEfficiencies(pred, eff) for eff in target_efficiencies]))
-            for stage in zip(*effs):
+                    function=lambda pred: [computeBinEfficiencies(pred, eff) for eff in target_efficiencies])
+            x_limits, = self._compute_bin_centers(uniform_variables, n_bins=n_bins )
+
+            effs = pandas.DataFrame(effs)
+            for stage_name, stage in effs.iterrows():
                 self._strip_figure(len(stage))
-                for i, (eff, eff_stage_data) in enumerate(zip(target_efficiencies, stage)):
-                    for name, local_effs in enumerate(eff_stage_data):
-                        pylab.subplot(1, len(stage), i + 1)
-                        pylab.plot(bin_indices[0], local_effs, label='eff=%.2f' % eff)
+                for i, (name, eff_stage_data) in enumerate(stage.iteritems()):
+                    if isinstance(eff_stage_data, float) and pandas.isnull(eff_stage_data):
+                        continue
+                    pylab.subplot(1, len(stage), i + 1)
+                    for eff, local_effs in zip(target_efficiencies, eff_stage_data):
+                        pylab.plot(x_limits, local_effs, label='eff=%.2f' % eff)
                         pylab.title(name)
                         pylab.xlabel(uniform_variables[0]), pylab.ylabel('efficiency')
+
+
+                # for i, (eff, eff_stage_data) in enumerate(zip(target_efficiencies, stage)):
+                #     for name, local_effs in enumerate(eff_stage_data):
+                #         if math.isnan(local_effs):
+                #             continue
+                #         pylab.subplot(1, len(stage), i + 1)
+                #         pylab.plot(bin_indices[0], local_effs, label='eff=%.2f' % eff)
+                #         pylab.title(name)
+                #         pylab.xlabel(uniform_variables[0]), pylab.ylabel('efficiency')
         else:
             for target_efficiency in target_efficiencies:
                 staged_results = self._map_on_stages(lambda x: computeBinEfficiencies(x, target_efficiency),
-                                                              stages=stages)
-                for stage_name, stage_data in staged_results.iteritems():
+                                                     stages=stages)
+                staged_results = pandas.DataFrame(staged_results)
+                for stage_name, stage_data in staged_results.iterrows():
+                    self._strip_figure(len(stage_data))
                     for i, (name, local_efficiencies) in enumerate(stage_data.iteritems()):
+                        if isinstance(local_efficiencies, float) and pandas.isnull(local_efficiencies):
+                            continue
                         local_efficiencies = local_efficiencies.reshape((n_bins, n_bins))
                         # drawing difference
                         local_efficiencies[local_efficiencies < 0] = target_efficiency
@@ -325,16 +344,13 @@ class Predictions(object):
         return self
 
     def compute_metrics(self, stages=None, metrics=roc_auc_score, in_html=True):
-        print("Computing " + Efficiency.__name__)
-
-        result = pandas.DataFrame(
-            self._map_on_stages(lambda preds: metrics(self.y, preds[:, 1]), stages=stages) )
+        print("Computing " + metrics.__name__)
+        result = pandas.DataFrame(self._map_on_stages(lambda preds: metrics(self.y, preds[:, 1]), stages=stages))
         if in_html:
             from IPython.display import display_html
             display_html(result)
         else:
             print(result)
-
         return self
 
     def hist(self, var_names):
@@ -490,16 +506,14 @@ def computeBinIndices(X, var_names, bin_limits):
         bin_indices += numpy.searchsorted(bin_limits_axis, X[var_name])
     return bin_indices
 
-
 def computeLocalEfficienciesOfBins(prediction_proba, answers, bin_indices, n_total_bins, cut):
     assert len(answers) == len(prediction_proba) == len(bin_indices), "different size"
     is_signal = answers > 0.5
-    bin_total = numpy.bincount(bin_indices[is_signal], minlength=n_total_bins) + 1e-10
+    bin_total = numpy.bincount(bin_indices[is_signal], minlength=n_total_bins) + 1e-6
 
     passed_cut = prediction_proba[:, 1] > cut
-    bin_passed_cut = numpy.bincount(bin_indices[is_signal & passed_cut], minlength=n_total_bins) - 1e-6
+    bin_passed_cut = numpy.bincount(bin_indices[is_signal & passed_cut], minlength=n_total_bins) - 1e-10
     return bin_passed_cut / bin_total
-
 
 def computeMseVariationOnBins(prediction_proba, is_signal, bin_indices, target_efficiencies, power=2.):
     """ An efficient function to compute MSE, the splitting into bins should be given in bin_indices """
@@ -561,7 +575,6 @@ def testComputeMseVariation(size=1000, n_bins=10):
     print "MSE variation is ok"
 
 testComputeMseVariation()
-
 
 
 def computeMseVariation(predict_proba, answers, testX, var_names, efficiencies, n_bins=30, bin_limits=None):
@@ -711,12 +724,14 @@ def testAll():
     classifiers['forest'] = RandomForestClassifier(n_estimators=20)
 
     classifiers.fit(trainX, trainY).test_on(testX, testY)\
-        .roc(stages=[10, 15]).show() \
-        .learning_curves().show() \
-        .mse_curves(['column0']).show() \
-        .hist(['column0']).show()\
-        .roc().show().print_mse(['column0'], in_html=False)\
-        .correlation(['column0']).show()
+        .efficiency(trainX.columns[:1]).show() \
+        # .efficiency(trainX.columns[:2]).show()
+        # .roc(stages=[10, 15]).show() \
+        # .learning_curves().show() \
+        # .mse_curves(['column0']).show() \
+        # .hist(['column0']).show()\
+        # .roc().show().print_mse(['column0'], in_html=False)\
+        # .correlation(['column0']).show()
         # .compute_metrics(stages=[5, 10], metrics=roc_auc_score, in_html=False) \
 
 if __name__ == "__main__":
