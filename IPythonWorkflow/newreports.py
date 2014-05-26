@@ -263,6 +263,7 @@ class Predictions(object):
     def mse_curves(self, uniform_variables, target_efficiencies=None, n_bins=20, step=3, power=2.):
         result = self._compute_staged_mse(uniform_variables, target_efficiencies, step=step, n_bins=n_bins, power=power)
         for name, mse_stages in result.iteritems():
+            pylab.xlabel("MSE"),  pylab.ylabel("stage")
             pylab.plot(mse_stages.keys(), mse_stages, label=name)
         return self
 
@@ -299,16 +300,6 @@ class Predictions(object):
                         pylab.plot(x_limits, local_effs, label='eff=%.2f' % eff)
                         pylab.title(name)
                         pylab.xlabel(uniform_variables[0]), pylab.ylabel('efficiency')
-
-
-                # for i, (eff, eff_stage_data) in enumerate(zip(target_efficiencies, stage)):
-                #     for name, local_effs in enumerate(eff_stage_data):
-                #         if math.isnan(local_effs):
-                #             continue
-                #         pylab.subplot(1, len(stage), i + 1)
-                #         pylab.plot(bin_indices[0], local_effs, label='eff=%.2f' % eff)
-                #         pylab.title(name)
-                #         pylab.xlabel(uniform_variables[0]), pylab.ylabel('efficiency')
         else:
             for target_efficiency in target_efficiencies:
                 staged_results = self._map_on_stages(lambda x: computeBinEfficiencies(x, target_efficiency),
