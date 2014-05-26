@@ -5,16 +5,15 @@
 
 import math
 from IPython.nbformat import current
+from numpy.random.mtrand import normal
 
 import pandas
 import numpy
-import pylab
 import io
 from sklearn.cross_validation import train_test_split
 from sklearn.metrics import precision_score, recall_score, f1_score, mean_squared_error
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.neighbors.unsupervised import NearestNeighbors
-from IPython.core.getipython import get_ipython
 
 
 Precision = precision_score
@@ -23,6 +22,7 @@ F1Score = f1_score
 
 
 def execute_notebook(fileName):
+    from IPython.core.getipython import get_ipython
     with io.open(fileName) as f:
         nb = current.read(f, 'json')
     ip = get_ipython()
@@ -259,6 +259,7 @@ def massiveCorrectionFunction(answers, predict_proba, steps=10):
 
 
 def testCorrectionFunctionIteration():
+    import pylab
     l = 100
     answers1 = numpy.zeros(l)
     answers2 = numpy.zeros(l) + 1
@@ -414,47 +415,22 @@ def testComputeSignalKnnIndices(n_events=100):
     print("computeSignalKnnIndices is ok")
 
 
+def smear_dataset(testX,  smeared_variables=None):
+    """For the selected features 'smears' them in dataset"""
+    assert isinstance(testX, pandas.DataFrame), "the passed object is not of type pandas.DataFrame"
+    if smeared_variables is None:
+        smeared_variables = testX.columns
+    for var in smeared_variables:
+        assert var in testX.columns, "The variable %s was not found in dataset"
+    result = pandas.DataFrame.copy(testX)
+    for var in smeared_variables:
+        sigma = math.sqrt(numpy.var(result[var]))
+        result[var] += normal(0, 0.1 * sigma, len(result))
+    return result
+
+
+
 
 testComputeSignalKnnIndices()
 
-
-
-# class Sequencer(object):
-#     def __init__(self, map_result):
-#         from threading import Lock
-#         self.map_result = map_result
-#         self.executed = False
-#         self.tasks = []
-#         self.tasks_executed = []
-#         self.wait_for_execution()
-#         self.lock = Lock()
-#
-#     def wait_for_execution(self):
-#         # new thread
-#         from threading import Thread
-#
-#         def threaded_function(sequencer):
-#             sequencer.map_result.wait()
-#             sequencer.executed = True
-#             if not sequencer.map_result.successful():
-#                 sequencer.map_result.display_outputs()
-#                 raise ValueError("The parallel code failed to be executed")
-#             sequencer._execute_tasks()
-#
-#         thread = Thread(target=threaded_function, args=(self, ))
-#         thread.start()
-#
-#     def then(self, next_task):
-#         self.tasks.append(next_task)
-#         self.tasks_executed.append(False)
-#         self._execute_tasks()
-#
-#     def _execute_tasks(self):
-#         with self.lock:
-#             if not self.executed:
-#                 return
-#             for i, (task, task_executed) in enumerate(zip(self.tasks, self.tasks_executed)):
-#                 if not task_executed:
-#                     task()
-#                     self.tasks_executed[i] = True
 
