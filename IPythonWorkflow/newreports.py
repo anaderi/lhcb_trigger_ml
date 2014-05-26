@@ -207,6 +207,7 @@ class Predictions(object):
         for i, (stage_name, proba_on_stage) in enumerate(proba_on_stages.iterrows()):
             pylab.subplot(1, n_stages, i + 1), pylab.title("stage " + str(stage_name))
             plotRocCurves(predict_proba_dict=proba_on_stage, answers=self.y, is_big_plot=False)
+            pylab.title('ROC at stage ' + str(stage_name))
         return self
 
     def learning_curves(self, metrics=roc_auc_score, step=1):
@@ -263,8 +264,9 @@ class Predictions(object):
     def mse_curves(self, uniform_variables, target_efficiencies=None, n_bins=20, step=3, power=2.):
         result = self._compute_staged_mse(uniform_variables, target_efficiencies, step=step, n_bins=n_bins, power=power)
         for name, mse_stages in result.iteritems():
-            pylab.xlabel("MSE"),  pylab.ylabel("stage")
+            pylab.ylabel("MSE"), pylab.xlabel("stage")
             pylab.plot(mse_stages.keys(), mse_stages, label=name)
+        pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=3, fancybox=True, shadow=True)
         return self
 
     def mse_curves2(self, uniform_variables, target_efficiencies=None, power=2., n_bins=20):
