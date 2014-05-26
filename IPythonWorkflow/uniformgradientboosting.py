@@ -19,6 +19,8 @@ from commonutils import generateSample
 import commonutils
 import reports
 
+__author__ = 'Alex Rogozhnikov'
+
 
 class KnnLossFunction(LossFunction):
     def __init__(self, uniform_variables):
@@ -86,7 +88,7 @@ class KnnLossFunction(LossFunction):
 
 
 class SimpleKnnLossFunction(KnnLossFunction):
-    def __init__(self, uniform_variables, knn=5, distinguish_classes=True, diagonal=0.):
+    def __init__(self, uniform_variables, knn=5, distinguish_classes=True, diagonal=0., imbalance_safe=True):
         """A matrix is square, each row corresponds to a single event in train dataset,
         in each row we put ones to the closest neighbours of that event.
 
@@ -95,21 +97,26 @@ class SimpleKnnLossFunction(KnnLossFunction):
         self.knn = knn
         self.distinguish_classes = distinguish_classes
         self.diagonal = diagonal
+        self.imbalance_safe = imbalance_safe
         KnnLossFunction.__init__(self, uniform_variables)
 
     def compute_parameters(self, trainX, trainY):
-        is_signal = trainY > 0.5
         if self.distinguish_classes:
+            is_signal = trainY > 0.5
             knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, self.knn)
-        if not self.distinguish_classes:
+        else:
             is_signal = numpy.ones(len(trainY), dtype=numpy.bool)
             knn_indices = commonutils.computeSignalKnnIndices(self.uniform_variables, trainX, is_signal, self.knn)
         ind_ptr = numpy.arange(0, len(trainX) * self.knn + 1, self.knn)
         column_indices = knn_indices.flatten()
         data = numpy.ones(len(trainX) * self.knn)
         A = sparse.csr_matrix(sparse.csr_matrix((data, column_indices, ind_ptr), shape=(len(trainX), len(trainX))) +
-            self.diagonal * sparse.eye(len(trainX), len(trainY)))
+                              self.diagonal * sparse.eye(len(trainX), len(trainY)))
         w = numpy.ones(len(trainX))
+        if self.imbalance_safe:
+            is_signal = trainY > 0.5
+            w[is_signal] = len(is_signal) / 2. / sum(is_signal)
+            w[~is_signal] = len(is_signal) / 2. / sum(1 - is_signal)
         return A, w
 
 
