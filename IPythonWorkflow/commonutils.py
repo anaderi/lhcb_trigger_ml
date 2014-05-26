@@ -414,9 +414,12 @@ def testComputeSignalKnnIndices(n_events=100):
 
     print("computeSignalKnnIndices is ok")
 
+testComputeSignalKnnIndices()
 
-def smear_dataset(testX,  smeared_variables=None):
-    """For the selected features 'smears' them in dataset"""
+
+def smear_dataset(testX, smeared_variables=None, smearing_factor=0.1):
+    """For the selected features 'smears' them in dataset,
+    pay attention, that only float feature can be smeared by now. """
     assert isinstance(testX, pandas.DataFrame), "the passed object is not of type pandas.DataFrame"
     if smeared_variables is None:
         smeared_variables = testX.columns
@@ -425,12 +428,10 @@ def smear_dataset(testX,  smeared_variables=None):
     result = pandas.DataFrame.copy(testX)
     for var in smeared_variables:
         sigma = math.sqrt(numpy.var(result[var]))
-        result[var] += normal(0, 0.1 * sigma, len(result))
+        result[var] += normal(0, smearing_factor * sigma, len(result))
     return result
 
 
 
-
-testComputeSignalKnnIndices()
 
 
