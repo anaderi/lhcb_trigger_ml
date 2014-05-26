@@ -10,6 +10,7 @@ except ImportError:
 import numpy
 import pandas
 import pylab
+import math
 from sklearn.metrics import roc_auc_score, recall_score, roc_curve, auc
 from sklearn.utils.validation import check_arrays
 from commonutils import computeBDTCut, Binner
@@ -230,7 +231,8 @@ class Predictions(object):
         bin_centers = []
         for var_name in var_names:
             var_data = self.X[var_name]
-            bin_centers.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), 2 * n_bins + 1)[::2])
+            bin_centers.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), 2 * n_bins + 1)[1::2])
+            assert len(bin_centers[-1]) == n_bins
         return bin_centers
 
     def _compute_staged_mse(self, var_names, target_efficiencies=None, step=3, n_bins=20, power=2.):
@@ -283,15 +285,30 @@ class Predictions(object):
 
         if len(uniform_variables) == 1:
             effs = self._map_on_stages(stages=stages,
-                    function=lambda pred: zip([computeBinEfficiencies(pred, eff) for eff in target_efficiencies]))
-            for stage in zip(*effs):
+                    function=lambda pred: [computeBinEfficiencies(pred, eff) for eff in target_efficiencies])
+            x_limits, = self._compute_bin_centers(uniform_variables, n_bins=n_bins)
+
+            effs = pandas.DataFrame(effs)
+            for stage_name, stage in effs.iterrows():
                 self._strip_figure(len(stage))
-                for i, (eff, eff_stage_data) in enumerate(zip(target_efficiencies, stage)):
-                    for name, local_effs in enumerate(eff_stage_data):
-                        pylab.subplot(1, len(stage), i + 1)
-                        pylab.plot(bin_indices[0], local_effs, label='eff=%.2f' % eff)
+                for i, (name, eff_stage_data) in enumerate(stage.iteritems()):
+                    if isinstance(eff_stage_data, float) and pandas.isnull(eff_stage_data):
+                        continue
+                    pylab.subplot(1, len(stage), i + 1)
+                    for eff, local_effs in zip(target_efficiencies, eff_stage_data):
+                        pylab.plot(x_limits, local_effs, label='eff=%.2f' % eff)
                         pylab.title(name)
                         pylab.xlabel(uniform_variables[0]), pylab.ylabel('efficiency')
+
+
+                # for i, (eff, eff_stage_data) in enumerate(zip(target_efficiencies, stage)):
+                #     for name, local_effs in enumerate(eff_stage_data):
+                #         if math.isnan(local_effs):
+                #             continue
+                #         pylab.subplot(1, len(stage), i + 1)
+                #         pylab.plot(bin_indices[0], local_effs, label='eff=%.2f' % eff)
+                #         pylab.title(name)
+                #         pylab.xlabel(uniform_variables[0]), pylab.ylabel('efficiency')
         else:
             for target_efficiency in target_efficiencies:
                 staged_results = self._map_on_stages(lambda x: computeBinEfficiencies(x, target_efficiency),
@@ -300,14 +317,14 @@ class Predictions(object):
                 for stage_name, stage_data in staged_results.iterrows():
                     self._strip_figure(len(stage_data))
                     for i, (name, local_efficiencies) in enumerate(stage_data.iteritems()):
-                        if local_efficiencies is None:
+                        if isinstance(local_efficiencies, float) and pandas.isnull(local_efficiencies):
                             continue
                         local_efficiencies = local_efficiencies.reshape((n_bins, n_bins))
                         # drawing difference
                         local_efficiencies[local_efficiencies < 0] = target_efficiency
                         local_efficiencies -= target_efficiency
                         ax = pylab.subplot(1, len(stage_data), i + 1)
-                        x_limits, y_limits = self._compute_bin_centers(uniform_variables)
+                        x_limits, y_limits = self._compute_bin_centers(uniform_variables, n_bins=n_bins)
                         p = ax.pcolor(x_limits, y_limits, local_efficiencies, cmap=cm.get_cmap("RdBu"),
                                       vmin=-0.2, vmax=+0.2)
                         ax.set_xlabel(uniform_variables[0]), ax.set_ylabel(uniform_variables[1])
@@ -316,7 +333,7 @@ class Predictions(object):
         return self
 
     def correlation(self, var_name, stages=None, metrics=Efficiency, n_bins=20, thresholds=None, **kwargs):
-        for stage, preds in self._get_stages(stages=stages).iteritems():
+        for stage, preds in pandas.DataFrame(self._get_stages(stages=stages)).iterrows():
             self._strip_figure(len(preds))
             print('stage ' + str(stage))
             for i, (name, predictions) in enumerate(preds.iteritems()):
@@ -492,10 +509,10 @@ def computeBinIndices(X, var_names, bin_limits):
 def computeLocalEfficienciesOfBins(prediction_proba, answers, bin_indices, n_total_bins, cut):
     assert len(answers) == len(prediction_proba) == len(bin_indices), "different size"
     is_signal = answers > 0.5
-    bin_total = numpy.bincount(bin_indices[is_signal], minlength=n_total_bins) + 1e-10
+    bin_total = numpy.bincount(bin_indices[is_signal], minlength=n_total_bins) + 1e-6
 
     passed_cut = prediction_proba[:, 1] > cut
-    bin_passed_cut = numpy.bincount(bin_indices[is_signal & passed_cut], minlength=n_total_bins) - 1e-6
+    bin_passed_cut = numpy.bincount(bin_indices[is_signal & passed_cut], minlength=n_total_bins) - 1e-10
     return bin_passed_cut / bin_total
 
 def computeMseVariationOnBins(prediction_proba, is_signal, bin_indices, target_efficiencies, power=2.):
@@ -707,7 +724,8 @@ def testAll():
     classifiers['forest'] = RandomForestClassifier(n_estimators=20)
 
     classifiers.fit(trainX, trainY).test_on(testX, testY)\
-        .efficiency(trainX.columns[:2]).show()
+        .efficiency(trainX.columns[:1], n_bins=7).show() \
+        .efficiency(trainX.columns[:2], n_bins=12).show()
         # .roc(stages=[10, 15]).show() \
         # .learning_curves().show() \
         # .mse_curves(['column0']).show() \
