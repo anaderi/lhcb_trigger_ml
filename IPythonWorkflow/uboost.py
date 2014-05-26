@@ -330,6 +330,23 @@ class uBoostBDT:
         for score in self.staged_predict_score(X):
             yield self.score_to_proba(score)
 
+    @property
+    def feature_importances_(self):
+        """Return the feature importances (the higher, the more important the
+           feature).
+
+        Returns
+        -------
+        feature_importances_ : array, shape = [n_features]
+        """
+        if self.estimators_ is None or len(self.estimators_) == 0:
+            raise ValueError("Estimator not fitted, "
+                             "call `fit` before `feature_importances_`.")
+
+        return sum(tree.feature_importances_ * weight
+                   for tree, weight in zip(self.estimators_, self.estimator_weights_)) / self.n_estimators
+
+
 
 
 
@@ -532,6 +549,8 @@ def test_uboost_classifier():
         proba1 = classifier.predict_proba(testX)
         proba2 = list(classifier.staged_predict_proba(testX))[-1]
         assert numpy.all(abs(proba1 - proba2) < 0.001), "something wrong with predictions"
+
+    assert len(bdt_classifier.feature_importances_) == trainX.shape[1]
 
     print 'uboost is ok'
 
