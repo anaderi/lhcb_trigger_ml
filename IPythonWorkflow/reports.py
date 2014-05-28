@@ -1,15 +1,5 @@
 # This module contains functions to build reports:
 # training, getting predictions, building various plots
-<<<<<<< HEAD
-from IPython.external.decorators._decorators import deprecated
-
-try:
-    from collections import OrderedDict
-except ImportError:
-    from ordereddict import OrderedDict
-
-import numpy, pandas
-=======
 from numpy.testing.decorators import deprecated
 
 try:
@@ -22,15 +12,9 @@ import time
 
 import numpy
 import pandas
->>>>>>> 329782841c1bde1a705284b20dedd02bd8681fff
 import pylab
 from sklearn.metrics import roc_auc_score, roc_curve, auc
 from sklearn.utils.validation import check_arrays
-<<<<<<< HEAD
-from commonutils import computeBDTCut, Binner
-import time
-=======
->>>>>>> 329782841c1bde1a705284b20dedd02bd8681fff
 from matplotlib import cm
 
 from commonutils import computeBDTCut, Binner
@@ -144,94 +128,6 @@ def trainClassifiers(classifiers_dict, trainX, trainY, ipc_profile=None):
 
 
 class Predictions(object):
-<<<<<<< HEAD
-    def __init__(self, classifiers_dict, X, y):
-        """The main object for different reports and plots"""
-        assert isinstance(classifiers_dict, OrderedDict)
-        self.X = X
-        self.y = y
-        self.predictions = OrderedDict()
-        self.staged_predictions = OrderedDict()
-
-        for name, classifier in classifiers_dict.iteritems():
-            try:
-                self.staged_predictions[name] = list(classifier.staged_predict_proba(X, y))
-                self.predictions[name] = self.staged_predictions[name][-1]
-            except AttributeError:
-                self.predictions[name] = classifier.predict_proba(X, y)
-
-    def roc(self, stages=None, is_big_plot=True):
-        if stages is None:
-            plotRocCurves(self.y, self.predictions, is_big_plot=is_big_plot)
-        else:
-            pylab.figure(figsize=(12 + 3 * len(stages), 9 - len(stages)))
-            for i, stage in enumerate(stages):
-                pylab.subplot(1, len(stages), i), pylab.title("stage = %i" % stage)
-                plotRocCurves(answers=self.y,
-                              predict_proba_dict=getStageOfStagedProbaDict(stage, self.staged_predictions))
-        return self
-
-    def learning_curves(self, metrics=roc_auc_score, step=1):
-        plotLearningCurves(self.y, self.staged_predictions, metrics=metrics, step=step)
-        return self
-
-    def mse_curves(self, uniform_variables, target_efficiencies=None, power=2., n_bins=20):
-        plotStagedMseCurves(self.staged_predictions, testX=self.X, testY=self.y, uniform_variables=uniform_variables,
-                            target_efficiencies=target_efficiencies, power=power, n_bins=n_bins)
-        return self
-
-    def print_mse(self, uniform_variables, efficiencies=None, stages=None):
-        if stages is None:
-            print(computeMseVariation(self.y, self.predictions, self.X, uniform_variables, efficiencies))
-        else:
-            for stage in stages:
-                print(computeMseVariation(self.y, self.predictions, self.X, uniform_variables, efficiencies))
-
-
-    def efficiency(self, uniform_variables, draw_difference=True, bins=20):
-        if len(uniform_variables) == 1:
-            pass
-        elif len(uniform_variables) == 2:
-            pass
-        else:
-            raise NotImplementedError("More than two variables are not implemented")
-
-    def correlation(self, var_name, stages=None, metrics=Efficiency, bins_number=20, thresholds=None, **kwargs):
-        if stages is None:
-            for name, predictions in self.predictions.iteritems():
-                plotScoreVariableCorrelation(self.y, predictions, self.X[var_name], classifier_name=name,
-                    var_name=var_name, score_function=metrics, thresholds=thresholds, bins_number=bins_number,
-                    **kwargs)
-        else:
-            for stage in stages:
-                pass
-
-
-    def compute_metrics(self, metrics=Efficiency):
-        for name, predictions in self.predictions.iteritems():
-            print(name, metrics(self.y, predictions[:, 1]))
-        return self
-
-    def compute(self, function):
-        for name, predictions in self.predictions.iteritems():
-            function(self.X, self.y, predictions)
-        return self
-
-    def show(self):
-        pylab.show()
-        return self
-
-
-
-
-
-
-
-
-
-
-
-=======
     def __init__(self, classifiers_dict, X, y, low_memory=False):
         """The main object for different reports and plots"""
         assert isinstance(classifiers_dict, OrderedDict)
@@ -473,7 +369,6 @@ class Predictions(object):
     def show(self):
         pylab.show()
         return self
->>>>>>> 329782841c1bde1a705284b20dedd02bd8681fff
 
 
 
@@ -492,22 +387,13 @@ def getClassifiersStagedPredictionProba(classifiers_dict, testX):
     return result
 
 
-<<<<<<< HEAD
-def getStageOfStagedProbaDict(stage, staged_predict_proba_dict):
-=======
 def getStageOfStagedProbaDict(staged_predict_proba_dict, stage):
->>>>>>> 329782841c1bde1a705284b20dedd02bd8681fff
     """Returns the predict_proba_dict, corresponding to 'stage' iteration of every classifier"""
     return OrderedDict([(name, predictions[stage]) for name, predictions in staged_predict_proba_dict.iteritems()])
 
 
-<<<<<<< HEAD
-def plotScoreVariableCorrelation(answers, prediction_proba, correlation_values, classifier_name="",
-            var_name="", score_function=Efficiency, bins_number=20, thresholds=None, show_legend=False):
-=======
 def plotScoreVariableCorrelation(prediction_proba, answers, correlation_values, classifier_name="", var_name="",
                                  score_function=Efficiency, bins_number=20, thresholds=None, show_legend=False):
->>>>>>> 329782841c1bde1a705284b20dedd02bd8681fff
     """Different score functions available: Efficiency, Precision, Recall, F1Score,
     and other things from sklearn.metrics
     var_name - for example, 'mass', just a name for plotting. """
@@ -626,22 +512,13 @@ def computeBinIndices(X, var_names, bin_limits):
 def computeLocalEfficienciesOfBins(prediction_proba, answers, bin_indices, n_total_bins, cut):
     assert len(answers) == len(prediction_proba) == len(bin_indices), "different size"
     is_signal = answers > 0.5
-<<<<<<< HEAD
-    bin_total = numpy.bincount(bin_indices[is_signal], minlength=n_total_bins) + 1e-10
-=======
     bin_total = numpy.bincount(bin_indices[is_signal], minlength=n_total_bins) + 1e-6
->>>>>>> 329782841c1bde1a705284b20dedd02bd8681fff
 
     passed_cut = prediction_proba[:, 1] > cut
     bin_passed_cut = numpy.bincount(bin_indices[is_signal & passed_cut], minlength=n_total_bins) - 1e-10
     return bin_passed_cut / bin_total
 
-<<<<<<< HEAD
-
-def computeMseVariationOnBins(is_signal, prediction_proba, bin_indices, target_efficiencies, power=2.):
-=======
 def computeMseVariationOnBins(prediction_proba, is_signal, bin_indices, target_efficiencies, power=2.):
->>>>>>> 329782841c1bde1a705284b20dedd02bd8681fff
     """ An efficient function to compute MSE, the splitting into bins should be given in bin_indices """
     assert len(prediction_proba) == len(bin_indices) == len(is_signal), "different size"
     n_bins = numpy.max(bin_indices) + 1
@@ -692,9 +569,6 @@ def testComputeMseVariation(size=1000, n_bins=10):
     testY = numpy.random.random(size) > 0.5
     preds = numpy.random.random((size, 2))
 
-<<<<<<< HEAD
-def computeMseVariation(answers, predict_proba, testX, var_names, efficiencies, n_bins=30, bin_limits=None):
-=======
     bins = numpy.random.randint(0, n_bins, size)
     target_efficiencies = [0.5, 0.6]
     groups = [numpy.where(numpy.logical_and(testY, bins == bin))[0] for bin in range(n_bins)]
@@ -707,18 +581,13 @@ testComputeMseVariation()
 
 
 def computeMseVariation(predict_proba, answers, testX, var_names, efficiencies, n_bins=30, bin_limits=None):
->>>>>>> 329782841c1bde1a705284b20dedd02bd8681fff
     if bin_limits is None:
         bin_limits = []
         for var_name in var_names:
             var_data = testX[var_name]
             bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
     bin_indices = computeBinIndices(testX, var_names, bin_limits)
-<<<<<<< HEAD
-    return computeMseVariationOnBins(answers > 0.5, predict_proba, bin_indices, efficiencies)
-=======
     return computeMseVariationOnBins(predict_proba, answers > 0.5, bin_indices, efficiencies)
->>>>>>> 329782841c1bde1a705284b20dedd02bd8681fff
 
 
 def computeStagedMseVariation(staged_predict_proba, answers, testX, var_names, stages, target_efficiencies, n_bins=30,
@@ -745,31 +614,8 @@ def computeStagedMseVariation(staged_predict_proba, answers, testX, var_names, s
 
 
 
-<<<<<<< HEAD
-def plotScoreVariableCorrelationSide2Side(classifiers_dict, testX, testY, var_name,
-                                          score_function=Efficiency, **kwargs):
-    assert len(testX) == len(testY), "Different size of arrays"
-    if isinstance(list(classifiers_dict.values())[0], list):
-        predict_proba_dict = classifiers_dict
-    else:
-        predict_proba_dict = getClassifiersPredictionProba(classifiers_dict, testX)
-
-    pylab.figure(figsize=(18, 7))
-    for i, (name, predict_proba) in enumerate(predict_proba_dict.iteritems()):
-        pylab.subplot(1, len(predict_proba_dict), i)
-        plotScoreVariableCorrelation(testY, predict_proba, testX[var_name], classifier_name=name, var_name=var_name,
-                                     score_function=score_function, **kwargs)
-        pylab.title(name)
-    pylab.show()
-
-
-
-def plotEfficiency2D(var_names, testX, testY, probas_dict, target_efficiency, n_bins=30,
-                     xlim=None, ylim=None, draw_difference=True):
-=======
 def plotEfficiency2D(probas_dict, var_names, testX, testY, target_efficiency, n_bins=30, xlim=None, ylim=None,
                      draw_difference=True):
->>>>>>> 329782841c1bde1a705284b20dedd02bd8681fff
     """This function plots the efficiency on 2D plot
     - var_name1 is name of first variable
     - var_name2 is name of second variable
@@ -828,8 +674,6 @@ def plotStagedMseCurves(classifiers, testX, testY, uniform_variables,
     pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=3, fancybox=True, shadow=True)
 
 
-<<<<<<< HEAD
-=======
 def plotClassesDistribution(X, y, var_names):
         y = numpy.array(y)
         classes = numpy.unique(y)
@@ -855,31 +699,18 @@ def plotClassesDistribution(X, y, var_names):
         else:
             raise ValueError("More than tow variables are not implemented")
 
->>>>>>> 329782841c1bde1a705284b20dedd02bd8681fff
 
 def testComputeMseAndBins(size=500):
     columns = ['var1', 'var2']
     X = pandas.DataFrame(numpy.random.random((size, 2)), columns=columns)
     y = numpy.random.random(size) > 0.5
     proba = numpy.random.random((size, 2))
-<<<<<<< HEAD
-    computeMseVariation(y, proba, X, columns, [0.3, 0.5, 0.7])
-=======
     computeMseVariation(proba, y, X, columns, [0.3, 0.5, 0.7])
->>>>>>> 329782841c1bde1a705284b20dedd02bd8681fff
     n_bins = 5
     x_limits = numpy.linspace(0, 1, n_bins + 1)[1:-1]
     bins = computeBinIndices(X, columns, [x_limits, x_limits])
     assert numpy.all(0 <= bins) and numpy.all(bins < n_bins * n_bins), "whooops"
 
-<<<<<<< HEAD
-    effs = computeLocalEfficienciesOfBins(y, proba, bins, n_bins * n_bins, .3)
-    # print numpy.mean(effs)
-    # todo continue testing
-
-
-testComputeMseAndBins()
-=======
     effs = computeLocalEfficienciesOfBins(proba, y, bins, n_bins * n_bins, .3)
 
 
@@ -910,4 +741,3 @@ if __name__ == "__main__":
 
 
 testComputeMseAndBins()
->>>>>>> 329782841c1bde1a705284b20dedd02bd8681fff
