@@ -292,6 +292,7 @@ class Predictions(object):
                                                      stages=stages)
                 staged_results = pandas.DataFrame(staged_results)
                 for stage_name, stage_data in staged_results.iterrows():
+                    print("Stage %s, efficiency=%.2f" % (str(stage_name), target_efficiency))
                     self._strip_figure(len(stage_data))
                     for i, (name, local_efficiencies) in enumerate(stage_data.iteritems()):
                         if isinstance(local_efficiencies, float) and pandas.isnull(local_efficiencies):
