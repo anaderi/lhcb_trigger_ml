@@ -94,36 +94,8 @@ class ClassifiersDict(OrderedDict):
 
         return self
 
-    def test_on(self, X, y):
-        return Predictions(self, X, y)
-
-
-
-# the same in old good functions
-def trainClassifiers(classifiers_dict, trainX, trainY, ipc_profile=None):
-    """Trains all classifiers on the same train data,
-    if ipc_profile in not None, it is used as a name of ipython cluster to use for parallel computations,
-    if block=False, nonblocking mode is used and then() method can be used"""
-    if ipc_profile is None:
-        for name, classifier in classifiers_dict.iteritems():
-            start_time = time.time()
-            classifier.fit(trainX, trainY)
-            print "Classifier %12s is learnt in %0.2f seconds" % (name, time.time() - start_time)
-    else:
-        from IPython.parallel import Client
-        client = Client(profile=ipc_profile)
-        start_time = time.time()
-        lb_view = client.load_balanced_view()
-        def trainClassifier(name_classifier, X, y):
-            name_classifier[1].fit(X, y)
-            return name_classifier
-
-        result = lb_view.map_sync(trainClassifier, classifiers_dict.iteritems(),
-                                [trainX] * len(classifiers_dict),  [trainY] * len(classifiers_dict))
-        print "We spent %.3f seconds on parallel training" % (time.time() - start_time)
-        for name, classifier in result:
-            classifiers_dict[name] = classifier
-
+    def test_on(self, X, y, low_memory=False):
+        return Predictions(self, X, y, low_memory)
 
 
 
@@ -163,7 +135,7 @@ class Predictions(object):
             result = OrderedDict()
             for name, classifier in self.classifiers.iteritems():
                 try:
-                    result[name] = classifier.staged_predict_proba(self.X, self.y)
+                    result[name] = classifier.staged_predict_proba(self.X)
                 except AttributeError:
                     pass # maybe raise warning?
             return result
@@ -370,6 +342,31 @@ class Predictions(object):
         pylab.show()
         return self
 
+
+# the same in old good functions (will be removed soon)
+def trainClassifiers(classifiers_dict, trainX, trainY, ipc_profile=None):
+    """Trains all classifiers on the same train data,
+    if ipc_profile in not None, it is used as a name of ipython cluster to use for parallel computations,
+    if block=False, nonblocking mode is used and then() method can be used"""
+    if ipc_profile is None:
+        for name, classifier in classifiers_dict.iteritems():
+            start_time = time.time()
+            classifier.fit(trainX, trainY)
+            print "Classifier %12s is learnt in %0.2f seconds" % (name, time.time() - start_time)
+    else:
+        from IPython.parallel import Client
+        client = Client(profile=ipc_profile)
+        start_time = time.time()
+        lb_view = client.load_balanced_view()
+        def trainClassifier(name_classifier, X, y):
+            name_classifier[1].fit(X, y)
+            return name_classifier
+
+        result = lb_view.map_sync(trainClassifier, classifiers_dict.iteritems(),
+                                [trainX] * len(classifiers_dict),  [trainY] * len(classifiers_dict))
+        print "We spent %.3f seconds on parallel training" % (time.time() - start_time)
+        for name, classifier in result:
+            classifiers_dict[name] = classifier
 
 
 def getClassifiersPredictionProba(classifiers_dict, testX):
@@ -721,20 +718,21 @@ def testAll():
     trainX, trainY = generateSample(1000, 10)
     testX, testY = generateSample(1000, 10)
 
-    classifiers = ClassifiersDict()
-    classifiers['ada'] = AdaBoostClassifier(n_estimators=20)
-    classifiers['forest'] = RandomForestClassifier(n_estimators=20)
+    for low_memory in [True, False]:
+        classifiers = ClassifiersDict()
+        classifiers['ada'] = AdaBoostClassifier(n_estimators=20)
+        classifiers['forest'] = RandomForestClassifier(n_estimators=20)
 
-    classifiers.fit(trainX, trainY).test_on(testX, testY)\
-        .efficiency(trainX.columns[:1], n_bins=7).show() \
-        .efficiency(trainX.columns[:2], n_bins=12).show() \
-        .roc(stages=[10, 15]).show() \
-        .learning_curves().show() \
-        .mse_curves(['column0']).show() \
-        .hist(['column0']).show()\
-        .roc().show().print_mse(['column0'], in_html=False)\
-        .correlation(['column0']).show() \
-        .compute_metrics(stages=[5, 10], metrics=roc_auc_score, in_html=False) \
+        classifiers.fit(trainX, trainY).test_on(testX, testY, low_memory=low_memory)\
+            .efficiency(trainX.columns[:1], n_bins=7).show() \
+            .efficiency(trainX.columns[:2], n_bins=12).show() \
+            .roc(stages=[10, 15]).show() \
+            .learning_curves().show() \
+            .mse_curves(['column0']).show() \
+            .hist(['column0']).show()\
+            .roc().show().print_mse(['column0'], in_html=False)\
+            .correlation(['column0']).show() \
+            .compute_metrics(stages=[5, 10], metrics=roc_auc_score, in_html=False) \
 
 if __name__ == "__main__":
     testAll()
