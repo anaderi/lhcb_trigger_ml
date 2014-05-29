@@ -250,6 +250,7 @@ class Predictions(object):
         for name, mse_stages in result.iteritems():
             pylab.plot(mse_stages.keys(), mse_stages, label=name)
             pylab.xlabel("stage"), pylab.ylabel("MSE")
+        pylab.ylim(ymin=0)
         pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=3, fancybox=True, shadow=True)
         return self
 
@@ -308,6 +309,7 @@ class Predictions(object):
                         ax.set_xlabel(uniform_variables[0]), ax.set_ylabel(uniform_variables[1])
                         ax.set_title(name)
                         pylab.colorbar(p, ax=ax)
+                    pylab.show()
         return self
 
     def correlation(self, var_name, stages=None, metrics=Efficiency, n_bins=20, thresholds=None, **kwargs):
