@@ -534,7 +534,7 @@ def computeMseVariationOnBins(prediction_proba, is_signal, bin_indices, target_e
         bin_efficiency = bin_passed_cut / bin_total
         result += numpy.sum(bin_total * numpy.abs(bin_efficiency - mean_efficiency) ** power)
     # Minkowski distance trick
-    return 10 * (result / len(target_efficiencies) / sum(is_signal)) ** (1. / power)
+    return 10 * (result / len(target_efficiencies) / numpy.sum(is_signal)) ** (1. / power)
 
 
 def computeMseVariationOnGroups(prediction_proba, is_signal, groups, target_efficiencies, power=2.):
@@ -553,7 +553,7 @@ def computeMseVariationOnGroups(prediction_proba, is_signal, groups, target_effi
         assert numpy.all(is_signal[group_indices]), "the provided groups contain bg events"
         group_predictions = numpy.take(prediction_proba[:, 1], group_indices)
         for i, (eff, cut) in enumerate(zip(efficiencies, cuts)):
-            efficiencies[i].append(sum(group_predictions > cut) / float(len(group_indices)))
+            efficiencies[i].append(numpy.sum(group_predictions > cut) / float(len(group_indices)))
 
     result = 0.
     for cut, efficiencies_at_cut in zip(cuts, efficiencies):
@@ -561,7 +561,7 @@ def computeMseVariationOnGroups(prediction_proba, is_signal, groups, target_effi
         result += numpy.sum(groups_sizes * numpy.abs(numpy.array(efficiencies_at_cut) - mean_efficiency) ** power)
 
     # Minkowski distance trick
-    return 10 * (result / len(target_efficiencies) / sum(groups_sizes)) ** (1. / power)
+    return 10 * (result / len(target_efficiencies) / numpy.sum(groups_sizes)) ** (1. / power)
 
 
 def testComputeMseVariation(size=1000, n_bins=10):
@@ -694,7 +694,7 @@ def plotClassesDistribution(X, y, var_names):
             pylab.title('Distribution of classes')
             pylab.xlim(xmin, xmax), pylab.ylim(ymin, ymax)
             for i, y_val in enumerate(classes):
-                alpha = numpy.clip(2000. / sum(y == y_val), 0.02, 1)
+                alpha = numpy.clip(2000. / numpy.sum(y == y_val), 0.02, 1)
                 pylab.plot(X.ix[y == y_val, x_var], X.ix[y == y_val, y_var], '.', alpha=alpha, label='class=' + str(y_val))
         else:
             raise ValueError("More than tow variables are not implemented")
