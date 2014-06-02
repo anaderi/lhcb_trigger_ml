@@ -224,7 +224,8 @@ class Predictions(object):
 
     def _compute_staged_mse(self, var_names, target_efficiencies=None, step=3, n_bins=20, power=2., on_signal=True):
         target_efficiencies = self._check_efficiencies(target_efficiencies)
-        bin_indices = self._compute_bin_indices(var_names, n_bins=n_bins)
+        mask = self.is_signal if on_signal else ~self.is_signal
+        bin_indices = self._compute_bin_indices(var_names, n_bins=n_bins, mask=mask)
         if on_signal:
             compute_mse = lambda pred: computeMseVariationOnBins(pred, self.is_signal, bin_indices,
                                     target_efficiencies=target_efficiencies, power=power)
@@ -235,7 +236,8 @@ class Predictions(object):
 
     def _compute_mse(self, var_names, target_efficiencies=None, stages=None, n_bins=20, power=2., on_signal=True):
         target_efficiencies = self._check_efficiencies(target_efficiencies)
-        bin_indices = self._compute_bin_indices(var_names, n_bins=n_bins)
+        mask = self.is_signal if on_signal else ~self.is_signal
+        bin_indices = self._compute_bin_indices(var_names, n_bins=n_bins, mask=mask)
         if on_signal:
             compute_mse = lambda pred: computeMseVariationOnBins(pred, self.is_signal, bin_indices,
                                     target_efficiencies=target_efficiencies, power=power)
@@ -311,7 +313,7 @@ class Predictions(object):
                     for i, (name, local_efficiencies) in enumerate(stage_data.iteritems()):
                         if isinstance(local_efficiencies, float) and pandas.isnull(local_efficiencies):
                             continue
-                        local_efficiencies = local_efficiencies.reshape((n_bins, n_bins))
+                        local_efficiencies = local_efficiencies.reshape((n_bins, n_bins)).transpose()
                         # drawing difference
                         local_efficiencies[local_efficiencies < 0] = target_efficiency
                         local_efficiencies -= target_efficiency
