@@ -10,6 +10,7 @@ from numpy.random.mtrand import normal
 import pandas
 import numpy
 import io
+from sklearn import grid_search
 from sklearn.cross_validation import train_test_split
 from sklearn.metrics import precision_score, recall_score, f1_score, mean_squared_error
 from sklearn.metrics.pairwise import pairwise_distances
@@ -419,7 +420,8 @@ testComputeSignalKnnIndices()
 
 def smear_dataset(testX, smeared_variables=None, smearing_factor=0.1):
     """For the selected features 'smears' them in dataset,
-    pay attention, that only float feature can be smeared by now. """
+    pay attention, that only float feature can be smeared by now.
+    If smeared variables is None, all the features are smeared"""
     assert isinstance(testX, pandas.DataFrame), "the passed object is not of type pandas.DataFrame"
     if smeared_variables is None:
         smeared_variables = testX.columns
@@ -430,8 +432,6 @@ def smear_dataset(testX, smeared_variables=None, smearing_factor=0.1):
         sigma = math.sqrt(numpy.var(result[var]))
         result[var] += normal(0, smearing_factor * sigma, len(result))
     return result
-
-
 
 
 
