@@ -128,6 +128,14 @@ class Predictions(object):
         else:
             return efficiencies
 
+    def _check_mask(self, mask):
+        """Checkes whether the mask is appropriate and normalizes it"""
+        if mask is None:
+            return numpy.ones(len(self.y), dtype=numpy.bool)
+        assert len(mask) == len(self.y), 'wrogn size of mask'
+        assert numpy.result_type(mask) == numpy.bool, 'the mask should be boolean'
+        return mask
+
     def _get_staged_proba(self):
         if self.staged_predictions is not None:
             return self.staged_predictions
@@ -194,19 +202,22 @@ class Predictions(object):
         pylab.xlabel("stage"), pylab.ylabel("ROC AUC")
         return self
 
-    def _compute_bin_indices(self, var_names, n_bins=20):
+    def _compute_bin_indices(self, var_names, n_bins=20, mask=None):
+        """Mask is used to show events that will be binned after"""
         for var in var_names:
             assert var in self.X.columns, "the variable %i is not in dataset" % var
+        mask = self._check_mask(mask)
         bin_limits = []
         for var_name in var_names:
-            var_data = self.X[var_name]
+            var_data = self.X[var_name][mask]
             bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
         return computeBinIndices(self.X, var_names, bin_limits)
 
-    def _compute_bin_centers(self, var_names, n_bins=20):
+    def _compute_bin_centers(self, var_names, n_bins=20, mask=None):
         bin_centers = []
+        mask = self._check_mask(mask)
         for var_name in var_names:
-            var_data = self.X[var_name]
+            var_data = self.X[var_name][mask]
             bin_centers.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), 2 * n_bins + 1)[1::2])
             assert len(bin_centers[-1]) == n_bins
         return bin_centers
@@ -265,7 +276,8 @@ class Predictions(object):
         if len(uniform_variables) not in {1, 2}:
             raise ValueError("More than two variables are not implemented, you got a 3d-monitor?")
 
-        bin_indices = self._compute_bin_indices(uniform_variables, n_bins)
+        mask = self.is_signal if on_signal else ~self.is_signal
+        bin_indices = self._compute_bin_indices(uniform_variables, n_bins, mask=mask)
         def computeBinEfficiencies(prediction_proba, target_eff):
             cut = computeBDTCut(target_eff, self.y, prediction_proba)
             return computeLocalEfficienciesOfBins(prediction_proba, self.y, bin_indices,
@@ -274,7 +286,7 @@ class Predictions(object):
         if len(uniform_variables) == 1:
             effs = self._map_on_stages(stages=stages,
                     function=lambda pred: [computeBinEfficiencies(pred, eff) for eff in target_efficiencies])
-            x_limits, = self._compute_bin_centers(uniform_variables, n_bins=n_bins)
+            x_limits, = self._compute_bin_centers(uniform_variables, n_bins=n_bins, mask=mask)
 
             effs = pandas.DataFrame(effs)
             for stage_name, stage in effs.iterrows():
@@ -288,6 +300,7 @@ class Predictions(object):
                         pylab.title(name)
                         pylab.xlabel(uniform_variables[0]), pylab.ylabel('efficiency')
         else:
+            x_limits, y_limits = self._compute_bin_centers(uniform_variables, n_bins=n_bins, mask=mask)
             for target_efficiency in target_efficiencies:
                 staged_results = self._map_on_stages(lambda x: computeBinEfficiencies(x, target_efficiency),
                                                      stages=stages)
@@ -303,7 +316,6 @@ class Predictions(object):
                         local_efficiencies[local_efficiencies < 0] = target_efficiency
                         local_efficiencies -= target_efficiency
                         ax = pylab.subplot(1, len(stage_data), i + 1)
-                        x_limits, y_limits = self._compute_bin_centers(uniform_variables, n_bins=n_bins)
                         p = ax.pcolor(x_limits, y_limits, local_efficiencies, cmap=cm.get_cmap("RdBu"),
                                       vmin=-0.2, vmax=+0.2)
                         ax.set_xlabel(uniform_variables[0]), ax.set_ylabel(uniform_variables[1])
