@@ -2,6 +2,7 @@ from collections import defaultdict
 from time import time
 import itertools
 import math
+from matplotlib.cbook import Null
 import scipy.sparse as sparse
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble._gradient_boosting import _random_sample_mask
@@ -11,7 +12,7 @@ import numpy
 from sklearn.ensemble.weight_boosting import AdaBoostClassifier
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.neighbors.unsupervised import NearestNeighbors
-from sklearn.tree._tree import DTYPE, TREE_LEAF
+from sklearn.tree._tree import DTYPE
 from sklearn.tree.tree import DecisionTreeClassifier
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays, column_or_1d
@@ -259,7 +260,7 @@ class DistanceBasedKnnFunction(KnnLossFunction):
 
 class FlatnessLossFunction(LossFunction):
     def __init__(self, uniform_variables, bins=10, on_signal=True, power=2., ada_coefficient=1.,
-                 allow_negative_gradients=True):
+                 allow_negative_gradients=True, keep_debug_info=False):
         """
         This loss function contains separately penalty for non-flatness and ada_coefficient.
         The penalty for non-flatness is using bins.
@@ -279,6 +280,7 @@ class FlatnessLossFunction(LossFunction):
         self.power = power
         self.ada_coefficient = ada_coefficient
         self.allow_negative_gradients = allow_negative_gradients
+        self.keep_debug_info = keep_debug_info
         LossFunction.__init__(self, 1)
 
     def fit(self, X, y):
@@ -300,13 +302,14 @@ class FlatnessLossFunction(LossFunction):
             print "warning: %i events are out of all bins" % out_of_bins
 
         event_weights = 1. / (occurences + 1e-10)
+        # bin weight is some mean of weights of its events
         self.bin_weights = numpy.zeros(len(self.bin_indices))
         for i, bin_indices in enumerate(self.bin_indices):
-            self.bin_weights[i] = numpy.sum(event_weights[bin_indices]) / len(bin_indices)
-        # self.bin_weights /= numpy.sum(self.bin_weights)
-        # self.bin_weights *= sum(needed_indices)
-        self.debug_dict = defaultdict(list)
+            self.bin_weights[i] = numpy.mean(event_weights[bin_indices])
+        self.debug_dict = defaultdict(list) if self.keep_debug_info else defaultdict(Null)
         return self
+
+
 
     def computeIndicesInBin(self, X, y):
         """Returns a dictionary, each value is a list with indices inside this bin,
@@ -393,22 +396,18 @@ class FlatnessLossFunction(LossFunction):
         return gradient
 
     # def update_terminal_regions(self, tree, X, y, residual, y_pred, sample_mask, learning_rate=1.0, k=0):
-    #     # nothing here
-    #     pass
+        # the standard version is used
 
     def _update_terminal_region(self, tree, terminal_regions, leaf, X, y, residual, pred):
         # terminal_region = numpy.where(terminal_regions == leaf)[0]
         tree.value[leaf, 0, 0] = numpy.clip(tree.value[leaf, 0, 0], -10, 10)
         # TODO think of real minimization
         # print tree.value[leaf, 0, 0]
-
         # tree.value[leaf, 0, 0] = numpy.median(y.take(terminal_region, axis=0) - pred.take(terminal_region, axis=0))
 
     def init_estimator(self, X=None, y=None):
         return LogOddsEstimator()
 
-    def do_nothing(self):
-        pass
 
 
 
@@ -627,17 +626,17 @@ def testGradientBoosting():
     # loss7 = DistanceBasedKnnFunction(uniform_variables, knn=None, distance_dependence=lambda r: numpy.exp(-r))
     loss8 = FlatnessLossFunction(uniform_variables, ada_coefficient=1)
 
-
     for loss in [loss2, loss3, loss4, loss5, loss6, loss8]:
         print MyGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2, subsample=0.7,
             n_estimators=n_estimators, train_variables=None).fit(trainX[:samples], trainY[:samples]).score(testX, testY),
 
-    print AdaBoostClassifier(n_estimators=n_estimators, base_estimator=base_estimator)\
-        .fit(trainX, trainY).score(testX, testY)
+    print(AdaBoostClassifier(n_estimators=n_estimators, base_estimator=base_estimator)
+        .fit(trainX, trainY).score(testX, testY))
 
     print('uniform gradient boosting is ok')
 
 testGradientBoosting()
+
 
 
 

@@ -1,5 +1,6 @@
 from collections import defaultdict
 import math
+from matplotlib.cbook import Null
 
 import numpy
 from numpy.lib._compiled_base import bincount
@@ -34,6 +35,7 @@ class uBoostBDT:
                  boost_only_signal=True,
                  train_variables=None,
                  smoothing=0.0,
+                 keep_debug_info=False,
                  random_state=None):
         """
         uBoostBDT is AdaBoostClassifier, which is modified to have flat efficiency
@@ -121,6 +123,7 @@ class uBoostBDT:
         self.boost_only_signal = boost_only_signal
         self.train_variables = train_variables
         self.smoothing = smoothing
+        self.keep_debug_info = keep_debug_info
         self.random_state = random_state
 
     def fit(self, X, y, sample_weight=None, neighbours_matrix=None):
@@ -187,7 +190,7 @@ class uBoostBDT:
         X_train_variables, y = check_arrays(X_train_variables, y, sparse_format="dense")
 
         # Some dictionary to keep all intermediate weights, efficiencies and so on
-        self.debug_dict = defaultdict(list)
+        self.debug_dict = defaultdict(list) if self.keep_debug_info else defaultdict(Null)
         # Setting up random generator
         self.random_generator = check_random_state(self.random_state)
         # Boosting itself
