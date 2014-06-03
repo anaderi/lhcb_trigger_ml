@@ -306,7 +306,8 @@ class FlatnessLossFunction(LossFunction):
         self.bin_weights = numpy.zeros(len(self.bin_indices))
         for i, bin_indices in enumerate(self.bin_indices):
             self.bin_weights[i] = numpy.mean(event_weights[bin_indices])
-        self.debug_dict = defaultdict(list) if self.keep_debug_info else defaultdict(Null)
+        if self.keep_debug_info:
+            self.debug_dict = defaultdict(list)
         return self
 
 
@@ -357,7 +358,6 @@ class FlatnessLossFunction(LossFunction):
         return loss
 
     def negative_gradient(self, y, y_pred, **kw_args):
-        self.debug_dict['pred'].append(numpy.copy(y_pred))
         gradient = numpy.zeros(len(y))
         needed_indices = (y > 0.5) == self.on_signal
         n_needed = numpy.sum(needed_indices)
@@ -383,11 +383,14 @@ class FlatnessLossFunction(LossFunction):
             gradient[indices_in_bin] += bin_weight * bin_gradient
 
         assert numpy.all(gradient[~needed_indices] == 0)
-        self.debug_dict['fl_grad'].append(numpy.copy(gradient))
-        # ada loss
+
         y_signed = 2 * y - 1
-        self.debug_dict['ada_grad'].append(y_signed * numpy.exp(- y_signed * y_pred))
-        ada_sqrt =  math.sqrt(self.ada_coefficient)
+        if self.keep_debug_info:
+            self.debug_dict['pred'].append(numpy.copy(y_pred))
+            self.debug_dict['fl_grad'].append(numpy.copy(gradient))
+            # ada loss
+            self.debug_dict['ada_grad'].append(y_signed * numpy.exp(- y_signed * y_pred))
+        ada_sqrt = math.sqrt(self.ada_coefficient)
         gradient = gradient / ada_sqrt + ada_sqrt * y_signed * numpy.exp(- y_signed * y_pred)
 
         if not self.allow_negative_gradients:

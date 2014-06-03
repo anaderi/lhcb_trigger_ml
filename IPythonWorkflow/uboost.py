@@ -190,7 +190,8 @@ class uBoostBDT:
         X_train_variables, y = check_arrays(X_train_variables, y, sparse_format="dense")
 
         # Some dictionary to keep all intermediate weights, efficiencies and so on
-        self.debug_dict = defaultdict(list) if self.keep_debug_info else defaultdict(Null)
+        if self.keep_debug_info:
+            self.debug_dict = defaultdict(list)
         # Setting up random generator
         self.random_generator = check_random_state(self.random_state)
         # Boosting itself
@@ -280,8 +281,9 @@ class uBoostBDT:
                 return
             sample_weight /= sample_weight_sum
 
-            self.debug_dict['weights'].append(sample_weight.copy())
-            self.debug_dict['local_efficiencies'].append(local_efficiencies.copy())
+            if self.keep_debug_info:
+                self.debug_dict['weights'].append(sample_weight.copy())
+                self.debug_dict['local_efficiencies'].append(local_efficiencies.copy())
 
 
     def get_train_vars(self, X):
