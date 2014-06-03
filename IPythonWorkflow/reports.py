@@ -94,13 +94,12 @@ class ClassifiersDict(OrderedDict):
 
         return self
 
-    def test_on(self, X, y, low_memory=False):
+    def test_on(self, X, y, low_memory=True):
         return Predictions(self, X, y, low_memory)
 
 
-
 class Predictions(object):
-    def __init__(self, classifiers_dict, X, y, low_memory=False):
+    def __init__(self, classifiers_dict, X, y, low_memory=True):
         """The main object for different reports and plots"""
         assert isinstance(classifiers_dict, OrderedDict)
         self.X = X
@@ -735,7 +734,7 @@ def testAll():
     trainX, trainY = generateSample(1000, 10)
     testX, testY = generateSample(1000, 10)
 
-    for low_memory in [True, False]:
+    for low_memory in [True]:
         classifiers = ClassifiersDict()
         classifiers['ada'] = AdaBoostClassifier(n_estimators=20)
         classifiers['forest'] = RandomForestClassifier(n_estimators=20)
