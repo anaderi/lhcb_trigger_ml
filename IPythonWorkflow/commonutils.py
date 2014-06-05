@@ -450,3 +450,18 @@ def memory_usage():
         if status is not None:
             status.close()
     return result
+
+def export_root_to_csv(filename):
+    """From selected file exports all the trees in separate files"""
+    import root_numpy
+    import os
+    trees = root_numpy.list_trees(filename)
+    print("The following branches are found:\n %s" % trees)
+    result = []
+    for tree_name in trees:
+        x = root_numpy.root2array(filename, treename=tree_name)
+        new_file_name = os.path.splitext(filename)[0] + '_' + tree_name + '.csv'
+        pandas.DataFrame(x).to_csv(new_file_name)
+        result.append(new_file_name)
+    print "Successfully converted"
+    return result
