@@ -10,9 +10,8 @@ from numpy.random.mtrand import normal
 import pandas
 import numpy
 import io
-from sklearn import grid_search
 from sklearn.cross_validation import train_test_split
-from sklearn.metrics import precision_score, recall_score, f1_score, mean_squared_error
+from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.neighbors.unsupervised import NearestNeighbors
 
@@ -22,9 +21,9 @@ Recall = recall_score
 F1Score = f1_score
 
 
-def execute_notebook(fileName):
+def execute_notebook(filename):
     from IPython.core.getipython import get_ipython
-    with io.open(fileName) as f:
+    with io.open(filename) as f:
         nb = current.read(f, 'json')
     ip = get_ipython()
     for cell in nb.worksheets[0].cells:
@@ -32,17 +31,6 @@ def execute_notebook(fileName):
         ip.run_cell(cell.input)
 
 
-def addIsSignalColumn(dataFrame, is_signal):
-    """Is signal can be either 1 or 0 or array """
-    dataFrame["IsSignal"] = is_signal
-
-
-def getProbabilitiesOfSignal(classifier, test_data):
-    """predictProba returns the 2d array, 
-        [:,0] - probabilities of 0 class (bg)
-        [:,1] - probabilities of 1 class (signal)
-    """
-    return classifier.predict_proba(test_data)[:, 1]
 
 
 def shuffleDataSet(dataFrame, answers):
@@ -62,8 +50,6 @@ def shuffleDataSet(dataFrame, answers):
     # restoring index
     dataFrame.set_index([range(length)], inplace=True)
     return dataFrame, answers[permutation]
-
-
 
 
 def my_train_test_split(*arrays, **kw_args):
@@ -88,6 +74,7 @@ def my_train_test_split(*arrays, **kw_args):
 
 
 def split_on_test_and_train(signal_df, bg_df, **kw_args):
+    # TODO test of splitting
     assert set(signal_df.columns) == set(bg_df.columns), 'Different set  of columns'
     common_df = pandas.concat([signal_df, bg_df], ignore_index=True)
     answers = numpy.concatenate([numpy.ones(len(signal_df)), numpy.zeros(len(bg_df))])
@@ -173,9 +160,7 @@ class Binner:
 
 
 def testBinner():
-    """
-    This function tests binner class
-    """
+    """This function tests binner class"""
     binner = Binner(numpy.random.permutation(30), 3)
     assert numpy.all(binner.limits > [9, 19]), 'failed on the limits'
     assert numpy.all(binner.limits < [10, 20]), 'failed on the limits'
@@ -217,11 +202,10 @@ def build_normalizer(signal, steps=None):
     transforms it to uniform distribution from [0, 1]. Example of usage:
         normalizer = build_normalizer(signal)
         hist(normalizer(background))
-        hist(normalizer())
+        hist(normalizer(signal))
     Parameters:
-        signal: array-like
+        signal: array-like, shape = [n_samples]
         steps: number of steps in interpolating function
-
     """
     if steps is None:
         steps = len(signal)
@@ -230,14 +214,15 @@ def build_normalizer(signal, steps=None):
     percs = numpy.percentile(signal, effs_by_100)
 
     def normalizing_function(data):
-        data = numpy.clip(data, percs[0] + 1e-6, percs[-1] - 1e-6)
+        data = numpy.clip(data, percs[0], percs[-1])
         upper = numpy.searchsorted(percs, data)
+        upper = numpy.clip(upper, 1, steps)
         lower = upper - 1
         lower_output = numpy.take(effs, lower)
         upper_output = numpy.take(effs, upper)
         lower_input = numpy.take(percs, lower)
         upper_input = numpy.take(percs, upper)
-        t = (data - lower_input) / (upper_input - lower_input + 1e-8)
+        t = (data - lower_input) / (upper_input - lower_input + 1e-10)
         return t * upper_output + (1-t) * lower_output
     return normalizing_function
 
@@ -245,9 +230,6 @@ def build_normalizer(signal, steps=None):
 def test_build_normalizer(checks=10):
     predictions = numpy.random.normal(size=2000)
     result = build_normalizer(predictions, steps=200)(predictions)
-    # predictions2 = numpy.zeros([len(predictions),2])
-    # predictions2[:, 1] = predictions
-    # result = massiveCorrectionFunction(numpy.ones_like(predictions), predictions2, steps=200)(predictions)
     assert numpy.all(result[numpy.argsort(predictions)] == sorted(result))
     assert numpy.all(result >= 0)
     assert numpy.all(result <= 1)
@@ -257,113 +239,14 @@ def test_build_normalizer(checks=10):
 
 
 
-# rewrite this part completely
-def slidingEfficiencyArray(answers, prediction_proba):
-    """Returns two arrays,
-    if threshold == second array[i]
-    then efficiency == first array[i] (approximately)
-    """
-    assert len(answers) == len(prediction_proba), "different size of arrays"
-    signal_probabilities = prediction_proba[:, 1]
-    indices = numpy.argsort(signal_probabilities)
-    ans = answers[indices]
-    probs = signal_probabilities[indices]
-
-    IsSig = numpy.sum(ans) + 1e-6
-    IsSigAsSig = numpy.sum(ans) - numpy.cumsum(ans)
-
-    return IsSigAsSig / IsSig, probs
 
 
-def computeEfficiencyAtCuts(answers, predictions_proba, cuts):
-    """A bit unprecise, for each cut this function computes the efficiency"""
-    efficiencies, thresholds = slidingEfficiencyArray(answers, predictions_proba)
-    indices = numpy.searchsorted(thresholds, cuts)
-    indices = numpy.clip(indices, 0, len(thresholds) - 1)
-    return efficiencies[indices]
 
-
-def interpolate(y_array, x):
-    """Assuming we have a function, that has at point i value y_array[i]
-    Then it returns piecewise-linear interpolation of it at point x"""
-    if x >= len(y_array) - 1.0001:
-        return y_array[-1]
-    if x <= 0:
-        return y_array[0]
-    n = int(math.floor(x))
-    t = x - n
-    return y_array[n] * (1.0 - t) + y_array[n + 1] * t
-
-
-def massive_interpolate(y_array, x):
-    """The same as interpolate, but x is array now
-    returns array of the same length as x
-    """
-    y_array = numpy.array(y_array)
-    x = numpy.clip(x, 0.0001, len(y_array) - 1.0001)
-    n = numpy.floor(x).astype(numpy.int)
-    t = x - n
-    return y_array.take(n) * (1.0 - t) + y_array.take(n + 1) * t
-
-
-def correctionFunction(answers, predict_proba, steps=10):
-    cuts = [i * 1.0 / steps for i in range(0, steps + 1)]
-    values = numpy.array([recall_score(answers, predict_proba[:, 1] > cut) for cut in cuts])
-    return lambda x: interpolate(values, x * (len(values) - 1))
-
-
-def massiveCorrectionFunction(answers, predict_proba, steps=10):
-    cuts = [i * 1.0 / steps for i in range(0, steps + 1)]
-    values = computeEfficiencyAtCuts(answers, predict_proba, cuts)
-    return lambda x: massive_interpolate(values, x * (len(values) - 1))
-
-
-def testCorrectionFunctionIteration():
-    import pylab
-    l = 100
-    answers1 = numpy.zeros(l)
-    answers2 = numpy.zeros(l) + 1
-    answers = numpy.concatenate((answers1, answers2))
-    probs1 = numpy.random.rand(l) * numpy.random.rand(l)
-    probs2 = - numpy.random.rand(l) * numpy.random.rand(l) + 1.0
-    probs = numpy.zeros((len(probs1) + len(probs2), 2))
-    probs[:, 1] = numpy.concatenate((probs1, probs2))
-    probs[:, 0] = 1 - probs[:, 1]
-
-    precisions, cuts = slidingEfficiencyArray(answers, probs)
-
-    lmb = massiveCorrectionFunction(answers, probs, 20)
-    newCuts = lmb(cuts)
-
-    mse = mean_squared_error(precisions, newCuts)
-    max_mse = 0.001
-    x_range = numpy.arange(0, 1, 0.01)
-    if mse >= max_mse:
-        # the second graph should look like approximation of the first one
-        pylab.plot(cuts, precisions)
-        pylab.plot(x_range, lmb(x_range))
-        pylab.show()
-        # these two plots should coincide
-        pylab.plot(newCuts, precisions)
-        pylab.plot(x_range, x_range)
-        pylab.show()
-        pylab.plot(precisions)
-        pylab.plot(newCuts)
-        pylab.show()
-
-    assert mse < max_mse, "unexpectedly big deviation of mse " + str(mse)
 
 test_build_normalizer()
 
 
 
-def testCorrectionFunction():
-    for i in range(5):
-        testCorrectionFunctionIteration()
-    print('correction function is ok')
-
-
-testCorrectionFunction()
 
 
 def computeBDTCut(target_efficiency, answers, prediction_probas):
@@ -410,16 +293,11 @@ def generateSample(n_samples, n_features, distance=2.0):
     all variables are independent (gaussian correlation matrix is identity)
     """
     from sklearn.datasets import make_blobs
-    # TODO
-    X, y = make_blobs(n_samples=n_samples, n_features=n_features,   )
-    X = numpy.zeros((n_samples, n_features))
-    y = numpy.zeros(n_samples)
-    signal_indices, bg_indices = train_test_split(range(n_samples), test_size=0.5)
-    X[signal_indices, :] = numpy.random.normal(distance / 2., 1, (len(signal_indices), n_features))
-    X[bg_indices, :] = numpy.random.normal(-distance / 2., 1, (len(bg_indices), n_features))
+    centers = numpy.zeros((2, n_features))
+    centers[0, :] = - distance / 2
+    centers[1, :] = distance / 2
 
-    y[signal_indices] = 1
-    y[bg_indices] = 0
+    X, y = make_blobs(n_samples=n_samples, n_features=n_features, centers=centers)
 
     columns = ["column" + str(x) for x in range(n_features)]
     X = pandas.DataFrame(X, columns=columns)
@@ -461,21 +339,20 @@ def computeKnnIndicesOfSameClass(uniform_variables, trainX, trainY, n_neighbours
 
 
 def testComputeSignalKnnIndices(n_events=100):
-    df = pandas.DataFrame(numpy.random.rand(n_events, 10))
-    is_signal = numpy.random.rand(n_events) > 0.5
+    X, y = generateSample(n_events, 10, distance=.5)
+    is_signal = y > 0.5
     signal_indices = numpy.where(is_signal)[0]
-    unif_columns = df.columns[:1]
-    knn_indices = computeSignalKnnIndices(unif_columns, df, is_signal, 10)
-    distances = pairwise_distances(df[unif_columns])
-    # distances = MinkowskiDistance(p=2).pairwise(df[unif_columns])
+    unif_columns = X.columns[:1]
+    knn_indices = computeSignalKnnIndices(unif_columns, X, is_signal, 10)
+    distances = pairwise_distances(X[unif_columns])
     for i, neighbours in enumerate(knn_indices):
         assert numpy.all(is_signal[neighbours]), "returned indices are not signal"
         not_neighbours = [x for x in signal_indices if not x in neighbours]
-        minr = numpy.min(distances[i, not_neighbours])
-        maxr = numpy.max(distances[i, neighbours])
-        assert minr >= maxr, "distances are set wrongly!"
+        min_dist = numpy.min(distances[i, not_neighbours])
+        max_dist = numpy.max(distances[i, neighbours])
+        assert min_dist >= max_dist, "distances are set wrongly!"
 
-    knn_all_indices = computeKnnIndicesOfSameClass(unif_columns, df, is_signal, 10)
+    knn_all_indices = computeKnnIndicesOfSameClass(unif_columns, X, is_signal, 10)
     for i, neighbours in enumerate(knn_all_indices):
         assert numpy.all(is_signal[neighbours] == is_signal[i]), "returned indices are not signal/bg"
 
@@ -517,8 +394,9 @@ def memory_usage():
             status.close()
     return result
 
+
 def export_root_to_csv(filename):
-    """From selected file exports all the trees in separate files"""
+    """From selected file exports all the trees in separate files, exports all the branches"""
     import root_numpy
     import os
     trees = root_numpy.list_trees(filename)
