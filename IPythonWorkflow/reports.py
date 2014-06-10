@@ -58,6 +58,7 @@ def partOfAsSignal(answer, prediction):
     return numpy.sum(prediction) * 1.0 / len(answer)
 
 
+
 # NB:
 # everything is kept as dictionaries,
 # classifiers_dict = {classifier_name: classifier object}
@@ -68,13 +69,16 @@ def partOfAsSignal(answer, prediction):
 
 
 class ClassifiersDict(OrderedDict):
-    def fit(self, X, y, ipc_profile=None):
+    def fit(self, X, y, sample_weight=None, ipc_profile=None):
         """Trains all classifiers on the same train data,
         if ipc_profile in not None, it is used as a name of ipython cluster to use for parallel computations"""
         if ipc_profile is None:
             for name, classifier in self.iteritems():
                 start_time = time.time()
-                classifier.fit(X, y)
+                if sample_weight is None:
+                    classifier.fit(X, y)
+                else:
+                    classifier.fit(X, y, sample_weight=sample_weight)
                 print("Classifier %12s is learnt in %.2f seconds" % (name, time.time() - start_time))
         else:
             from IPython.parallel import Client
@@ -94,17 +98,18 @@ class ClassifiersDict(OrderedDict):
 
         return self
 
-    def test_on(self, X, y, low_memory=True):
-        return Predictions(self, X, y, low_memory)
+    def test_on(self, X, y, sample_weight=None, low_memory=True):
+        return Predictions(self, X, y, sample_weight=sample_weight, low_memory=low_memory)
 
 
 class Predictions(object):
-    def __init__(self, classifiers_dict, X, y, low_memory=True):
+    def __init__(self, classifiers_dict, X, y, sample_weight=None, low_memory=True):
         """The main object for different reports and plots"""
         assert isinstance(classifiers_dict, OrderedDict)
         self.X = X
         self.y = numpy.array(y, dtype=int)
         self.is_signal = y > 0.5
+        self.sample_weight = sample_weight
         if low_memory:
             self.predictions = OrderedDict([(name, classifier.predict_proba(X))
                                            for name, classifier in classifiers_dict.iteritems()])
@@ -193,7 +198,11 @@ class Predictions(object):
         return self
 
     def learning_curves(self, metrics=roc_auc_score, step=1):
-        function = lambda predictions: metrics(self.y, predictions[:, 1])
+        if self.sample_weight is None:
+            # Old sklearn versions compatibility
+            function = lambda predictions: metrics(self.y, predictions[:, 1])
+        else:
+            function = lambda predictions: metrics(self.y, predictions[:, 1], sample_weight=self.sample_weight)
         result = self._map_on_staged_proba(function=function, step=step)
         for classifier_name, staged_roc in result.iteritems():
             pylab.plot(staged_roc.keys(), staged_roc, label=classifier_name)
@@ -336,6 +345,7 @@ class Predictions(object):
                                              thresholds=thresholds, ** kwargs)
         return self
 
+
     def compute_metrics(self, stages=None, metrics=roc_auc_score, in_html=True):
         print("Computing " + metrics.__name__)
         result = pandas.DataFrame(self._map_on_stages(lambda preds: metrics(self.y, preds[:, 1]), stages=stages))
@@ -467,7 +477,7 @@ def plotLearningCurves(staged_proba_dict, answers, step=1, metrics=roc_auc_score
     pylab.ylabel("ROC AUC")
 
 
-def plotRocCurves(predict_proba_dict, answers, is_big_plot=True):
+def plotRocCurves(predict_proba_dict, answers, sample_weight=None, is_big_plot=True):
     """TestAnswer in numpy.array with zeros and ones
     testPredictions is dictionary:
     - key is string (classifier name usually)
@@ -477,7 +487,12 @@ def plotRocCurves(predict_proba_dict, answers, is_big_plot=True):
         pylab.figure(num=None, figsize=(12, 10), dpi=80, facecolor='w', edgecolor='k')
     for classifierName, predictions in predict_proba_dict.iteritems():
         assert len(answers) == len(predictions), "different length"
-        fpr, tpr, thresholds = roc_curve(answers, predictions[:, 1])
+        if sample_weight is None:
+            # old sklearn versions compatibility
+            fpr, tpr, thresholds = roc_curve(answers, predictions[:, 1])
+        else:
+            fpr, tpr, thresholds = roc_curve(answers, predictions[:, 1], sample_weight=sample_weight)
+
         # tpr = recall = isSasS / isS = signalEfficiecncy
         # fpr = isBasS / isB = 1 - specifity ?=?  1 - backgroundRejection
         bgRej = 1 - numpy.array(fpr)
