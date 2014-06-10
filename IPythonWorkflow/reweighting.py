@@ -1,12 +1,14 @@
-from collections import defaultdict
-
 import numpy
 import math
+
+from collections import defaultdict
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.ensemble.forest import RandomForestClassifier
 from sklearn.tree.tree import DecisionTreeClassifier
 
 import commonutils
+
+__author__ = "Alex Rogozhnikov"
 
 
 class ReweightClassifier(BaseEstimator, ClassifierMixin):
@@ -14,7 +16,7 @@ class ReweightClassifier(BaseEstimator, ClassifierMixin):
                  base_estimator=DecisionTreeClassifier(max_depth=6),
                  train_variables=None, learning_rate=10, efficiencies_as_sum=True):
         """This classifier tries to obtain flat efficiency in signal by
-        changing the weights of training sample.
+        changing the weights of training sample. Doesn't use boosting or whatever
 
         :type base_estimator: BaseEstimator
         """
@@ -94,13 +96,13 @@ class ReweightClassifier(BaseEstimator, ClassifierMixin):
         return self.trained_estimator.predict_proba(X)
 
 
-def testReweightClassifier():
+def test_reweighting():
     trainX, trainY = commonutils.generateSample(4000, 5, 2.0)
     testX, testY = commonutils.generateSample(4000, 5, 2.0)
 
     reweighter = ReweightClassifier(uniform_variables=trainX.columns[:1],
-                            base_estimator=RandomForestClassifier(n_estimators=10),
-                            iterations=10, learning_rate=100)
+                                    base_estimator=RandomForestClassifier(n_estimators=10),
+                                    iterations=10, learning_rate=100)
     reweighter.fit(trainX, trainY)
     reweighter.predict(testX)
     reweighter.predict_proba(testX)
@@ -108,4 +110,4 @@ def testReweightClassifier():
     print "reweighting is ok"
 
 
-testReweightClassifier()
+test_reweighting()
