@@ -1,60 +1,32 @@
-# #About
-# 
+# About
 # This file contains some helpful functions and classes which are often used.
-# This file is ROOT-independent
 
 import math
-from IPython.nbformat import current
-from numpy.random.mtrand import normal
-
 import pandas
 import numpy
 import io
 from sklearn.cross_validation import train_test_split
-from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.neighbors.unsupervised import NearestNeighbors
 
-
-Precision = precision_score
-Recall = recall_score
-F1Score = f1_score
-
+__author__ = "Alex Rogozhnikov"
 
 def execute_notebook(filename):
+    """Allows one to execute cell-by-cell some notebook provided its name"""
     from IPython.core.getipython import get_ipython
+    from IPython.nbformat import current
+
     with io.open(filename) as f:
         nb = current.read(f, 'json')
     ip = get_ipython()
     for cell in nb.worksheets[0].cells:
-        if cell.cell_type != 'code': continue
+        if cell.cell_type != 'code':
+            continue
         ip.run_cell(cell.input)
 
 
-
-
-def shuffleDataSet(dataFrame, answers):
-    """Shuffles the rows in the dataFrame and answersColumn simultaneously
-    Pay attention that dataFrame is changed in the procedure,
-    this may cause some side-effects, so if you need original dataFrame, use clone() before
-    """
-    # TODO sklearn shuffle
-    length = len(dataFrame)
-    if len(answers) != length:
-        raise ValueError("Different lengths")
-    permutation = numpy.random.permutation(length)
-    # don't use inplace and copy without real need
-    # these operations just economy the time
-    dataFrame.set_index([range(length)], inplace=True)
-    dataFrame = dataFrame.reindex(permutation, copy=False)
-    # restoring index
-    dataFrame.set_index([range(length)], inplace=True)
-    return dataFrame, answers[permutation]
-
-
 def my_train_test_split(*arrays, **kw_args):
-    """
-    Does the same thing as train_test_split, but preserves columns in DataFrames
+    """Does the same thing as train_test_split, but preserves columns in DataFrames
     Uses the same parameters: test_size, train_size, random_state
     """
     assert len(arrays) > 0, "at least one array should be given"
@@ -74,37 +46,11 @@ def my_train_test_split(*arrays, **kw_args):
 
 
 def split_on_test_and_train(signal_df, bg_df, **kw_args):
-    # TODO test of splitting
     assert set(signal_df.columns) == set(bg_df.columns), 'Different set  of columns'
     common_df = pandas.concat([signal_df, bg_df], ignore_index=True)
     answers = numpy.concatenate([numpy.ones(len(signal_df)), numpy.zeros(len(bg_df))])
+    assert len(answers) == len(common_df), 'Something gone wrong during splitting'
     return my_train_test_split(common_df, answers, **kw_args)
-
-    # signalTrainInd, signalTestInd = train_test_split(range(len(signalDataFrame)), train_size=signalTrainPart)
-    # bgTrainInd, bgTestInd = train_test_split(range(len(bgDataFrame)), train_size=bgTrainPart)
-    #
-    # signalTrain = signalDataFrame.irow(signalTrainInd)
-    # signalAnsTrain = numpy.ones_like(signalTrainInd)
-    # signalTest = signalDataFrame.irow(signalTestInd)
-    # signalAnsTest = numpy.ones_like(signalTestInd)
-    #
-    # bgTrain = bgDataFrame.irow(bgTrainInd)
-    # bgAnsTrain = numpy.zeros_like(bgTrainInd)
-    # bgTest = bgDataFrame.irow(bgTestInd)
-    # bgAnsTest = numpy.zeros_like(bgTestInd)
-    #
-    # # Concatenating in single dataframe
-    # train = pandas.concat([signalTrain, bgTrain], join='inner', ignore_index=True)
-    # test = pandas.concat([signalTest, bgTest], join='inner', ignore_index=True)
-    # trainAns = numpy.concatenate((signalAnsTrain, bgAnsTrain))
-    # testAns = numpy.concatenate((signalAnsTest, bgAnsTest))
-    #
-    # # Shuffling. It isn't mandatory, just in case classifier would somehow take order into account
-    # # it is better to shuffle data
-    # train, trainAns = shuffleDataSet(train, trainAns)
-    # test, testAns = shuffleDataSet(test, testAns)
-    #
-    # return train, trainAns, test, testAns
 
 
 def test_splitting():
@@ -113,9 +59,9 @@ def test_splitting():
 
     trainX, testX, trainY, testY = split_on_test_and_train(signal_df, bg_df, train_size=0.5)
     for (index, row), pred in zip(trainX.iterrows(), trainY):
-        assert numpy.all(pred == row), 'wrongly splitted data'
+        assert numpy.all(pred == row), 'wrongly data partition'
     for (index, row), pred in zip(testX.iterrows(), testY):
-        assert numpy.all(pred == row), 'wrongly splitted data'
+        assert numpy.all(pred == row), 'wrongly data partition'
 
 test_splitting()
 
@@ -131,13 +77,6 @@ class Binner:
     def get_bins(self, values):
         return numpy.searchsorted(self.limits, values)
 
-    def get_bins_dumb(self, values):
-        """This is the sane as previous function, but a bit slower and naive"""
-        result = numpy.zeros(len(values))
-        for limit in self.limits:
-            result += values > limit
-        return result
-
     def set_limits(self, limits):
         self.limits = limits
 
@@ -145,31 +84,27 @@ class Binner:
         return len(self.limits) + 1
 
     def split_into_bins(self, *arrays):
-        """
-        Splits the data of parallel arrays into bins, the first array is binning variable
-        """
+        """Splits the data of parallel arrays into bins, the first array is binning variable"""
         values = arrays[0]
-        for array in arrays:
-            assert len(array) == len(values), "passed arrays have different length"
+        numpy_arrays = []
+        for i, array in enumerate(arrays):
+            assert len(array) == len(values), "passed arrays have different lengths"
+            numpy_arrays.append(numpy.array(array))
         bins = self.get_bins(values)
         result = []
         for bin in range(len(self.limits) + 1):
             indices = bins == bin
-            result.append([numpy.array(array)[indices] for array in arrays])
+            result.append([array[indices] for array in numpy_arrays])
         return result
 
 
-def testBinner():
+def test_binner():
     """This function tests binner class"""
     binner = Binner(numpy.random.permutation(30), 3)
     assert numpy.all(binner.limits > [9, 19]), 'failed on the limits'
     assert numpy.all(binner.limits < [10, 20]), 'failed on the limits'
     bins = binner.get_bins([-1000, 1000, 0, 10, 20, 9.0, 10.1, 19.0, 20.1])
     assert numpy.all(bins == [0, 2, 0, 1, 2, 0, 1, 1, 2]), 'wrong binning'
-
-    binner = Binner(numpy.random.permutation(100), 7)
-    p = numpy.random.permutation(100)
-    assert numpy.all(binner.get_bins(p) == binner.get_bins_dumb(p)), "getBins() function is wrong"
 
     binner = Binner(numpy.random.permutation(20), 5)
     p = numpy.random.permutation(40)
@@ -193,8 +128,7 @@ def testBinner():
 
     print('binner is ok')
 
-
-testBinner()
+test_binner()
 
 
 def build_normalizer(signal, steps=None):
@@ -235,25 +169,21 @@ def test_build_normalizer(checks=10):
     assert numpy.all(result <= 1)
     percentiles = [100 * (i + 1.) / (checks + 1.) for i in range(checks)]
     assert numpy.all(abs(numpy.percentile(result, percentiles) - numpy.array(percentiles) / 100.) < 0.01)
-    print "Normalizer is ok"
-
-
-
-
-
+    print "normalizer is ok"
 
 
 test_build_normalizer()
 
 
 
+# Functions primarily for uBoost
 
 
 def computeBDTCut(target_efficiency, answers, prediction_probas):
     """Computes cut which gives targetEfficiency
     * targetEfficiency from 0 to 1
     * answers is an array of zeros and ones
-    * predictionProbas is prediction probabilites returned by BDT at some step
+    * prediction_probas is prediction probabilities returned by classifier, shape = [n_samples, 2]
     """
     assert len(answers) == len(prediction_probas), "different size"
 
@@ -276,8 +206,8 @@ def sigmoidFunction(x, width):
     """Sigmoid function is smoothing oh Heaviside function, the lesser width,
        the closer we are to Heaviside function
     Parameters:
-    * x - array of values
-    * width is float, if width == 0, this is simply heaviside function
+        * x - array-like with floats, arbitrary shape
+        * width is float, if width == 0, this is simply Heaviside function
     """
     assert width >= 0, 'the width should be non-negative'
     if abs(width) > 0.0001:
@@ -287,11 +217,9 @@ def sigmoidFunction(x, width):
 
 
 def generateSample(n_samples, n_features, distance=2.0):
-    """
-    Generates some test distribution,
+    """Generates some test distribution,
     signal and background distributions are gaussian with same dispersion and different centers,
-    all variables are independent (gaussian correlation matrix is identity)
-    """
+    all variables are independent (gaussian correlation matrix is identity)"""
     from sklearn.datasets import make_blobs
     centers = numpy.zeros((2, n_features))
     centers[0, :] = - distance / 2
@@ -305,37 +233,34 @@ def generateSample(n_samples, n_features, distance=2.0):
 
 
 def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, n_neighbors=50):
-    """For each event returns the knn closest signal events.
+    """For each event returns the knn closest signal(!) events. No matter of what class the event is.
     Parameters:
-        *uniform_variables* is list of names of variables,
-        using which we want to compute the distance
-
-        *dataframe* should contain these variables
-
-        *is_signal* is boolean numpy.array
+        * uniform_variables is list of names of variables, using which we want to compute the distance
+        * dataframe should contain these variables
+        * is_signal is boolean numpy.array, shape = [n_samples]
     Returns:
-        ndarray of shape (len(dataframe), knn),
+        ndarray of shape [len(dataframe), knn],
         each row contains indices of closest signal events
     """
     assert len(dataframe) == len(is_signal), "Different lengths"
     signal_indices = numpy.where(is_signal)[0]
     for variable in uniform_variables:
-        if variable not in dataframe.columns:
-            raise ValueError("Dataframe is missing %s column" % variable)
+        assert variable in dataframe.columns, "Dataframe is missing %s column" % variable
     uniforming_features_of_signal = numpy.array(dataframe.ix[is_signal, uniform_variables])
     neighbours = NearestNeighbors(n_neighbors=n_neighbors, algorithm='kd_tree').fit(uniforming_features_of_signal)
     _, knn_signal_indices = neighbours.kneighbors(dataframe[uniform_variables])
     return numpy.take(signal_indices, knn_signal_indices)
 
 
-def computeKnnIndicesOfSameClass(uniform_variables, trainX, trainY, n_neighbours=50):
+def computeKnnIndicesOfSameClass(uniform_variables, X, y, n_neighbours=50):
     """Works as previous function, but returns the neighbours of the same class as element"""
-    assert len(trainX) == len(trainY), "different size"
-    is_signal = trainY > 0.5
-    signal_knn = computeSignalKnnIndices(uniform_variables, trainX, is_signal, n_neighbours)
-    bg_knn = computeSignalKnnIndices(uniform_variables, trainX, ~is_signal, n_neighbours)
-    bg_knn[is_signal, :] = signal_knn[is_signal, :]
-    return bg_knn
+    assert len(X) == len(y), "different size"
+    result = numpy.zeros([len(X), n_neighbours], dtype=numpy.int)
+    for label in set(y):
+        is_signal = y == label
+        label_knn = computeSignalKnnIndices(uniform_variables, X, is_signal, n_neighbours)
+        result[is_signal, :] = label_knn[is_signal, :]
+    return result
 
 
 def testComputeSignalKnnIndices(n_events=100):
@@ -369,11 +294,11 @@ def smear_dataset(testX, smeared_variables=None, smearing_factor=0.1):
     if smeared_variables is None:
         smeared_variables = testX.columns
     for var in smeared_variables:
-        assert var in testX.columns, "The variable %s was not found in dataset"
+        assert var in testX.columns, "The variable %s was not found in dataframe"
     result = pandas.DataFrame.copy(testX)
     for var in smeared_variables:
         sigma = math.sqrt(numpy.var(result[var]))
-        result[var] += normal(0, smearing_factor * sigma, len(result))
+        result[var] += numpy.random.normal(0, smearing_factor * sigma, len(result))
     return result
 
 
@@ -396,7 +321,8 @@ def memory_usage():
 
 
 def export_root_to_csv(filename):
-    """From selected file exports all the trees in separate files, exports all the branches"""
+    """From selected file exports all the trees in separate files, exports all the branches,
+    requires rootpy and root_numpy modules"""
     import root_numpy
     import os
     trees = root_numpy.list_trees(filename)
