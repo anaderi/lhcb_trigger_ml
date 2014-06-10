@@ -11,6 +11,7 @@ from sklearn.neighbors.unsupervised import NearestNeighbors
 
 __author__ = "Alex Rogozhnikov"
 
+
 def execute_notebook(filename):
     """Allows one to execute cell-by-cell some notebook provided its name"""
     from IPython.core.getipython import get_ipython
@@ -303,7 +304,7 @@ def smear_dataset(testX, smeared_variables=None, smearing_factor=0.1):
 
 
 def memory_usage():
-    """Memory usage of the current process in kilobytes."""
+    """Memory usage of the current process in bytes."""
     status = None
     result = {'peak': 0, 'rss': 0}
     try:
@@ -313,7 +314,7 @@ def memory_usage():
             parts = line.split()
             key = parts[0][2:-1].lower()
             if key in result:
-                result[key] = int(parts[1])
+                result[key] = "{:,} kB".format(int(parts[1]))
     finally:
         if status is not None:
             status.close()
