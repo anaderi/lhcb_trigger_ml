@@ -64,39 +64,12 @@ def shuffleDataSet(dataFrame, answers):
     return dataFrame, answers[permutation]
 
 
-def splitOnTestAndTrain(signalDataFrame, bgDataFrame,
-                        signalTrainPart=0.5, bgTrainPart=0.5):
-    signalTrainInd, signalTestInd = train_test_split(range(len(signalDataFrame)), train_size=signalTrainPart)
-    bgTrainInd, bgTestInd = train_test_split(range(len(bgDataFrame)), train_size=bgTrainPart)
-
-    signalTrain = signalDataFrame.irow(signalTrainInd)
-    signalAnsTrain = numpy.ones_like(signalTrainInd)
-    signalTest = signalDataFrame.irow(signalTestInd)
-    signalAnsTest = numpy.ones_like(signalTestInd)
-
-    bgTrain = bgDataFrame.irow(bgTrainInd)
-    bgAnsTrain = numpy.zeros_like(bgTrainInd)
-    bgTest = bgDataFrame.irow(bgTestInd)
-    bgAnsTest = numpy.zeros_like(bgTestInd)
-
-    # Concatenating in single dataframe
-    train = pandas.concat([signalTrain, bgTrain], join='inner', ignore_index=True)
-    test = pandas.concat([signalTest, bgTest], join='inner', ignore_index=True)
-    trainAns = numpy.concatenate((signalAnsTrain, bgAnsTrain))
-    testAns = numpy.concatenate((signalAnsTest, bgAnsTest))
-
-    # Shuffling. It isn't mandatory, just in case classifier would somehow take order into account
-    # it is better to shuffle data
-    train, trainAns = shuffleDataSet(train, trainAns)
-    test, testAns = shuffleDataSet(test, testAns)
-
-    return train, trainAns, test, testAns
 
 
 def my_train_test_split(*arrays, **kw_args):
     """
-    Does the same thin as train_test_split, but preserves columns in DataFrames
-    Uses the same parameters: test_size. train_size, random_state
+    Does the same thing as train_test_split, but preserves columns in DataFrames
+    Uses the same parameters: test_size, train_size, random_state
     """
     assert len(arrays) > 0, "at least one array should be given"
     length = len(arrays[0])
@@ -114,10 +87,50 @@ def my_train_test_split(*arrays, **kw_args):
     return result
 
 
-df = pandas.DataFrame(numpy.random.rand(100, 10))
-a, b = my_train_test_split(df)
+def split_on_test_and_train(signal_df, bg_df, **kw_args):
+    assert set(signal_df.columns) == set(bg_df.columns), 'Different set  of columns'
+    common_df = pandas.concat([signal_df, bg_df], ignore_index=True)
+    answers = numpy.concatenate([numpy.ones(len(signal_df)), numpy.zeros(len(bg_df))])
+    return my_train_test_split(common_df, answers, **kw_args)
+
+    # signalTrainInd, signalTestInd = train_test_split(range(len(signalDataFrame)), train_size=signalTrainPart)
+    # bgTrainInd, bgTestInd = train_test_split(range(len(bgDataFrame)), train_size=bgTrainPart)
+    #
+    # signalTrain = signalDataFrame.irow(signalTrainInd)
+    # signalAnsTrain = numpy.ones_like(signalTrainInd)
+    # signalTest = signalDataFrame.irow(signalTestInd)
+    # signalAnsTest = numpy.ones_like(signalTestInd)
+    #
+    # bgTrain = bgDataFrame.irow(bgTrainInd)
+    # bgAnsTrain = numpy.zeros_like(bgTrainInd)
+    # bgTest = bgDataFrame.irow(bgTestInd)
+    # bgAnsTest = numpy.zeros_like(bgTestInd)
+    #
+    # # Concatenating in single dataframe
+    # train = pandas.concat([signalTrain, bgTrain], join='inner', ignore_index=True)
+    # test = pandas.concat([signalTest, bgTest], join='inner', ignore_index=True)
+    # trainAns = numpy.concatenate((signalAnsTrain, bgAnsTrain))
+    # testAns = numpy.concatenate((signalAnsTest, bgAnsTest))
+    #
+    # # Shuffling. It isn't mandatory, just in case classifier would somehow take order into account
+    # # it is better to shuffle data
+    # train, trainAns = shuffleDataSet(train, trainAns)
+    # test, testAns = shuffleDataSet(test, testAns)
+    #
+    # return train, trainAns, test, testAns
 
 
+def test_splitting():
+    signal_df = pandas.DataFrame(numpy.ones([10, 10]))
+    bg_df = pandas.DataFrame(numpy.zeros([10, 10]))
+
+    trainX, testX, trainY, testY = split_on_test_and_train(signal_df, bg_df, train_size=0.5)
+    for (index, row), pred in zip(trainX.iterrows(), trainY):
+        assert numpy.all(pred == row), 'wrongly splitted data'
+    for (index, row), pred in zip(testX.iterrows(), testY):
+        assert numpy.all(pred == row), 'wrongly splitted data'
+
+test_splitting()
 
 
 class Binner:
@@ -199,6 +212,52 @@ def testBinner():
 testBinner()
 
 
+def build_normalizer(signal, steps=None):
+    """Prepares normalization function for some set of values
+    transforms it to uniform distribution from [0, 1]. Example of usage:
+        normalizer = build_normalizer(signal)
+        hist(normalizer(background))
+        hist(normalizer())
+    Parameters:
+        signal: array-like
+        steps: number of steps in interpolating function
+
+    """
+    if steps is None:
+        steps = len(signal)
+    effs = numpy.array([i / float(steps) for i in range(steps+1)])
+    effs_by_100 = [100 * x for x in effs]
+    percs = numpy.percentile(signal, effs_by_100)
+
+    def normalizing_function(data):
+        data = numpy.clip(data, percs[0] + 1e-6, percs[-1] - 1e-6)
+        upper = numpy.searchsorted(percs, data)
+        lower = upper - 1
+        lower_output = numpy.take(effs, lower)
+        upper_output = numpy.take(effs, upper)
+        lower_input = numpy.take(percs, lower)
+        upper_input = numpy.take(percs, upper)
+        t = (data - lower_input) / (upper_input - lower_input + 1e-8)
+        return t * upper_output + (1-t) * lower_output
+    return normalizing_function
+
+
+def test_build_normalizer(checks=10):
+    predictions = numpy.random.normal(size=2000)
+    result = build_normalizer(predictions, steps=200)(predictions)
+    # predictions2 = numpy.zeros([len(predictions),2])
+    # predictions2[:, 1] = predictions
+    # result = massiveCorrectionFunction(numpy.ones_like(predictions), predictions2, steps=200)(predictions)
+    assert numpy.all(result[numpy.argsort(predictions)] == sorted(result))
+    assert numpy.all(result >= 0)
+    assert numpy.all(result <= 1)
+    percentiles = [100 * (i + 1.) / (checks + 1.) for i in range(checks)]
+    assert numpy.all(abs(numpy.percentile(result, percentiles) - numpy.array(percentiles) / 100.) < 0.01)
+    print "Normalizer is ok"
+
+
+
+# rewrite this part completely
 def slidingEfficiencyArray(answers, prediction_proba):
     """Returns two arrays,
     if threshold == second array[i]
@@ -294,6 +353,9 @@ def testCorrectionFunctionIteration():
 
     assert mse < max_mse, "unexpectedly big deviation of mse " + str(mse)
 
+test_build_normalizer()
+
+
 
 def testCorrectionFunction():
     for i in range(5):
@@ -334,28 +396,32 @@ def sigmoidFunction(x, width):
     * x - array of values
     * width is float, if width == 0, this is simply heaviside function
     """
+    assert width >= 0, 'the width should be non-negative'
     if abs(width) > 0.0001:
         return 1.0 / (1.0 + numpy.exp(-x / width))
     else:
         return (x > 0) * 1.0
 
 
-def generateSample(size, featuresNumber, distance=2.0):
+def generateSample(n_samples, n_features, distance=2.0):
     """
     Generates some test distribution,
     signal and background distributions are gaussian with same dispersion and different centers,
     all variables are independent (gaussian correlation matrix is identity)
     """
-    X = numpy.zeros((size, featuresNumber))
-    y = numpy.zeros(size)
-    signal_indices, bg_indices = train_test_split(range(size), test_size=0.5)
-    X[signal_indices, :] = numpy.random.normal(distance / 2., 1, (len(signal_indices), featuresNumber))
-    X[bg_indices, :] = numpy.random.normal(-distance / 2., 1, (len(bg_indices), featuresNumber))
+    from sklearn.datasets import make_blobs
+    # TODO
+    X, y = make_blobs(n_samples=n_samples, n_features=n_features,   )
+    X = numpy.zeros((n_samples, n_features))
+    y = numpy.zeros(n_samples)
+    signal_indices, bg_indices = train_test_split(range(n_samples), test_size=0.5)
+    X[signal_indices, :] = numpy.random.normal(distance / 2., 1, (len(signal_indices), n_features))
+    X[bg_indices, :] = numpy.random.normal(-distance / 2., 1, (len(bg_indices), n_features))
 
     y[signal_indices] = 1
     y[bg_indices] = 0
 
-    columns = ["column" + str(x) for x in range(featuresNumber)]
+    columns = ["column" + str(x) for x in range(n_features)]
     X = pandas.DataFrame(X, columns=columns)
     return X, y
 
@@ -463,5 +529,6 @@ def export_root_to_csv(filename):
         new_file_name = os.path.splitext(filename)[0] + '_' + tree_name + '.csv'
         pandas.DataFrame(x).to_csv(new_file_name)
         result.append(new_file_name)
-    print "Successfully converted"
+    print("Successfully converted")
     return result
+
