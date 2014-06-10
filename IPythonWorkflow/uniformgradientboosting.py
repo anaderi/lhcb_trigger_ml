@@ -1,7 +1,6 @@
 from __future__ import print_function
 from __future__ import division
 from collections import defaultdict
-
 from time import time
 import itertools
 import math
@@ -11,11 +10,9 @@ from sklearn.ensemble._gradient_boosting import _random_sample_mask
 from sklearn.ensemble.gradient_boosting import LossFunction, LOSS_FUNCTIONS, MultinomialDeviance, \
     LogOddsEstimator, BinomialDeviance
 import numpy
-from sklearn.ensemble.weight_boosting import AdaBoostClassifier
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.neighbors.unsupervised import NearestNeighbors
 from sklearn.tree._tree import DTYPE
-from sklearn.tree.tree import DecisionTreeClassifier
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays, column_or_1d
 from commonutils import generateSample

@@ -1,3 +1,5 @@
+import numpy
+import pandas
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 
 
@@ -22,3 +24,17 @@ class HidingClassifier(BaseEstimator, ClassifierMixin):
 
     def staged_predict_proba(self, X):
         return self._trained_estimator.staged_predict_proba(X[self.train_variables])
+
+
+class FeatureSplitter(BaseEstimator, ClassifierMixin):
+    def __init__(self, feature_name, base_estimator):
+        self.base_estimator = base_estimator
+        self.feature_name = feature_name
+
+    def fit(self, X, y, sample_weight=None):
+        column = numpy.array(X[self.feature_name])
+        self.values = set(column)
+        for value in self.values:
+            x_part = X[self.values == value]
+            stayed_columns = pandas.DataFrame.dropna(x_part, axis=1).columns
+            x_part[stayed_columns]
