@@ -1,11 +1,14 @@
+from __future__ import print_function
+from __future__ import division
 from collections import defaultdict
+
 from time import time
 import itertools
 import math
 import scipy.sparse as sparse
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble._gradient_boosting import _random_sample_mask
-from sklearn.ensemble.gradient_boosting import LossFunction, LOSS_FUNCTIONS, MultinomialDeviance, MeanEstimator, \
+from sklearn.ensemble.gradient_boosting import LossFunction, LOSS_FUNCTIONS, MultinomialDeviance, \
     LogOddsEstimator, BinomialDeviance
 import numpy
 from sklearn.ensemble.weight_boosting import AdaBoostClassifier
@@ -213,6 +216,7 @@ class DistanceBasedKnnFunction(KnnLossFunction):
         self.large_pred_penalty = large_preds_penalty
         self.row_normalize = row_normalize
         KnnLossFunction.__init__(self, uniform_variables)
+
     def compute_parameters(self, trainX, trainY):
         for variable in self.uniform_variables:
             if variable not in trainX.columns:
@@ -298,7 +302,7 @@ class FlatnessLossFunction(LossFunction):
         needed_indices = (y > 0.5) == self.on_signal
         out_of_bins = numpy.sum((occurences == 0) & needed_indices)
         if out_of_bins > 0.01 * len(X):
-            print "warning: %i events are out of all bins" % out_of_bins
+            print("warning: %i events are out of all bins" % out_of_bins)
 
         event_weights = 1. / (occurences + 1e-10)
         # bin weight is some mean of weights of its events
@@ -364,7 +368,7 @@ class FlatnessLossFunction(LossFunction):
         # sorted_pred = numpy.sort(y_pred[needed_indices])
         global_efficiencies = numpy.zeros(len(y), dtype=numpy.float)
         global_efficiencies[numpy.where(needed_indices)[0][y_pred[needed_indices].argsort()]] = \
-            (numpy.arange(0, n_needed) + 0.5) / float(n_needed)
+            (numpy.arange(0, n_needed) + 0.5) / n_needed
 
         for bin_weight, indices_in_bin in zip(self.bin_weights, self.bin_indices):
             preds_in_bin = numpy.take(y_pred, indices_in_bin)
@@ -437,7 +441,7 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
         else:
             return X[self.train_variables]
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         """Fit the gradient boosting model.
 
         Parameters
@@ -451,6 +455,9 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
             regression)
             For classification, labels must correspond to classes
             ``0, 1, ..., n_classes_-1``
+
+        sample_weight: array-like, shape = [n_samples], default None,
+            positive weights if they are needed
 
         Returns
         -------
@@ -468,7 +475,6 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
         if isinstance(self.loss_, KnnLossFunction) or isinstance(self.loss_, FlatnessLossFunction):
             self.loss_.fit(X, y)
         X = self.get_train_variables(X)
-
 
         # Check input
         X, = check_arrays(X, dtype=DTYPE, sparse_format="dense", check_ccontiguous=True)
@@ -523,8 +529,7 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
 
             if self.verbose > 0:
                 if (i + 1) % verbose_mod == 0:
-                    remaining_time = ((self.n_estimators - (i + 1)) *
-                                      (time() - start_time) / float(i + 1))
+                    remaining_time = (self.n_estimators - (i + 1)) * (time() - start_time) / float(i + 1)
                     if remaining_time > 60:
                         remaining_time = '{0:.2f}m'.format(remaining_time / 60.0)
                     else:
@@ -589,10 +594,10 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
 
 
 def testGradient(loss, size=1000):
-    loss.fit(numpy.arange(size), numpy.arange(size))
-    y = numpy.random.random(size) > 0.5
+    X, y = commonutils.generateSample(size, 10)
+    loss.fit(X, y)
     pred = numpy.random.random(size)
-    epsilon = 1e-6
+    epsilon = 1e-7
     val = loss(y, pred)
     gradient = numpy.zeros_like(pred)
 
@@ -603,51 +608,38 @@ def testGradient(loss, size=1000):
         gradient[i] = (val2 - val) / epsilon
 
     n_gradient = loss.negative_gradient(y, pred)
-    assert numpy.all(abs(n_gradient + gradient) < 1e-4), "Problem with functional gradient"
-    print("loss is ok")
-
-testGradient(AdaLossFunction())
+    assert numpy.all(abs(n_gradient + gradient) < 1e-3), "Problem with functional gradient"
 
 
-def testGradientBoosting():
+
+def testGradientBoosting(samples=1000):
     # Generating some samples correlated with first variable
     distance = 0.6
-    testX, testY = generateSample(2000, 10, distance)
-    trainX, trainY = generateSample(2000, 10, distance)
+    testX, testY = generateSample(samples, 10, distance)
+    trainX, trainY = generateSample(samples, 10, distance)
     # We will try to get uniform distribution along this variable
     uniform_variables = ['column0']
-    base_estimator = DecisionTreeClassifier(min_samples_split=20, max_depth=5)
     n_estimators = 20
-    samples = 1000
 
-    loss2 = SimpleKnnLossFunction(uniform_variables)
-    loss3 = PairwiseKnnLossFunction(uniform_variables, knn=10)
-    loss4 = AdaLossFunction()
-    loss5 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
-    loss6 = DistanceBasedKnnFunction(uniform_variables, knn=10, distance_dependence=lambda r: numpy.exp(-r))
-    # loss7 = DistanceBasedKnnFunction(uniform_variables, knn=None, distance_dependence=lambda r: numpy.exp(-r))
-    loss8 = FlatnessLossFunction(uniform_variables, ada_coefficient=1)
+    loss1 = SimpleKnnLossFunction(uniform_variables)
+    loss2 = PairwiseKnnLossFunction(uniform_variables, knn=10)
+    loss3 = AdaLossFunction()
+    loss4 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
+    loss5 = DistanceBasedKnnFunction(uniform_variables, knn=10, distance_dependence=lambda r: numpy.exp(-0.1 * r))
+    loss6 = FlatnessLossFunction(uniform_variables, ada_coefficient=1)
 
-    for loss in [loss2, loss3, loss4, loss5, loss6, loss8]:
-        print MyGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2, subsample=0.7,
-            n_estimators=n_estimators, train_variables=None).fit(trainX[:samples], trainY[:samples]).score(testX, testY),
+    for loss in [loss1, loss2, loss3, loss4, loss5, loss6]:
+        result = MyGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2,
+                                              subsample=0.7, n_estimators=n_estimators, train_variables=None)\
+            .fit(trainX[:samples], trainY[:samples]).score(testX, testY)
+        assert result >= 0.7, "The quality is too poor: %.3f" % result
 
-    print(AdaBoostClassifier(n_estimators=n_estimators, base_estimator=base_estimator)
-        .fit(trainX, trainY).score(testX, testY))
+    for loss in [loss1, loss2, loss3, loss4, loss5]:
+        testGradient(loss)
+
+
 
     print('uniform gradient boosting is ok')
 
 testGradientBoosting()
 
-
-
-
-def testFlatnessLossFunction(size=1000):
-    trainX, trainY = generateSample(size, 10)
-    uniform_variables = trainX.columns[0]
-    train_variables = trainX.columns[1:]
-    loss = FlatnessLossFunction(uniform_variables)
-    classifier = MyGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2,
-                                              subsample=0.7, n_estimators=20, train_variables=train_variables)
-    classifier.fit(trainX, trainY)
-    print classifier.score()
