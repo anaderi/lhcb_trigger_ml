@@ -1,12 +1,14 @@
-__author__ = 'Alex Rogozhnikov'
-
 import numpy
 import commonutils
+from commonutils import build_normalizer
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.cross_validation import train_test_split
 from sklearn.lda import LDA
 from sklearn.naive_bayes import GaussianNB
-from sklearn.metrics import f1_score
+from sklearn.metrics import roc_auc_score
+
+__author__ = 'Alex Rogozhnikov'
+
 
 
 # How does it work: it splits the mass space into bins,
@@ -14,6 +16,7 @@ from sklearn.metrics import f1_score
 # when getting prediction_probas, the predictions of basic classifier
 # are altered by some correcting monotonic function
 
+# TODO try doing the same without binning
 
 
 def getTrainTestDataForBin(bins_data, bin_index, mode='outer'):
@@ -71,8 +74,7 @@ class BinningUniformClassifier(BaseEstimator, ClassifierMixin):
         # binning
         self.binner = commonutils.Binner(masses, self.n_bins)
         self.classifiers = []
-        self.lambda_uniformers = []
-        self.massive_lambda_uniformers = []
+        self.normalizers = []
         splittedBinsData = list(self.binner.split_into_bins(masses, self.get_train_variables(X), y))
         for binIndex in range(len(splittedBinsData)):
             binFitX, binCorrX, binFitY, binCorrY = \
@@ -83,27 +85,17 @@ class BinningUniformClassifier(BaseEstimator, ClassifierMixin):
             binClassifier = clone(self.base_estimator)
             self.classifiers.append(binClassifier.fit(binFitX, binFitY))
             predictions = binClassifier.predict_proba(binCorrX)
-            lmb = commonutils.correctionFunction(binCorrY, predictions, self.correction_steps)
-            self.lambda_uniformers.append(lmb)
-            self.massive_lambda_uniformers.append(
-                commonutils.massiveCorrectionFunction(binCorrY, predictions, self.correction_steps))
+            self.normalizers.append( build_normalizer(predictions[binCorrY > 0.5, 1], steps=self.correction_steps ) )
+
         return self
 
     def predict(self, X):
+        # TODO set some threshold, simply max is absolutely irrelevant
         return numpy.argmax(self.predict_proba(X), axis=1)
-        # masses = X[self.uniform_variables[0]]
-        # X_train_vars = self.get_train_variables(X)
-        #
-        # result = numpy.zeros(len(X))
-        # bins_indices = self.binner.get_bins(masses)
-        #
-        # for bin_index in range(self.n_bins):
-        #     indices = bins_indices == bin_index
-        #     result[indices] = self.classifiers[bin_index].predict(X_train_vars[indices])
-        # return result
 
     def predict_proba(self, X):
         # use binner for correcting predictions
+        # it is simpler to fit efficiency
         masses = X[self.uniform_variables[0]]
         X_train_vars = self.get_train_variables(X)
         predicts = numpy.ndarray([len(masses), 2])
@@ -111,19 +103,9 @@ class BinningUniformClassifier(BaseEstimator, ClassifierMixin):
         for bin_index in range(self.n_bins):
             indices = bins_indices == bin_index
             raw_probas = self.classifiers[bin_index].predict_proba(X_train_vars[indices])
-            predicts[indices, 1] = 1. - self.massive_lambda_uniformers[bin_index](raw_probas[:, 1])
+            predicts[indices, 1] = self.normalizers[bin_index](raw_probas[:, 1])
         predicts[:, 0] = 1. - predicts[:, 1]
 
-        # slow place
-        # predicts2 = numpy.zeros([len(masses), 2])
-        # for i in range(len(masses)):
-        #     binNumber = bins_indices[i]
-        #     p = self.classifiers[binNumber].predict_proba(X.irow(i))[0, 1]
-        #     lmb = self.lambda_uniformers[binNumber]
-        #     pNew = 1 - lmb(p)
-        #     predicts2[i, 0] = 1 - pNew
-        #     predicts2[i, 1] = pNew
-        # assert numpy.max(abs(predicts - predicts2)) < 0.001, "interpolation works in the wrong way"
         return predicts
 
     def get_train_variables(self, X):
@@ -133,27 +115,25 @@ class BinningUniformClassifier(BaseEstimator, ClassifierMixin):
             return X[self.train_variables]
 
 
-
-
-def testBinningUniformerClassifier():
+def test_binning_unfiorming():
     trainX, trainY = commonutils.generateSample(1000, 10, 2)
     testX, testY = commonutils.generateSample(1000, 10, 2)
 
-    uniformVariables = [trainX.columns[0]]
+    uniform_variables = [trainX.columns[0]]
 
-    unifier = BinningUniformClassifier(LDA(), uniform_variables=uniformVariables)
+    unifier = BinningUniformClassifier(LDA(), uniform_variables=uniform_variables)
     _ = clone(unifier)
 
-    unifier = BinningUniformClassifier(GaussianNB(), uniform_variables=uniformVariables, n_bins=1,
-                                       mode='innerNoSplit').fit(trainX, trainY)
-    predictions = unifier.predict(testX)
-    _ = unifier.predict_proba(testX)
+    unifier = BinningUniformClassifier(GaussianNB(), uniform_variables=uniform_variables, n_bins=1,
+                                       mode='innerSplit').fit(trainX, trainY)
+    _ = unifier.predict(testX)
+    proba = unifier.predict_proba(testX)
 
-    if f1_score(predictions, testY) < 0.75:
-        print 'predictions are awful, f1 = ' + str(f1_score(predictions, testY))
-    print 'uniformer classifier is ok'
+    score = roc_auc_score(testY, proba[:, 1])
+    if score < 0.8:
+        print 'Predictions are awful, roc = %.2f' % score
 
 
-testBinningUniformerClassifier()
+test_binning_unfiorming()
 
 
