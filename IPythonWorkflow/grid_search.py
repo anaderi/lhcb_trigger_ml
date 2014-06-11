@@ -183,7 +183,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
 
     def _generate_start_point(self):
         while True:
-            result = tuple([self.random_generator.randint(0, size - 1) for size in self.dimensions])
+            result = tuple([self.random_generator.randint(0, size) for size in self.dimensions])
             print(result)
             print(self.queued_tasks_)
             if result not in self.queued_tasks_:
