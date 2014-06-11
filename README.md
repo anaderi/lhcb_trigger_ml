@@ -17,8 +17,11 @@ and some functions to import data from ROOT files, these one need ROOT and pytho
   See `grid_search` module, there is an simulated anneling-like optimization of parameters on dataset
 * plots, plots, plots <br />
   See `reports` module, it is a good way to visualize learning curves, roc curves, flatness of predictions on variables.
-* There is also procedure to generate toy Monte-Carlo in `toymc` module <br />
+* there is also procedure to generate toy Monte-Carlo in `toymc` module <br />
   (generates new set of events based on the set of events we already have with same distribution) and special notebook 'ToyMonteCarlo' to demonstrate and analyze its results. 
+* parallelism <br />
+  ClassifiersDict from `reports` can train classifiers on IPython cluster, <br />
+  __uBoost__ is quite slow, and it has built-in parallelism option: different BDTs inside uBoost can be trained parallelly in cluster.
 
 ###Getting this to work
 To run most the notebooks, only IPython and some python libraries are needed.
