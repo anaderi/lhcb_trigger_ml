@@ -1,9 +1,9 @@
-#lhcb_trigger_ml
+# lhcb_trigger_ml
 Friendly machine learning for LHCb experiment. 
-Project should enable one to compare several classifiers by their characteristics based on some training dataset.
+Project should enable one to train and compare classifiers on some training dataset.
 
 The programming language is python,
-the analysis is performed in IPython notebooks - commonly used in machine learning interactive shell for python, which is good for development, analysis and presenting results (plots, histograms and so on)
+the analysis is performed in __IPython__ notebooks - commonly used in machine learning interactive shell for python, which is good for development, analysis and presenting results (plots, histograms and so on)
 
 At this moment project contains several notebooks which use python classifiers, 
 and some functions to import data from ROOT files, these one need ROOT and python wrappers for it.
