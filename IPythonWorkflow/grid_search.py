@@ -1,5 +1,6 @@
 # About
 # this module is implementation of optimized grid_search
+
 from __future__ import division
 from __future__ import print_function
 from itertools import islice
@@ -89,23 +90,6 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
     n_evaluations : integer
         The number of attempts of evaluations
 
-    Examples
-    --------
-    >>> from sklearn import svm, grid_search, datasets
-    >>> iris = datasets.load_iris()
-    >>> parameters = {'kernel':('linear', 'rbf'), 'C':[1, 10]}
-    >>> svr = svm.SVC()
-    >>> clf = grid_search.GridSearchCV(svr, parameters)
-    >>> clf.fit(iris.data, iris.target)
-    ...                             # doctest: +NORMALIZE_WHITESPACE +ELLIPSIS
-    GridSearchCV(cv=None,
-           estimator=SVC(C=1.0, cache_size=..., class_weight=..., coef0=..., degree=..., gamma=...,
-       kernel='rbf', max_iter=-1, probability=False, random_state=None,
-       shrinking=True, tol=..., verbose=False),
-           fit_params={}, iid=..., loss_func=..., n_jobs=1,
-           param_grid=..., pre_dispatch=..., refit=..., score_func=...,
-           scoring=..., verbose=...)
-
 
     Attributes
     ----------
@@ -156,9 +140,8 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
     """
 
     def __init__(self, estimator, param_grid, score_function=None, folds=3, fold_checks=1, n_evaluations=40,
-                 complete_cv=False, random_state=None, pareto=False):
-        """If complete_cv is False, only.
-        If pareto = True, it optimizes in pareto style """
+                 complete_cv=False, random_state=None, ipc_profile=None):
+        """If complete_cv is False, only.  """
         self.base_estimator = estimator
         self.param_grid = param_grid
         self.dimensions = list([len(param_values) for param, param_values in param_grid.iteritems()])
@@ -169,6 +152,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
         self.folds = folds
         self.fold_checks = fold_checks
         self.random_generator = random_state
+        self.ipc_profile = ipc_profile
 
     def check_params(self):
         assert isinstance(self.param_grid, OrderedDict), 'the passed param_grid should be of OrderedDict class'
@@ -193,10 +177,11 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
     def _generate_next_point(self):
         """Generating next point in parameters space"""
         results = numpy.array(self.grid_scores_.values())
-        std = numpy.std(results)
-        probabilities = numpy.exp(-results * 3. / std)
+        std = numpy.std(results) + 1e-5
+        probabilities = numpy.exp(numpy.clip( (results - numpy.mean(results)) * 3. / std, 0, 6))
         probabilities /= numpy.sum(probabilities)
-        start = numpy.random.choice(a=self.grid_scores_.keys(), p=probabilities)
+        start = numpy.random.choice(len(probabilities), p=probabilities)
+        start = self.grid_scores_.keys()[start]
         while True:
             axis = self.random_generator.randint(len(self.dimensions))
             new_state_indices = list(start)[:] # copy
@@ -204,19 +189,6 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
             if new_state_indices[axis] < 0 or new_state_indices[axis] >= self.dimensions[axis]:
                 continue
             return tuple(new_state_indices)
-
-    def _indices_after_jump(self, current_indices, new_indices):
-        """Decides whether to jump in the new point or not, after we had computed the loss there """
-        if not self.grid_scores_.has_key(current_indices):
-            # this happens at first iteration
-            return new_indices
-        val = self.grid_scores_[current_indices]
-        new_val = self.grid_scores_[new_indices]
-        std = numpy.std(self.grid_scores_.values()) + 1e-10
-        if self.random_generator.uniform() < numpy.exp((new_val - val) * 4. / std):
-            return new_indices
-        else:
-            return current_indices
 
     @property
     def best_score_(self):
@@ -244,18 +216,14 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
         state_indices = self._generate_first_point()
         X = pandas.DataFrame(X)
         while self.evaluations_done < self.n_evaluations:
-            new_state_indices = self._generate_next_point()
-            if self.grid_scores_.has_key(new_state_indices):
-                state_indices = self._indices_after_jump(state_indices, new_state_indices)
-                continue
-            state_dict = self._indices_to_parameters(new_state_indices)
+            state_dict = self._indices_to_parameters(state_indices)
             self.evaluations_done += 1
             kFolds = StratifiedKFold(y=y, n_folds=self.folds)
+            score = 0.
             for train_indices, test_indices in islice(kFolds, self.fold_checks):
                 trainX, trainY = X.irow(train_indices), y[train_indices]
                 testX, testY = X.irow(test_indices), y[test_indices]
                 estimator = sklearn.clone(self.base_estimator).set_params(**state_dict)
-                score = 0.
                 if sample_weight is None:
                     estimator.fit(X=trainX, y=trainY)
                     proba = estimator.predict_proba(testX)
@@ -265,26 +233,31 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                     estimator.fit(X=trainX, y=trainY, sample_weight=train_weights)
                     proba = estimator.predict_proba(testX)
                     score += self.score_function(testY, proba[:, 1], sample_weight=test_weights)
-                self.grid_scores_[new_state_indices] = score / self.fold_checks
-                state_indices = self._indices_after_jump(state_indices, new_state_indices)
+            self.grid_scores_[state_indices] = score / self.fold_checks
+            state_indices = self._generate_next_point()
 
         # Training classifier once again
         self.best_estimator_ = sklearn.clone(self.base_estimator).set_params(**self.best_params_)
         if sample_weight is None:
-            self.base_estimator.fit(X, y)
+            self.best_estimator_.fit(X, y)
         else:
-            self.base_estimator.fit(X, y, sample_weight=sample_weight)
+            self.best_estimator_.fit(X, y, sample_weight=sample_weight)
 
-    def predict_proba(self, X, y, sample_weight=None):
-        raise NotImplementedError()
+    def predict_proba(self, X):
+        return self.best_estimator_.predict_proba(X)
 
-    def predict(self, X, y, sample_weight=None):
-        raise NotImplementedError()
+    def predict(self, X):
+        return self.best_estimator_.predict(X)
 
     def print_results(self):
         for state_indices, value in self.grid_scores_.iteritems():
             state_string = ", ".join([d[0] + '=' + str(d[1]) for d in self._indices_to_parameters(state_indices).iteritems()])
             print("{0:.3f}:  {1}".format(value, state_string))
+
+
+
+
+
 
 
 class TestClassifier(BaseEstimator, ClassifierMixin):
@@ -303,26 +276,20 @@ class TestClassifier(BaseEstimator, ClassifierMixin):
 
 
 def metric_functions(y, pred, sample_weight=None):
-    return numpy.sum(pred[:, 1])
-
-
+    return numpy.mean(pred)
 
 
 def test_optimization(size=10, n_evaluations=100):
-    grid_1d = numpy.linspace(0, 1, num=size)
+    grid_1d = numpy.linspace(0.1, 1, num=size)
     grid = {'a': grid_1d, 'b': grid_1d, 'c': grid_1d, 'd': grid_1d}
     grid = OrderedDict(grid)
 
-    grid_cv = GridOptimalSearchCV(TestClassifier(), grid, n_evaluations=n_evaluations)
+    grid_cv = GridOptimalSearchCV(TestClassifier(), grid, n_evaluations=n_evaluations, score_function=metric_functions)
     trainX, trainY = commonutils.generateSample(2000, 10, distance=0.5)
     grid_cv.fit(trainX, trainY)
 
-    print(len(grid_cv.grid_scores_))
-    print(grid_cv.best_params_)
-    print(grid_cv.best_score_)
-    grid_cv.print_results()
-    print('Success!')
-    # TODO assertions here
+    assert 0.8 <= grid_cv.best_score_ <= 1., 'Too poor optimization : %.2f' % grid_cv.best_score_
+
 
 test_optimization()
 
@@ -349,4 +316,4 @@ def test_grid_search():
 
 
 
-test_grid_search()
+# test_grid_search()
