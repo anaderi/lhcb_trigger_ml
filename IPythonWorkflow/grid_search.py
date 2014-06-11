@@ -256,13 +256,10 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
             while self.evaluations_done < self.n_evaluations:
                 state_indices_array = [self._generate_next_point() for _ in range(portion)]
                 state_dict_array = [self._indices_to_parameters(indices) for indices in state_indices_array]
-                result = dview.map_sync(estimate_classifier, params_dict=state_dict_array,
-                    base_estimator=[self.base_estimator] * portion,
-                    X=[X]*portion, y=[y]*portion,
-                    folds=[self.folds] * portion,
-                    fold_checks=[self.fold_checks] * portion,
-                    score_function=[self.score_function] * portion,
-                    sample_weight=[sample_weight]*portion)
+                result = dview.map_sync(estimate_classifier, state_dict_array,
+                    [self.base_estimator] * portion, [X]*portion, [y]*portion,
+                    [self.folds] * portion, [self.fold_checks] * portion,
+                    [self.score_function] * portion, [sample_weight]*portion)
                 for state_indices, score in zip(state_indices_array, result):
                     self.grid_scores_[state_indices] = score
                 self.evaluations_done += portion
