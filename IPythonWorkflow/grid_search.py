@@ -253,6 +253,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
             from IPython.parallel import Client
             dview = Client(profile=self.ipc_profile).direct_view()
             portion = len(dview)
+            print("There are {0} cores in cluster, the portion is equal {1}".format(len(dview), portion))
             while self.evaluations_done < self.n_evaluations:
                 state_indices_array = [self._generate_next_point() for _ in range(portion)]
                 state_dict_array = [self._indices_to_parameters(indices) for indices in state_indices_array]
@@ -260,6 +261,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                     [self.base_estimator] * portion, [X]*portion, [y]*portion,
                     [self.folds] * portion, [self.fold_checks] * portion,
                     [self.score_function] * portion, [sample_weight]*portion)
+                assert len(result) == portion, "The length of result is very strange"
                 for state_indices, score in zip(state_indices_array, result):
                     self.grid_scores_[state_indices] = score
                 self.evaluations_done += portion
@@ -329,19 +331,10 @@ def test_grid_search():
     grid = OrderedDict(grid)
 
     trainX, trainY = commonutils.generateSample(2000, 10, distance=0.5)
-    grid_cv = GridOptimalSearchCV(AdaBoostClassifier(), grid)
+    grid_cv = GridOptimalSearchCV(AdaBoostClassifier(), grid, n_evaluations=10)
     grid_cv.fit(trainX, trainY)
-    print(len(grid_cv.grid_scores_))
-    print(grid_cv.best_params_)
-    print(grid_cv.best_score_)
-    grid_cv.print_results()
-    print('Success!')
-    import pylab
-    pylab.plot(grid_cv.grid_scores_.values())
-    pylab.show()
-
-
-
+    grid_cv.predict_proba(trainX)
+    grid_cv.predict(trainX)
 
 
 test_grid_search()
