@@ -245,10 +245,10 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
             while self.evaluations_done < self.n_evaluations:
                 state_indices = self._generate_next_point()
                 state_dict = self._indices_to_parameters(state_indices)
-                self.evaluations_done += 1
                 self.grid_scores_[state_indices] = estimate_classifier(params_dict=state_dict,
                     base_estimator=self.base_estimator, X=X, y=y, folds=self.folds,
                     fold_checks=self.fold_checks, score_function=self.score_function, sample_weight=sample_weight)
+                self.evaluations_done += 1
         else:
             from IPython.parallel import Client
             dview = Client(profile=self.ipc_profile).direct_view()
@@ -265,6 +265,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                     sample_weight=[sample_weight]*portion)
                 for state_indices, score in zip(state_indices_array, result):
                     self.grid_scores_[state_indices] = score
+                self.evaluations_done += portion
 
         self._fit_best_estimator(X, y, sample_weight=sample_weight)
 
