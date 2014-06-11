@@ -1,6 +1,5 @@
 #lhcb_trigger_ml
-LHCb trigger based on machine learning research
-
+Friendly machine learning for LHCb experiment. 
 Project should enable one to compare several classifiers by their characteristics based on some training dataset.
 
 The programming language is python,
@@ -8,6 +7,13 @@ the analysis is performed in IPython notebooks - commonly used in machine learni
 
 At this moment project contains several notebooks which use python classifiers, 
 and some functions to import data from ROOT files, these one need ROOT and python wrappers for it.
+
+# Main points
+* working of uniform classifiers
+** uBoost optimized implementation inside
+** uniform gradient boosting (with different losses, specially FlatnessLoss is very interesting)
+* 
+ 
 
 There is also procedure to generate toy Monte-Carlo (generates new set of events based on the set of events we already have with same distribution) and special notebook 'ToyMonteCarlo' to demonstrate and analyze its results. 
 
