@@ -7,6 +7,7 @@ from itertools import islice
 import numpy
 import pandas
 import sklearn
+
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.cross_validation import StratifiedKFold
 
@@ -16,12 +17,32 @@ from sklearn.utils.random import check_random_state
 import commonutils
 
 try:
-    from collections import OrderedDict, defaultdict
+    from collections import OrderedDict
 except ImportError:
     from ordereddict import OrderedDict
 
 
 __author__ = 'Alex Rogozhnikov'
+
+
+def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
+                        score_function, sample_weight=None):
+    kFolds = StratifiedKFold(y=y, n_folds=folds)
+    score = 0.
+    for train_indices, test_indices in islice(kFolds, fold_checks):
+        trainX, trainY = X.irow(train_indices), y[train_indices]
+        testX, testY = X.irow(test_indices), y[test_indices]
+        estimator = sklearn.clone(base_estimator).set_params(**params_dict)
+        if sample_weight is None:
+            estimator.fit(X=trainX, y=trainY)
+            proba = estimator.predict_proba(testX)
+            score += score_function(testY, proba[:, 1])
+        else:
+            train_weights, test_weights = sample_weight[train_indices], sample_weight[test_indices]
+            estimator.fit(X=trainX, y=trainY, sample_weight=train_weights)
+            proba = estimator.predict_proba(testX)
+            score += score_function(testY, proba[:, 1], sample_weight=test_weights)
+    return score / fold_checks
 
 
 
@@ -127,40 +148,32 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
     `pre_dispatch` many times. A reasonable value for `pre_dispatch` is `2 *
     n_jobs`.
 
-    See Also
-    ---------
-    :class:`ParameterGrid`:
-        generates all the combinations of a an hyperparameter grid.
-
-    :func:`sklearn.cross_validation.train_test_split`:
-        utility function to split the data into a development set usable
-        for fitting a GridSearchCV instance and an evaluation set for
-        its final evaluation.
-
     """
 
     def __init__(self, estimator, param_grid, score_function=None, folds=3, fold_checks=1, n_evaluations=40,
                  complete_cv=False, random_state=None, ipc_profile=None):
-        """If complete_cv is False, only.  """
+        """ipc_profile is name of IPython cluster profile, None for local training """
         self.base_estimator = estimator
         self.param_grid = param_grid
         self.dimensions = list([len(param_values) for param, param_values in param_grid.iteritems()])
         self.n_evaluations = n_evaluations
-        # results on different parameters
         self.grid_scores_ = OrderedDict()
+        self.queued_tasks_ = set()
         self.score_function = score_function
         self.folds = folds
         self.fold_checks = fold_checks
         self.random_generator = random_state
         self.ipc_profile = ipc_profile
 
-    def check_params(self):
+    def _check_params(self):
         assert isinstance(self.param_grid, OrderedDict), 'the passed param_grid should be of OrderedDict class'
         _check_param_grid(self.param_grid)
         size = numpy.prod(self.dimensions)
         assert size > 1, 'The space of parameters contains only %i points' % size
         # results on different parameters
         self.grid_scores_ = OrderedDict()
+        # all the tasks that are being computed or already computed
+        self.queued_tasks_ = set()
         self.dimensions = list([len(param_values) for param, param_values in self.param_grid.iteritems()])
         if self.score_function is None:
             self.score_function = roc_auc_score
@@ -168,27 +181,37 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
         self.random_generator = check_random_state(self.random_generator)
         self.n_evaluations = min(self.n_evaluations, size // 2)
 
-    def _generate_first_point(self):
-        return tuple([self.random_generator.randint(0, size - 1) for size in self.dimensions])
+    def _generate_start_point(self):
+        while True:
+            result = tuple([self.random_generator.randint(0, size - 1) for size in self.dimensions])
+            if result not in self.queued_tasks_:
+                self.queued_tasks_.add(result)
+                return result
 
     def _indices_to_parameters(self, state_indices):
         return OrderedDict([(name, values[i]) for i, (name, values) in zip(state_indices, self.param_grid.iteritems())])
 
     def _generate_next_point(self):
         """Generating next point in parameters space"""
+        if len(self.grid_scores_) <= 2:
+            return self._generate_start_point()
         results = numpy.array(self.grid_scores_.values())
         std = numpy.std(results) + 1e-5
-        probabilities = numpy.exp(numpy.clip( (results - numpy.mean(results)) * 3. / std, 0, 6))
+        probabilities = numpy.exp(numpy.clip( (results - numpy.mean(results)) * 3. / std, -5, 5))
         probabilities /= numpy.sum(probabilities)
-        start = numpy.random.choice(len(probabilities), p=probabilities)
-        start = self.grid_scores_.keys()[start]
         while True:
+            start = numpy.random.choice(len(probabilities), p=probabilities)
+            start_indices = self.grid_scores_.keys()[start]
             axis = self.random_generator.randint(len(self.dimensions))
-            new_state_indices = list(start)[:] # copy
+            new_state_indices = list(start_indices)[:] # copy
             new_state_indices[axis] += 1 if self.random_generator.uniform() > 0.5 else -1
             if new_state_indices[axis] < 0 or new_state_indices[axis] >= self.dimensions[axis]:
                 continue
-            return tuple(new_state_indices)
+            new_state_indices = tuple(new_state_indices)
+            if new_state_indices in self.queued_tasks_:
+                continue
+            self.queued_tasks_.add(new_state_indices)
+            return new_state_indices
 
     @property
     def best_score_(self):
@@ -198,50 +221,52 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
     def best_params_(self):
         return self._indices_to_parameters(max(self.grid_scores_.iteritems(), key=lambda x: x[1])[0])
 
-    def fit(self, X, y, sample_weight=None, **params):
-        """Run fit with all sets of parameters.
-        Parameters
-        ----------
-
-        X : array-like, shape = [n_samples, n_features]
-            Training vector, where n_samples is the number of samples and
-            n_features is the number of features.
-
-        y : array-like, shape = [n_samples] or [n_samples, n_output], optional
-            Target relative to X for classification or regression;
-            None for unsupervised learning.
-        """
-        self.check_params()
-        self.evaluations_done = 0
-        state_indices = self._generate_first_point()
-        X = pandas.DataFrame(X)
-        while self.evaluations_done < self.n_evaluations:
-            state_dict = self._indices_to_parameters(state_indices)
-            self.evaluations_done += 1
-            kFolds = StratifiedKFold(y=y, n_folds=self.folds)
-            score = 0.
-            for train_indices, test_indices in islice(kFolds, self.fold_checks):
-                trainX, trainY = X.irow(train_indices), y[train_indices]
-                testX, testY = X.irow(test_indices), y[test_indices]
-                estimator = sklearn.clone(self.base_estimator).set_params(**state_dict)
-                if sample_weight is None:
-                    estimator.fit(X=trainX, y=trainY)
-                    proba = estimator.predict_proba(testX)
-                    score += self.score_function(testY, proba[:, 1])
-                else:
-                    train_weights, test_weights = sample_weight[train_indices], sample_weight[test_indices]
-                    estimator.fit(X=trainX, y=trainY, sample_weight=train_weights)
-                    proba = estimator.predict_proba(testX)
-                    score += self.score_function(testY, proba[:, 1], sample_weight=test_weights)
-            self.grid_scores_[state_indices] = score / self.fold_checks
-            state_indices = self._generate_next_point()
-
+    def _fit_best_estimator(self, X, y, sample_weight=None):
         # Training classifier once again
         self.best_estimator_ = sklearn.clone(self.base_estimator).set_params(**self.best_params_)
         if sample_weight is None:
             self.best_estimator_.fit(X, y)
         else:
             self.best_estimator_.fit(X, y, sample_weight=sample_weight)
+
+    def fit(self, X, y, sample_weight=None, **params):
+        """Run fit with all sets of parameters.
+        Parameters
+        ----------
+        X : array-like, shape = [n_samples, n_features]
+            Training vector, where n_samples is the number of samples and n_features is the number of features.
+
+        y : array-like, shape = [n_samples] or [n_samples, n_output], optional
+        """
+        self._check_params()
+        self.evaluations_done = 0
+        X = pandas.DataFrame(X)
+        if self.ipc_profile is None:
+            while self.evaluations_done < self.n_evaluations:
+                state_indices = self._generate_next_point()
+                state_dict = self._indices_to_parameters(state_indices)
+                self.evaluations_done += 1
+                self.grid_scores_[state_indices] = estimate_classifier(params_dict=state_dict,
+                    base_estimator=self.base_estimator, X=X, y=y, folds=self.folds,
+                    fold_checks=self.fold_checks, score_function=self.score_function, sample_weight=sample_weight)
+        else:
+            from IPython.parallel import Client
+            dview = Client(profile=self.ipc_profile).direct_view()
+            portion = len(dview)
+            while self.evaluations_done < self.n_evaluations:
+                state_indices_array = [self._generate_next_point() for _ in range(portion)]
+                state_dict_array = [self._indices_to_parameters(indices) for indices in state_indices_array]
+                result = dview.map_sync(estimate_classifier, params_dict=state_dict_array,
+                    base_estimator=[self.base_estimator] * portion,
+                    X=[X]*portion, y=[y]*portion,
+                    folds=[self.folds] * portion,
+                    fold_checks=[self.fold_checks] * portion,
+                    score_function=[self.score_function] * portion,
+                    sample_weight=[sample_weight]*portion)
+                for state_indices, score in zip(state_indices_array, result):
+                    self.grid_scores_[state_indices] = score
+
+        self._fit_best_estimator(X, y, sample_weight=sample_weight)
 
     def predict_proba(self, X):
         return self.best_estimator_.predict_proba(X)
@@ -275,24 +300,24 @@ class TestClassifier(BaseEstimator, ClassifierMixin):
         return numpy.zeros([len(X), 2]) + self.a * self.b * self.c * self.d
 
 
-def metric_functions(y, pred, sample_weight=None):
+def MeanMetrics(y, pred, sample_weight=None):
+    """ This metrics was created for testing purposes"""
     return numpy.mean(pred)
 
 
-def test_optimization(size=10, n_evaluations=100):
+def test_optimization(size=10, n_evaluations=150):
     grid_1d = numpy.linspace(0.1, 1, num=size)
     grid = {'a': grid_1d, 'b': grid_1d, 'c': grid_1d, 'd': grid_1d}
     grid = OrderedDict(grid)
 
-    grid_cv = GridOptimalSearchCV(TestClassifier(), grid, n_evaluations=n_evaluations, score_function=metric_functions)
+    grid_cv = GridOptimalSearchCV(TestClassifier(), grid, n_evaluations=n_evaluations, score_function=MeanMetrics)
     trainX, trainY = commonutils.generateSample(2000, 10, distance=0.5)
     grid_cv.fit(trainX, trainY)
 
     assert 0.8 <= grid_cv.best_score_ <= 1., 'Too poor optimization : %.2f' % grid_cv.best_score_
-
+    assert MeanMetrics(trainY, grid_cv.predict_proba(trainX)[:, 1]) == grid_cv.best_score_, 'something is wrong'
 
 test_optimization()
-
 
 
 def test_grid_search():
@@ -301,7 +326,8 @@ def test_grid_search():
     grid = {'base_estimator': [DecisionTreeClassifier(max_depth=3), DecisionTreeClassifier(max_depth=4),
                                ExtraTreeClassifier(max_depth=4)],
             'learning_rate': [0.01, 0.1, 0.5, 1.],
-            'n_estimators': [5, 10, 15, 20, 30, 40, 50]}
+            'n_estimators': [5, 10, 15, 20, 30, 40, 50, 75, 100, 125],
+            'algorithm': ['SAMME', 'SAMME.R']}
     grid = OrderedDict(grid)
 
     trainX, trainY = commonutils.generateSample(2000, 10, distance=0.5)
@@ -312,8 +338,12 @@ def test_grid_search():
     print(grid_cv.best_score_)
     grid_cv.print_results()
     print('Success!')
+    import pylab
+    pylab.plot(grid_cv.grid_scores_.values())
+    pylab.show()
 
 
 
 
-# test_grid_search()
+
+test_grid_search()
