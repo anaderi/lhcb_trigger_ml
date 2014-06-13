@@ -1,6 +1,7 @@
 # About
 # This file contains some helpful functions and classes which are often used.
 
+
 import math
 import pandas
 import numpy
@@ -68,11 +69,11 @@ test_splitting()
 
 
 class Binner:
-    def __init__(self, values, bins_number):
+    def __init__(self, values, n_bins):
         """Binner is a class that helps to split the values into several bins.
         Initially an array of values is given, which is then splitted into 'bins_number' equal parts,
         and thus we are computing limits (boundaries of bins)."""
-        percentiles = [i * 100.0 / bins_number for i in range(1, bins_number)]
+        percentiles = [i * 100.0 / n_bins for i in range(1, n_bins)]
         self.limits = numpy.percentile(values, percentiles)
 
     def get_bins(self, values):
@@ -114,17 +115,18 @@ def test_binner():
     for a, b in list1:
         for x, y in zip(a, b):
             assert x + 10 == y, 'transpositions are wrong after binning'
-    binner = Binner(numpy.random.permutation(30), 3)
-    res2 = list(binner.split_into_bins(range(10, 20)))
-    ans2 = [[], range(10, 20), []]
 
-    for a, b in zip(res2, ans2):
+    binner = Binner(numpy.random.permutation(30), 3)
+    result2 = list(binner.split_into_bins(range(10, 20)))
+    answer2 = [[], range(10, 20), []]
+
+    for a, b in zip(result2, answer2):
         for x, y in zip(a[0], b):
             assert x == y, 'binning is wrong'
 
-    res3 = list(binner.split_into_bins(numpy.random.permutation(45)))
-    ans3 = list(binner.split_into_bins(range(45)))
-    for x, y in zip(res3, ans3):
+    result3 = list(binner.split_into_bins(numpy.random.permutation(45)))
+    answer3 = list(binner.split_into_bins(range(45)))
+    for x, y in zip(result3, answer3):
         assert set(x[0]) == set(y[0]), "binner doesn't work well with permutations"
 
     print('binner is ok')
@@ -227,7 +229,6 @@ def generateSample(n_samples, n_features, distance=2.0):
     centers[1, :] = distance / 2
 
     X, y = make_blobs(n_samples=n_samples, n_features=n_features, centers=centers)
-
     columns = ["column" + str(x) for x in range(n_features)]
     X = pandas.DataFrame(X, columns=columns)
     return X, y
@@ -319,6 +320,36 @@ def memory_usage():
         if status is not None:
             status.close()
     return result
+
+
+def roc_curve(y_true, y_score, sample_weight=None):
+    if sample_weight is None:
+        sample_weight = numpy.ones(len(y_score))
+    assert len(y_true) == len(y_score) == len(sample_weight), 'the lengths are different'
+    assert set(y_true) == {0, 1}, "the labels should be 0 and 1, labels are " + str(set(y_true))
+    order = numpy.argsort(y_score)[::-1]
+    thresholds = y_score[order]
+    y_true = y_true[order]
+    sample_weight = sample_weight[order]
+    tpr = numpy.insert(numpy.cumsum(sample_weight * y_true), 0, 0.)
+    tpr /= tpr[-1]
+    fpr = numpy.insert(numpy.cumsum(sample_weight * (1 - y_true)), 0, 0.)
+    fpr /= fpr[-1]
+    thresholds = numpy.insert(thresholds, 0, thresholds[0] + 1.)
+    return fpr, tpr, thresholds
+
+
+def test_roc_curve(size=100):
+    import sklearn.metrics
+    y = (numpy.random.random(size) > 0.5) * 1
+    pred = numpy.random.random(size)
+    fpr1, tpr1, thr1 = sklearn.metrics.roc_curve(y, pred)
+    fpr2, tpr2, thr2 = roc_curve(y, pred)
+    assert numpy.all(fpr1 == fpr2)
+    assert numpy.all(tpr1 == tpr2)
+    assert numpy.all(thr1 == thr2)
+
+# test_roc_curve(10)
 
 
 def export_root_to_csv(filename):
