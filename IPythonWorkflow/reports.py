@@ -192,7 +192,8 @@ class Predictions(object):
         self._strip_figure(n_stages)
         for i, (stage_name, proba_on_stage) in enumerate(proba_on_stages.iterrows()):
             pylab.subplot(1, n_stages, i + 1), pylab.title("stage " + str(stage_name))
-            plotRocCurves(predict_proba_dict=proba_on_stage, answers=self.y, is_big_plot=False)
+            plotRocCurves(predict_proba_dict=proba_on_stage, answers=self.y, sample_weight=self.sample_weight,
+                          is_big_plot=False)
             pylab.title('ROC at stage ' + str(stage_name))
         return self
 
