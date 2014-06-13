@@ -10,7 +10,7 @@ and some functions to import data from ROOT files, these one need ROOT and pytho
 
 # Brief demos:
 * [Dalitz Demo](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/IPythonWorkflow/DalitzDemo.ipynb) (several uniforming classifiers on dataset from uBoost paper)
-* [$\tau \to \mu \mu \mu$ decay](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/IPythonWorkflow/TauIntoMuons.ipynb)
+* [Decay of tau into three muons](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/IPythonWorkflow/TauIntoMuons.ipynb)
 
 # Main points
 * working of uniform classifiers - the classifiers with low correlation of predictions and mass (or some other variable(s))
