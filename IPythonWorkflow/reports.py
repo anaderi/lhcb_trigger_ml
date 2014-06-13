@@ -1,23 +1,22 @@
+# About
 # This module contains functions to build reports:
 # training, getting predictions, building various plots
-from numpy.testing.decorators import deprecated
 
 try:
-    from collections import OrderedDict, defaultdict
+    from collections import OrderedDict
 except ImportError:
     from ordereddict import OrderedDict
 
-from warnings import warn
 import time
-
 import numpy
 import pandas
 import pylab
-from sklearn.metrics import roc_auc_score, roc_curve, auc
+from warnings import warn
+from sklearn.metrics import roc_auc_score, auc
 from sklearn.utils.validation import check_arrays
 from matplotlib import cm
 
-from commonutils import computeBDTCut, Binner
+from commonutils import computeBDTCut, Binner, roc_curve
 
 
 __author__ = 'Alex Rogozhnikov'
@@ -32,10 +31,10 @@ __author__ = 'Alex Rogozhnikov'
 
 def Efficiency(answer, prediction):
     """Efficiency = right classified signal / everything that is really signal
-    Efficiency == recall, returns -1 when ill-defined"""
+    Efficiency == recall, returns -0.1 when ill-defined"""
     assert len(answer) == len(prediction), "Different size of arrays"
     isSignal =  numpy.sum(answer) - 1e-6
-    isSignalAsSignal = numpy.sum(answer * prediction) + 1e-6
+    isSignalAsSignal = numpy.sum(answer * prediction) + 1e-7
     return isSignalAsSignal / isSignal
     # the same, but with notifications
     # return recall_score(answer, prediction)
@@ -222,6 +221,7 @@ class Predictions(object):
         return computeBinIndices(self.X, var_names, bin_limits)
 
     def _compute_bin_centers(self, var_names, n_bins=20, mask=None):
+        """Mask is used to show events that will be binned after"""
         bin_centers = []
         mask = self._check_mask(mask)
         for var_name in var_names:
@@ -372,8 +372,7 @@ class Predictions(object):
 # the same in old good functions (will be removed soon)
 def trainClassifiers(classifiers_dict, trainX, trainY, ipc_profile=None):
     """Trains all classifiers on the same train data,
-    if ipc_profile in not None, it is used as a name of ipython cluster to use for parallel computations,
-    if block=False, nonblocking mode is used and then() method can be used"""
+    if ipc_profile in not None, it is used as a name of ipython cluster to use for parallel computations"""
     if ipc_profile is None:
         for name, classifier in classifiers_dict.iteritems():
             start_time = time.time()
@@ -396,8 +395,7 @@ def trainClassifiers(classifiers_dict, trainX, trainY, ipc_profile=None):
 
 
 def getClassifiersPredictionProba(classifiers_dict, testX):
-    return OrderedDict([(name, classifier.predict_proba(testX))
-                        for name, classifier in classifiers_dict.iteritems()])
+    return OrderedDict([(name, classifier.predict_proba(testX)) for name, classifier in classifiers_dict.iteritems()])
 
 def getClassifiersStagedPredictionProba(classifiers_dict, testX):
     """Returns dictionary: {classifier_name: staged_predict_proba of classifier} """
@@ -426,7 +424,7 @@ def plotScoreVariableCorrelation(prediction_proba, answers, correlation_values, 
     if thresholds is None:
         thresholds = [computeBDTCut(eff, answers, prediction_proba) for eff in [0.2, 0.4, 0.5, 0.6, 0.8]]
 
-    binner = Binner(correlation_values, bins_number=bins_number)
+    binner = Binner(correlation_values, n_bins=bins_number)
     bins_data = binner.split_into_bins(correlation_values, answers, prediction_proba)
     for threshold in thresholds:
         x_values = []
@@ -487,11 +485,7 @@ def plotRocCurves(predict_proba_dict, answers, sample_weight=None, is_big_plot=T
         pylab.figure(num=None, figsize=(12, 10), dpi=80, facecolor='w', edgecolor='k')
     for classifierName, predictions in predict_proba_dict.iteritems():
         assert len(answers) == len(predictions), "different length"
-        if sample_weight is None:
-            # old sklearn versions compatibility
-            fpr, tpr, thresholds = roc_curve(answers, predictions[:, 1])
-        else:
-            fpr, tpr, thresholds = roc_curve(answers, predictions[:, 1], sample_weight=sample_weight)
+        fpr, tpr, thresholds =  roc_curve(answers, predictions[:, 1], sample_weight=sample_weight)
 
         # tpr = recall = isSasS / isS = signalEfficiecncy
         # fpr = isBasS / isB = 1 - specifity ?=?  1 - backgroundRejection
