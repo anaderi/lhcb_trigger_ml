@@ -323,6 +323,7 @@ def memory_usage():
 
 
 def roc_curve(y_true, y_score, sample_weight=None):
+    """ The same as sklearn.metrics.roc_curve, but this one supports weights    """
     if sample_weight is None:
         sample_weight = numpy.ones(len(y_score))
     assert len(y_true) == len(y_score) == len(sample_weight), 'the lengths are different'
