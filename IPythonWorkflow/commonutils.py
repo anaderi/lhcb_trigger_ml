@@ -9,6 +9,7 @@ import io
 from sklearn.cross_validation import train_test_split
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.neighbors.unsupervised import NearestNeighbors
+from sklearn.metrics import auc
 
 __author__ = "Alex Rogozhnikov"
 
@@ -340,6 +341,14 @@ def roc_curve(y_true, y_score, sample_weight=None):
     return fpr, tpr, thresholds
 
 
+def roc_auc_score(y_true, y_score, sample_weight=None):
+    """The same as sklearn.metrics.roc_auc_score, but supports weights """
+    if len(numpy.unique(y_true)) != 2:
+        raise ValueError("AUC is defined for binary classification only")
+    fpr, tpr, _ = roc_curve(y_true, y_score, sample_weight=sample_weight)
+    return auc(fpr, tpr, reorder=True)
+
+
 def test_roc_curve(size=100):
     import sklearn.metrics
     y = (numpy.random.random(size) > 0.5) * 1
@@ -368,4 +377,5 @@ def export_root_to_csv(filename):
         result.append(new_file_name)
     print("Successfully converted")
     return result
+
 
