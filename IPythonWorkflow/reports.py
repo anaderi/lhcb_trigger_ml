@@ -84,12 +84,15 @@ class ClassifiersDict(OrderedDict):
             start_time = time.time()
             lb_view = client.load_balanced_view()
 
-            def train_сlassifier(name_classifier, X, y):
+            def train_classifier(name_classifier, X, y, sample_weight=None):
                 """ Trains one classifier on a separate node"""
                 name_classifier[1].fit(X, y)
                 return name_classifier
-
-            result = lb_view.map_sync(train_сlassifier, self.iteritems(), [X] * len(self),  [y] * len(self))
+            if sample_weight is None:
+                result = lb_view.map_sync(train_classifier, self.iteritems(), [X] * len(self),  [y] * len(self))
+            else:
+                result = lb_view.map_sync(train_classifier, self.iteritems(), [X] * len(self),  [y] * len(self),
+                                          sample_weight=[sample_weight] * len(self))
             print("We spent %.2f seconds on parallel training" % (time.time() - start_time))
             for name, classifier in result:
                 self[name] = classifier
