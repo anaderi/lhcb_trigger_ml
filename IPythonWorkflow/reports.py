@@ -15,7 +15,7 @@ from sklearn.metrics import auc
 from sklearn.utils.validation import check_arrays, column_or_1d
 from matplotlib import cm
 
-from commonutils import computeBDTCut, Binner, roc_curve, roc_auc_score
+from commonutils import compute_bdt_cut, Binner, roc_curve, roc_auc_score
 
 
 __author__ = 'Alex Rogozhnikov'
@@ -289,7 +289,7 @@ class Predictions(object):
         bin_indices = self._compute_bin_indices(uniform_variables, n_bins, mask=mask)
 
         def compute_bin_efficiencies(prediction_proba, target_eff):
-            cut = computeBDTCut(target_eff, self.y, prediction_proba)
+            cut = compute_bdt_cut(target_eff, self.y, prediction_proba)
             return computeLocalEfficienciesOfBins(prediction_proba, self.y, bin_indices,
                                                   n_total_bins=n_bins ** len(uniform_variables), cut=cut)
 
@@ -422,7 +422,7 @@ def plotScoreVariableCorrelation(prediction_proba, answers, correlation_values, 
         check_arrays(answers, prediction_proba, correlation_values)
 
     if thresholds is None:
-        thresholds = [computeBDTCut(eff, answers, prediction_proba) for eff in [0.2, 0.4, 0.5, 0.6, 0.8]]
+        thresholds = [compute_bdt_cut(eff, answers, prediction_proba) for eff in [0.2, 0.4, 0.5, 0.6, 0.8]]
 
     binner = Binner(correlation_values, n_bins=bins_number)
     bins_data = binner.split_into_bins(correlation_values, answers, prediction_proba)
@@ -552,7 +552,7 @@ def computeMseVariationOnBins(prediction_proba, is_signal, bin_indices, target_e
     signal_prediction_proba = prediction_proba[is_signal, :]
     signal_answers = numpy.ones(len(signal_prediction_proba), dtype=numpy.int)
     result = 0.
-    cuts = computeBDTCut(numpy.array(target_efficiencies), signal_answers, signal_prediction_proba)
+    cuts = compute_bdt_cut(numpy.array(target_efficiencies), signal_answers, signal_prediction_proba)
     for cut, efficiency in zip(cuts, target_efficiencies):
         passed_cut = signal_prediction_proba[:, 1] > cut
         mean_efficiency = numpy.mean(passed_cut)
@@ -568,7 +568,7 @@ def computeMseVariationOnGroups(prediction_proba, is_signal, groups, target_effi
      in the format of list, each item is a list of indices inside bin"""
     assert len(prediction_proba) == len(is_signal), "different size"
 
-    cuts = computeBDTCut(numpy.array(target_efficiencies), is_signal, prediction_proba)
+    cuts = compute_bdt_cut(numpy.array(target_efficiencies), is_signal, prediction_proba)
 
     efficiencies = [list() for eff in target_efficiencies]
     groups_sizes = numpy.array([len(x) for x in groups])
@@ -664,7 +664,7 @@ def plotEfficiency2D(probas_dict, var_names, testX, testY, target_efficiency, n_
     fig = pylab.figure(figsize=(5 + 5 * len(probas_dict), 7))
     for i, name in enumerate(probas_dict):
         predict_proba = probas_dict[name]
-        cut = computeBDTCut(target_efficiency, testY, predict_proba)
+        cut = compute_bdt_cut(target_efficiency, testY, predict_proba)
         bin_indices = computeBinIndices(testX, [var_name1, var_name2], [x_limits[1:-1], y_limits[1:-1]])
 
         local_efficiencies = computeLocalEfficienciesOfBins(predict_proba, testY, bin_indices=bin_indices,
