@@ -333,7 +333,6 @@ test_optimization()
 def test_grid_search():
     from sklearn.ensemble import AdaBoostClassifier
     from sklearn.tree import DecisionTreeClassifier, ExtraTreeClassifier
-    from config import ipc_profile
     grid = {'base_estimator': [DecisionTreeClassifier(max_depth=3), DecisionTreeClassifier(max_depth=4),
                                ExtraTreeClassifier(max_depth=4)],
             'learning_rate': [0.01, 0.1, 0.5, 1.],
@@ -342,11 +341,10 @@ def test_grid_search():
     grid = OrderedDict(grid)
 
     trainX, trainY = commonutils.generateSample(2000, 10, distance=0.5)
-    grid_cv = GridOptimalSearchCV(AdaBoostClassifier(), grid, n_evaluations=10, ipc_profile=ipc_profile)
+    grid_cv = GridOptimalSearchCV(AdaBoostClassifier(), grid, n_evaluations=10)
     grid_cv.fit(trainX, trainY)
     grid_cv.predict_proba(trainX)
     grid_cv.predict(trainX)
-    # grid_cv.print_results()
 
     x = grid_cv.results_dataframe_
     print(x.shape)
