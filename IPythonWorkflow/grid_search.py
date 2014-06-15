@@ -27,9 +27,9 @@ __author__ = 'Alex Rogozhnikov'
 
 def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
                         score_function, sample_weight=None):
-    kFolds = StratifiedKFold(y=y, n_folds=folds)
+    k_folder = StratifiedKFold(y=y, n_folds=folds)
     score = 0.
-    for train_indices, test_indices in islice(kFolds, fold_checks):
+    for train_indices, test_indices in islice(k_folder, fold_checks):
         trainX, trainY = X.irow(train_indices), y[train_indices]
         testX, testY = X.irow(test_indices), y[test_indices]
         estimator = sklearn.clone(base_estimator).set_params(**params_dict)
@@ -251,13 +251,13 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                 self.evaluations_done += 1
         else:
             from IPython.parallel import Client
-            dview = Client(profile=self.ipc_profile).direct_view()
-            portion = len(dview)
-            print("There are {0} cores in cluster, the portion is equal {1}".format(len(dview), portion))
+            direct_view = Client(profile=self.ipc_profile).direct_view()
+            portion = len(direct_view)
+            print("There are {0} cores in cluster, the portion is equal {1}".format(len(direct_view), portion))
             while self.evaluations_done < self.n_evaluations:
                 state_indices_array = [self._generate_next_point() for _ in range(portion)]
                 state_dict_array = [self._indices_to_parameters(indices) for indices in state_indices_array]
-                result = dview.map_sync(estimate_classifier, state_dict_array,
+                result = direct_view.map_sync(estimate_classifier, state_dict_array,
                     [self.base_estimator] * portion, [X]*portion, [y]*portion,
                     [self.folds] * portion, [self.fold_checks] * portion,
                     [self.score_function] * portion, [sample_weight]*portion)
@@ -265,6 +265,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                 for state_indices, score in zip(state_indices_array, result):
                     self.grid_scores_[state_indices] = score
                 self.evaluations_done += portion
+                print("%i evaluations done" % self.evaluations_done)
 
         self._fit_best_estimator(X, y, sample_weight=sample_weight)
 
@@ -274,30 +275,39 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
     def predict(self, X):
         return self.best_estimator_.predict(X)
 
-    def print_results(self):
-        for state_indices, value in self.grid_scores_.iteritems():
+    def print_results(self, reorder=True):
+        """Prints the results of training, if reorder==True, best results go earlier,
+        otherwise the results are printed in the order of computation"""
+        sequence = self.grid_scores_.iteritems()
+        if reorder:
+            sequence = sorted(sequence, key=lambda x: -x[1])
+        for state_indices, value in sequence:
             state_string = ", ".join([d[0] + '=' + str(d[1]) for d in self._indices_to_parameters(state_indices).iteritems()])
             print("{0:.3f}:  {1}".format(value, state_string))
 
-
-
-
-
+    @property
+    def results_dataframe_(self):
+        sequence = sorted(self.grid_scores_.iteritems(), key=lambda x: x[1])
+        data = []
+        for state_indices, value in sequence:
+            data.append(self._indices_to_parameters(state_indices))
+        return pandas.DataFrame(data).transpose()
 
 
 class TestClassifier(BaseEstimator, ClassifierMixin):
     """This classifier is created specially for testing optimization"""
-    def __init__(self, a=1., b=1., c=1., d=1.):
+    def __init__(self, a=1., b=1., c=1., d=1., sign=1):
         self.a = a
         self.b = b
         self.c = c
         self.d = d
+        self.sign = sign
 
     def fit(self, X, y, sample_weight=None):
         pass
 
     def predict_proba(self, X):
-        return numpy.zeros([len(X), 2]) + self.a * self.b * self.c * self.d
+        return numpy.zeros([len(X), 2]) + self.a * self.b * self.c * self.d * self.sign
 
 
 def MeanMetrics(y, pred, sample_weight=None):
@@ -323,6 +333,7 @@ test_optimization()
 def test_grid_search():
     from sklearn.ensemble import AdaBoostClassifier
     from sklearn.tree import DecisionTreeClassifier, ExtraTreeClassifier
+    from config import ipc_profile
     grid = {'base_estimator': [DecisionTreeClassifier(max_depth=3), DecisionTreeClassifier(max_depth=4),
                                ExtraTreeClassifier(max_depth=4)],
             'learning_rate': [0.01, 0.1, 0.5, 1.],
@@ -331,10 +342,15 @@ def test_grid_search():
     grid = OrderedDict(grid)
 
     trainX, trainY = commonutils.generateSample(2000, 10, distance=0.5)
-    grid_cv = GridOptimalSearchCV(AdaBoostClassifier(), grid, n_evaluations=10)
+    grid_cv = GridOptimalSearchCV(AdaBoostClassifier(), grid, n_evaluations=10, ipc_profile=ipc_profile)
     grid_cv.fit(trainX, trainY)
     grid_cv.predict_proba(trainX)
     grid_cv.predict(trainX)
+    # grid_cv.print_results()
+
+    x = grid_cv.results_dataframe_
+    print(x.shape)
+
 
 
 test_grid_search()
