@@ -634,8 +634,6 @@ def testGradientBoosting(samples=1000):
     for loss in [loss1, loss2, loss3, loss4, loss5]:
         testGradient(loss)
 
-
-
     print('uniform gradient boosting is ok')
 
 testGradientBoosting()

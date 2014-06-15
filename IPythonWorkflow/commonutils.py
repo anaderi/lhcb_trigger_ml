@@ -49,6 +49,7 @@ def my_train_test_split(*arrays, **kw_args):
 
 
 def split_on_test_and_train(signal_df, bg_df, **kw_args):
+    """Useful way to split data when array is given """
     assert set(signal_df.columns) == set(bg_df.columns), 'Different set  of columns'
     common_df = pandas.concat([signal_df, bg_df], ignore_index=True)
     answers = numpy.concatenate([numpy.ones(len(signal_df)), numpy.zeros(len(bg_df))])
@@ -135,59 +136,73 @@ def test_binner():
 test_binner()
 
 
-def build_normalizer(signal, steps=None):
+def build_normalizer(signal, sample_weight=None):
     """Prepares normalization function for some set of values
     transforms it to uniform distribution from [0, 1]. Example of usage:
         normalizer = build_normalizer(signal)
         hist(normalizer(background))
+        # this one should be uniform in [0,1]
         hist(normalizer(signal))
     Parameters:
         signal: array-like, shape = [n_samples]
-        steps: number of steps in interpolating function
+        sample_weight: array-like, shape = [n_samples], the weights associated to events.
     """
-    if steps is None:
-        steps = len(signal)
-    effs = numpy.array([i / float(steps) for i in range(steps+1)])
-    effs_by_100 = [100 * x for x in effs]
-    percs = numpy.percentile(signal, effs_by_100)
+    if sample_weight is None:
+        sample_weight = numpy.ones(len(signal))
+    assert len(signal) == len(sample_weight), 'the lengths are different'
+    assert numpy.all(sample_weight >= 0.), 'sample weight must be non-negative'
+    order = numpy.argsort(signal)
+    signal, sample_weight = signal[order], sample_weight[order]
+    predictions = numpy.cumsum(sample_weight) / numpy.sum(sample_weight)
 
     def normalizing_function(data):
-        data = numpy.clip(data, percs[0], percs[-1])
-        upper = numpy.searchsorted(percs, data)
-        upper = numpy.clip(upper, 1, steps)
+        data = numpy.clip(data, signal[0], signal[-1])
+        upper = numpy.searchsorted(signal, data)
+        upper = numpy.clip(upper, 1, len(signal))
         lower = upper - 1
-        lower_output = numpy.take(effs, lower)
-        upper_output = numpy.take(effs, upper)
-        lower_input = numpy.take(percs, lower)
-        upper_input = numpy.take(percs, upper)
+        lower_output = numpy.take(predictions, lower)
+        upper_output = numpy.take(predictions, upper)
+        lower_input = numpy.take(signal, lower)
+        upper_input = numpy.take(signal, upper)
         t = (data - lower_input) / (upper_input - lower_input + 1e-10)
-        return t * upper_output + (1-t) * lower_output
+        return t * upper_output + (1.-t) * lower_output
     return normalizing_function
 
 
 def test_build_normalizer(checks=10):
     predictions = numpy.random.normal(size=2000)
-    result = build_normalizer(predictions, steps=200)(predictions)
+    result = build_normalizer(predictions)(predictions)
     assert numpy.all(result[numpy.argsort(predictions)] == sorted(result))
     assert numpy.all(result >= 0)
     assert numpy.all(result <= 1)
     percentiles = [100 * (i + 1.) / (checks + 1.) for i in range(checks)]
     assert numpy.all(abs(numpy.percentile(result, percentiles) - numpy.array(percentiles) / 100.) < 0.01)
+
+    # testing weights
+    predictions = numpy.exp(predictions)
+    weighted_normalizer = build_normalizer(predictions, sample_weight=predictions)
+    result = weighted_normalizer(predictions)
+    assert numpy.all(result[numpy.argsort(predictions)] == sorted(result))
+    assert numpy.all(result >= 0)
+    assert numpy.all(result <= 1)
+    predictions = numpy.sort(predictions)
+    result = weighted_normalizer(predictions)
+    result2 = numpy.cumsum(predictions) / numpy.sum(predictions)
+    assert numpy.all(numpy.abs(result-result2) < 0.005)
     print "normalizer is ok"
 
 
 test_build_normalizer()
 
 
-
 # Functions primarily for uBoost
 
-
-def computeBDTCut(target_efficiency, answers, prediction_probas):
-    """Computes cut which gives targetEfficiency
-    * targetEfficiency from 0 to 1
-    * answers is an array of zeros and ones
-    * prediction_probas is prediction probabilities returned by classifier, shape = [n_samples, 2]
+def compute_bdt_cut(target_efficiency, answers, prediction_probas):
+    """Computes cut which gives fixed efficiency.
+    Parameters:
+        target_efficiency: float from 0 to 1
+        answers: an array of zeros and ones, shape = [n_samples]
+        prediction_probas: prediction probabilities returned by classifier, shape = [n_samples, 2]
     """
     assert len(answers) == len(prediction_probas), "different size"
 
@@ -198,12 +213,18 @@ def computeBDTCut(target_efficiency, answers, prediction_probas):
     return numpy.percentile(signal_probas, percentiles)
 
 
-def computeLocalEfficiencies(globalCut, knnIndices, answers, prediction_proba, smoothing_width=0.0):
+def compute_groups_efficiencies(global_cut, knn_indices, answers, prediction_proba,
+                                sample_weight=None, smoothing_width=0.0):
     """Fast implementation in numpy"""
+    if sample_weight is None:
+        sample_weight = numpy.ones(len(answers))
     assert len(answers) == len(prediction_proba), 'different size'
-    predictions = sigmoidFunction(prediction_proba[:, 1] - globalCut, smoothing_width)
-    neigh_predictions = numpy.take(predictions, knnIndices)
-    return neigh_predictions.mean(axis=1)
+    predictions = sigmoidFunction(prediction_proba[:, 1] - global_cut, smoothing_width)
+    groups_predictions = numpy.take(predictions, knn_indices)
+    groups_weights = numpy.take(sample_weight, knn_indices)
+    # TODO test this new implementation
+    return numpy.average(groups_predictions, weights=groups_weights, axis=1)
+    # neigh_predictions.mean(axis=1)
 
 
 def sigmoidFunction(x, width):
@@ -266,13 +287,13 @@ def computeKnnIndicesOfSameClass(uniform_variables, X, y, n_neighbours=50):
     return result
 
 
-def testComputeSignalKnnIndices(n_events=100):
+def test_compute_knn_indices(n_events=100):
     X, y = generateSample(n_events, 10, distance=.5)
     is_signal = y > 0.5
     signal_indices = numpy.where(is_signal)[0]
-    unif_columns = X.columns[:1]
-    knn_indices = computeSignalKnnIndices(unif_columns, X, is_signal, 10)
-    distances = pairwise_distances(X[unif_columns])
+    uniform_columns = X.columns[:1]
+    knn_indices = computeSignalKnnIndices(uniform_columns, X, is_signal, 10)
+    distances = pairwise_distances(X[uniform_columns])
     for i, neighbours in enumerate(knn_indices):
         assert numpy.all(is_signal[neighbours]), "returned indices are not signal"
         not_neighbours = [x for x in signal_indices if not x in neighbours]
@@ -280,13 +301,13 @@ def testComputeSignalKnnIndices(n_events=100):
         max_dist = numpy.max(distances[i, neighbours])
         assert min_dist >= max_dist, "distances are set wrongly!"
 
-    knn_all_indices = computeKnnIndicesOfSameClass(unif_columns, X, is_signal, 10)
+    knn_all_indices = computeKnnIndicesOfSameClass(uniform_columns, X, is_signal, 10)
     for i, neighbours in enumerate(knn_all_indices):
         assert numpy.all(is_signal[neighbours] == is_signal[i]), "returned indices are not signal/bg"
 
     print("computeSignalKnnIndices is ok")
 
-testComputeSignalKnnIndices()
+test_compute_knn_indices()
 
 
 def smear_dataset(testX, smeared_variables=None, smearing_factor=0.1):

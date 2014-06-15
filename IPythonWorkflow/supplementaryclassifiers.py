@@ -1,3 +1,10 @@
+from __future__ import print_function, division
+
+try:
+    from collections import OrderedDict
+except ImportError:
+    from ordereddict import OrderedDict
+
 import numpy
 import pandas
 import sklearn
@@ -29,17 +36,14 @@ class HidingClassifier(BaseEstimator, ClassifierMixin):
         return self._trained_estimator.staged_predict_proba(X[self.train_variables])
 
 
-
-
-
-
 class FeatureSplitter(BaseEstimator, ClassifierMixin):
     def __init__(self, feature_name, base_estimators, final_estimator):
         """ The dataset is supposed to have some special variable, and depending on this variable,
         the event has some set of features. For each pair of values we use common features to train
         additional variables
         :param feature_name: str, the name of key feature
-        :param base_estimator: BaseEstimator, any sklearn classifier
+        :param base_estimators: dict, the classifiers used to generate features
+        :param final_estimator: BaseEstimator, the classifier used to make final decision
         """
         self.base_estimators = base_estimators
         self.feature_name = feature_name
@@ -169,12 +173,42 @@ class DumbSplitter(BaseEstimator, ClassifierMixin):
         return result
 
 
+class ChainClassifiers(BaseEstimator, ClassifierMixin):
+    def __init__(self, base_estimators=None):
+        # TODO the bad thing is we use the same dataset for train and the for prediction.
+        # smearing or toymc can probably solve address issue
+        self.base_estimators = base_estimators
 
+    def fit(self, X, y, sample_weight=None):
+        assert isinstance(self.base_estimators, OrderedDict)
+        X = pandas.DataFrame(X).copy()
+        assert len(X) == len(y), 'lengths are different'
+        self.trained_estimators = OrderedDict()
+        for name, classifier in self.base_estimators.iteritems():
+            new_classifier = sklearn.clone(classifier)
+            new_classifier.fit(X, y, sample_weight)
+            X['new_'+name] = new_classifier.predict_proba(X)[:, 1]
+            self.trained_estimators[name] = new_classifier
+        return self
+
+    def predict(self, X):
+        return numpy.argmax(self.predict_proba(X), axis=1)
+
+    def predict_proba(self, X):
+        X = pandas.DataFrame(X).copy()
+        result = None
+        for name, classifier in self.trained_estimators.iteritems():
+            result = classifier.predict_proba(X)
+            X['new_'+name] = result[:, 1]
+        return result
 
 
 def test_feature_splitter(size=2000):
     import commonutils
     from sklearn.ensemble import RandomForestClassifier
+    from sklearn.lda import LDA
+    from sklearn.qda import QDA
+
     X, y = commonutils.generateSample(size, 10, distance=0.5)
     X['column0'] = numpy.clip(numpy.array(X['column0']).astype(numpy.int), -2, 2)
     trainX, testX, trainY, testY = commonutils.my_train_test_split(X, y)
@@ -184,7 +218,12 @@ def test_feature_splitter(size=2000):
     print(splitter.score(testX, testY))
     print(RandomForestClassifier().fit(trainX, trainY).score(testX, testY))
     print(DumbSplitter('column0', base_estimator=RandomForestClassifier()).fit(trainX, trainY).score(testX, testY))
-
+    chain = OrderedDict()
+    chain['QDA'] = QDA()
+    chain['LDA'] = LDA()
+    chain['RF'] = RandomForestClassifier()
+    print(ChainClassifiers(chain).fit(trainX, trainY).score(testX, testY))
+    print(LDA().fit(trainX, trainY).score(testX, testY))
 
 test_feature_splitter()
 

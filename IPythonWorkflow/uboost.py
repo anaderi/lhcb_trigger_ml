@@ -15,7 +15,7 @@ try:
 except:
     import pickle
 
-from commonutils import computeLocalEfficiencies, computeBDTCut, sigmoidFunction, \
+from commonutils import compute_groups_efficiencies, compute_bdt_cut, sigmoidFunction, \
     generateSample, computeSignalKnnIndices
 
 __author__ = 'Alex Rogozhnikov'
@@ -197,7 +197,7 @@ class uBoostBDT:
         # Boosting itself
         self._boost_discrete(X_train_variables, y, sample_weight)
         # compute BDT cut
-        self.bdt_cut = computeBDTCut(self.target_efficiency, y, self.predict_proba(X))
+        self.bdt_cut = compute_bdt_cut(self.target_efficiency, y, self.predict_proba(X))
         assert self.bdt_cut == self.bdt_cuts_[-1], "BDT cut doesn't appear to coincide with staged one"
 
         return self
@@ -262,10 +262,10 @@ class uBoostBDT:
             # assert numpy.all(cumulative_score == self.predict_score(X)), "wrong prediction"
             predict_proba = self.score_to_proba(cumulative_score)
 
-            global_cut = computeBDTCut(self.target_efficiency, y, predict_proba)
+            global_cut = compute_bdt_cut(self.target_efficiency, y, predict_proba)
             self.bdt_cuts_.append(global_cut)
-            local_efficiencies = computeLocalEfficiencies(global_cut, self.knn_indices,
-                                                          y, predict_proba, self.smoothing)
+            local_efficiencies = compute_groups_efficiencies(global_cut, self.knn_indices, y, predict_proba,
+                                                          smoothing_width=self.smoothing)
             e_prime = numpy.sum(sample_weight * numpy.abs(local_efficiencies - self.target_efficiency))
             # TODO why do we have nominator here?
             # beta = math.log((1.0 - e_prime) / e_prime)
