@@ -36,14 +36,7 @@ To run example notebooks on some machine, one should have
   better use [pip](http://pip-installer.org)
   
 
-The libraries you need are
-* numpy 
-* scipy
-* pandas
-* scikit-learn 
-* rootpy  
-* root-numpy
-
+The libraries you need are `numpy`, `scipy`, `pandas`, `scikit-learn`, `rootpy`, `root-numpy`
 and maybe something else, basically the packages are installed via command-line:
 <pre>sudo pip install numpy scipy pandas scikit-learn rootpy root-numpy</pre>
 IPython can be installed via pip as well
