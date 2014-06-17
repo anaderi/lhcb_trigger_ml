@@ -73,13 +73,13 @@ def my_train_test_split(*arrays, **kw_args):
 #     assert len(answers) == len(common_df), 'Something gone wrong during splitting'
 #     return my_train_test_split(common_df, answers, **kw_args)
 
-def weighted_percentile(array, percentiles, sample_weight=None, array_sorted=False, old=False):
+def weighted_percentile(array, percentiles, sample_weight=None, array_sorted=False, old_style=False):
     sample_weight = check_sample_weight(array, sample_weight)
     if not array_sorted:
         order = numpy.argsort(array)
         array, sample_weight = array[order], sample_weight[order]
     weighted_quantiles = numpy.cumsum(sample_weight) - 0.5 * sample_weight
-    if old:
+    if old_style:
         # To be convenient with numpy.percentile
         weighted_quantiles -= weighted_quantiles[0]
         weighted_quantiles /= weighted_quantiles[-1]
@@ -115,7 +115,7 @@ def test_percentile(size=100, q_size=20):
     array = numpy.array([0, 1, 2, 5])
     # comparing with simple percentiles
     for x in random.uniform(size=10):
-        assert numpy.abs(numpy.percentile(array, x * 100) - weighted_percentile(array, x, old=True)) < 1e-7, \
+        assert numpy.abs(numpy.percentile(array, x * 100) - weighted_percentile(array, x, old_style=True)) < 1e-7, \
             "doesn't coincide with numpy.percentile"
 
 
@@ -290,7 +290,7 @@ def test_compute_cut():
         cut = compute_cut_for_efficiency(eff, labels, predictions)
         assert numpy.sum(predictions > cut) / len(predictions) == eff, 'the cut was set wrongly'
 
-    weights = random.exponential(size=10)
+    weights = random.exponential(size=100)
     for eff in random.uniform(size=100):
         cut = compute_cut_for_efficiency(eff, labels, predictions, sample_weight=weights)
         lower = numpy.sum(weights[predictions > cut + 1]) / numpy.sum(weights)
@@ -307,7 +307,6 @@ def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
         y_true: an array of zeros and ones, shape = [n_samples]
         y_pred: prediction probabilities returned by classifier, shape = [n_samples, 2]
     """
-
     assert len(y_true) == len(y_pred), "different size"
     signal_probas = y_pred[y_true > 0.5, 1]
     percentiles = 100 - target_efficiency * 100
