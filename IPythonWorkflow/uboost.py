@@ -1,25 +1,24 @@
+# About
+
+# this module contains implementation of uBoost algorithm in sklearn-way
+# Two classifiers are proposed:
+# uBoostBDT - the modified version of AdaBoost
+
 from collections import defaultdict
 import math
-from matplotlib.cbook import Null
-
 import numpy
-from numpy.lib._compiled_base import bincount
 from sklearn.base import BaseEstimator, clone
 from sklearn.ensemble.weight_boosting import ClassifierMixin
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays
+from itertools import izip, islice
 
-try:
-    import cPickle as pickle
-except:
-    import pickle
-
-from commonutils import compute_groups_efficiencies, compute_bdt_cut, sigmoidFunction, \
+from commonutils import compute_groups_efficiencies, compute_bdt_cut, sigmoid_function, \
     generateSample, computeSignalKnnIndices
 
-__author__ = 'Alex Rogozhnikov'
 
+__author__ = 'Alex Rogozhnikov'
 
 
 class uBoostBDT:
@@ -31,7 +30,7 @@ class uBoostBDT:
                  base_estimator=DecisionTreeClassifier(max_depth=1),
                  n_estimators=50,
                  learning_rate=1.,
-                 uboosting_rate=1.,
+                 uniforming_rate=1.,
                  boost_only_signal=True,
                  train_variables=None,
                  smoothing=0.0,
@@ -73,9 +72,9 @@ class uBoostBDT:
             Learning rate shrinks the contribution of each classifier by
             ``learning_rate``. There is a trade-off between ``learning_rate`` and ``n_estimators``.
 
-        uboosting_rate: float, optional (default=1.)
+        uniforming_rate: float, optional (default=1.)
             how much do we take into account the uniformity of signal,
-             there is a trade-off between uboosting_rate and the speed of uniforming, zero
+             there is a trade-off between uniforming_rate and the speed of uniforming, zero
              value corresponds to plain AdaBoost
 
         boost_only_signal: bool (default=True),
@@ -115,7 +114,7 @@ class uBoostBDT:
         self.base_estimator = base_estimator
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
-        self.uboosting_rate = uboosting_rate
+        self.uniforming_rate = uniforming_rate
         self.uniform_variables = uniform_variables
         self.target_efficiency = target_efficiency
         self.n_neighbors = n_neighbors
@@ -167,7 +166,7 @@ class uBoostBDT:
             assert numpy.shape(neighbours_matrix) == (len(X), self.n_neighbors), "Wrong shape of neighbours_matrix"
             self.knn_indices = neighbours_matrix
         else:
-            assert self.uniform_variables is not None, "uniform_variables must be set"
+            assert self.uniform_variables is not None, "uniform_variables should be set"
             # computing knn matrix
             self.knn_indices = computeSignalKnnIndices(self.uniform_variables, X, y > 0.5, self.n_neighbors)
 
@@ -176,7 +175,8 @@ class uBoostBDT:
             sample_weight = numpy.zeros(len(X), dtype=numpy.float) + 1. / len(X)
         else:
             # Normalize existing weights
-            sample_weight = numpy.copy(sample_weight) / sample_weight.sum()
+            assert numpy.all(sample_weight >= 0.), 'the weights should be non-negative'
+            sample_weight = numpy.copy(sample_weight) / numpy.sum(sample_weight)
 
         # Clear any previous fit results
         self.estimators_ = []
@@ -202,7 +202,6 @@ class uBoostBDT:
 
         return self
 
-
     def _boost_discrete(self, X, y, sample_weight):
         """Implement a single boost using the SAMME discrete algorithm,
         which is modified in uBoost way"""
@@ -222,7 +221,7 @@ class uBoostBDT:
             n_samples = len(X)
             if isinstance(self.bagging, bool) and self.bagging is True:
                 indices = self.random_generator.randint(0, n_samples, n_samples)
-                sample_counts = bincount(indices, minlength=n_samples)
+                sample_counts = numpy.bincount(indices, minlength=n_samples)
                 masked_sample_weight *= sample_counts
             elif isinstance(self.bagging, float):
                 masked_sample_weight *= (self.random_generator.rand(len(X)) > 1 - self.bagging)
@@ -247,17 +246,16 @@ class uBoostBDT:
 
             # Stop if the error is at least as bad as random guessing <-- I've deleted that
 
-            # Boost weight using multi-class AdaBoost SAMME alg
+            # Boost weight using AdaBoost SAMME alg
             estimator_weight = self.learning_rate * (numpy.log((1. - estimator_error) / estimator_error))
             self.estimator_weights_[iboost] = estimator_weight
 
-            # Default SAMME -- boosting only positive weights
-            # sample_weight *= numpy.exp(estimator_weight * incorrect * ((sample_weight > 0) | (estimator_weight < 0)))
-
+            # correcting the weights according to predictions
             sample_weight *= numpy.exp(estimator_weight * incorrect)
             sample_weight += 1e-30
             sample_weight /= numpy.sum(sample_weight)
 
+            # computing score
             cumulative_score += (2 * y_predict - 1) * estimator_weight
             # assert numpy.all(cumulative_score == self.predict_score(X)), "wrong prediction"
             predict_proba = self.score_to_proba(cumulative_score)
@@ -266,25 +264,32 @@ class uBoostBDT:
             self.bdt_cuts_.append(global_cut)
             local_efficiencies = compute_groups_efficiencies(global_cut, self.knn_indices, y, predict_proba,
                                                           smoothing_width=self.smoothing)
+
+            # another way to compute efficiencies
+            # TODO think of weights, we should take weights into account when computing efficiencies
+            # global_cut2 = commonutils.compute_cut_for_efficiency(self.target_efficiency, y, cumulative_score)
+            # cumulative_score2 = numpy.zeros([len(cumulative_score), 2])
+            # cumulative_score2[:, 1] = cumulative_score
+            # assert self.score_to_proba(numpy.array([global_cut2]))[0, 1] == global_cut, ' cuts are different '
+            # local_efficiencies2 = compute_groups_efficiencies(global_cut2, self.knn_indices, y, cumulative_score2,
+            #                                                   smoothing_width=self.smoothing)
+            # assert numpy.all(local_efficiencies == local_efficiencies2), 'The computed efficiencies are different'
+
+
             e_prime = numpy.sum(sample_weight * numpy.abs(local_efficiencies - self.target_efficiency))
             # TODO why do we have nominator here?
             # beta = math.log((1.0 - e_prime) / e_prime)
             beta = math.log(1. / e_prime)
             if self.boost_only_signal:
-                sample_weight *= numpy.exp((self.target_efficiency - local_efficiencies) * y * (beta * self.uboosting_rate))
+                sample_weight *= numpy.exp((self.target_efficiency - local_efficiencies) * y * (beta * self.uniforming_rate))
             else:
-                sample_weight *= numpy.exp((self.target_efficiency - local_efficiencies) * (beta * self.uboosting_rate))
+                sample_weight *= numpy.exp((self.target_efficiency - local_efficiencies) * (beta * self.uniforming_rate))
 
-            sample_weight_sum = numpy.sum(sample_weight)
-            # Stop if the sum of sample weights has become non-positive
-            if sample_weight_sum <= 0:
-                return
-            sample_weight /= sample_weight_sum
+            sample_weight /= numpy.sum(sample_weight)
 
             if self.keep_debug_info:
                 self.debug_dict['weights'].append(sample_weight.copy())
                 self.debug_dict['local_efficiencies'].append(local_efficiencies.copy())
-
 
     def get_train_vars(self, X):
         """Gets the DataFrame and returns only columns that should be used in fitting / predictions"""
@@ -295,69 +300,64 @@ class uBoostBDT:
 
     def predict_score(self, X):
         score = numpy.zeros(len(X))
-        X_train_vars = self.get_train_vars(X)
+        X = self.get_train_vars(X)
         for classifier, weight in zip(self.estimators_, self.estimator_weights_):
-            score += (2 * classifier.predict(X_train_vars) - 1) * weight
+            score += (2 * classifier.predict(X) - 1) * weight
         return score
 
     def staged_predict_score(self, X):
         score = numpy.zeros(len(X))
-        X_train_vars = self.get_train_vars(X)
+        X = self.get_train_vars(X)
         for classifier, weight in zip(self.estimators_, self.estimator_weights_):
-            score += (2 * classifier.predict(X_train_vars) - 1) * weight
+            score += (2 * classifier.predict(X) - 1) * weight
             yield score
 
     @staticmethod
-    def score_to_proba(score):
+    def score_to_proba(score, old_result=None):
         """Compute class probability estimates from decision scores. """
-        proba = numpy.ones((score.shape[0], 2), dtype=numpy.float64)
+        if old_result is None:
+            proba = numpy.ones((score.shape[0], 2), dtype=numpy.float64)
+        else:
+            proba = old_result
         proba[:, 1] = 1.0 / (1.0 + numpy.exp(-score.ravel()))
-        proba[:, 0] -= proba[:, 1]
+        proba[:, 0] = 1.0 - proba[:, 1]
         return proba
 
     def predict(self, X):
         """Predict classes for X.
-        Parameters
-        ----------
-        X : array-like of shape = [n_samples, n_features], the input samples.
+        Parameters:
+            X : array-like of shape = [n_samples, n_features], the input samples.
 
-        Returns
-        -------
-        y : array of shape = [n_samples], the predicted classes.
+        Returns:
+            y : array of shape = [n_samples], the predicted classes.
         """
-        # return AdaBoostClassifier.predict(self, self.get_train_vars(X))
         return self.predict_proba(X).argmax(axis=1)
 
     def predict_proba(self, X):
         return self.score_to_proba(self.predict_score(X))
 
     def staged_predict_proba(self, X):
+        result = numpy.zeros([len(X), 2])
         for score in self.staged_predict_score(X):
-            yield self.score_to_proba(score)
+            yield self.score_to_proba(score, old_result=result)
 
     @property
     def feature_importances_(self):
-        """Return the feature importances (the higher, the more important the
-           feature).
-
-        Returns
-        -------
-        feature_importances_ : array, shape = [n_features]
+        """Return the feature importances (the higher, the more important the feature).
+        Returns:
+            array, shape = [n_features]
         """
         if self.estimators_ is None or len(self.estimators_) == 0:
-            raise ValueError("Estimator not fitted, "
-                             "call `fit` before `feature_importances_`.")
+            raise ValueError("Estimator not fitted, call `fit` before `feature_importances_`.")
 
-        return sum(tree.feature_importances_ * weight
-                   for tree, weight in zip(self.estimators_, self.estimator_weights_)) / self.n_estimators
-
+        return numpy.array(sum(tree.feature_importances_ * weight for tree, weight
+                               in zip(self.estimators_, self.estimator_weights_)) / self.n_estimators)
 
 
 
 
-def trainClassifier(classifier, X_train_vars, y, sample_weight, neighbours_matrix):
+def _train_classifier(classifier, X_train_vars, y, sample_weight, neighbours_matrix):
     return classifier.fit(X_train_vars, y, sample_weight=sample_weight, neighbours_matrix=neighbours_matrix)
-
 
 
 class uBoostClassifier(BaseEstimator, ClassifierMixin):
@@ -441,10 +441,9 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         else:
             return X
 
-
     def fit(self, X, y, sample_weight=None):
         if self.uniform_variables is None:
-            raise ValueError("Please set uniformVariables")
+            raise ValueError("Please set uniform variables")
         if len(self.uniform_variables) == 0:
             raise ValueError("The set of uniform variables cannot be empty")
         if len(X) != len(y):
@@ -456,7 +455,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
             self.smoothing = 0.2 / self.efficiency_steps
 
         neighbours_matrix = computeSignalKnnIndices(self.uniform_variables, X, y > 0.5, n_neighbors=self.knn)
-        # TODO select some other targets
+        # TODO select some other targets ?
         self.target_efficiencies = [(i + 1.0) / (self.efficiency_steps + 1.0) for i in range(self.efficiency_steps)]
         self.classifiers = []
 
@@ -471,15 +470,13 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         if self.ipc_profile is not None:
             from IPython.parallel import Client
             client = Client(profile=self.ipc_profile)
-            self.classifiers  = client.load_balanced_view().map_sync(trainClassifier, self.classifiers,
+            self.classifiers = client.load_balanced_view().map_sync(_train_classifier, self.classifiers,
                                     [X_train_vars] * self.efficiency_steps, [y] * self.efficiency_steps,
                                     [sample_weight] * self.efficiency_steps, [neighbours_matrix] * self.efficiency_steps)
         else:
-            self.classifiers = map(trainClassifier, self.classifiers,
+            self.classifiers = map(_train_classifier, self.classifiers,
                                    [X_train_vars] * self.efficiency_steps, [y] * self.efficiency_steps,
                                    [sample_weight] * self.efficiency_steps, [neighbours_matrix] * self.efficiency_steps)
-
-
         return self
 
     def predict(self, X):
@@ -487,33 +484,27 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
 
     def predict_proba(self, X):
         X_train_vars = self.get_train_variables(X)
-        signal_proba = numpy.zeros(len(X))
         result = numpy.zeros([len(X), 2])
         for efficiency, classifier in zip(self.target_efficiencies, self.classifiers):
-            signal_proba += sigmoidFunction(classifier.predict_proba(X_train_vars)[:, 1] - classifier.bdt_cut,
+            result[:, 1] += sigmoid_function(classifier.predict_proba(X_train_vars)[:, 1] - classifier.bdt_cut,
                                             self.smoothing)
 
-        signal_proba /= self.efficiency_steps
-        result[:, 1] = signal_proba
-        result[:, 0] = 1.0 - signal_proba
+        result[:, 1] /= self.efficiency_steps
+        result[:, 0] = 1.0 - result[:, 1]
         return result
 
     def staged_predict_proba(self, X):
         X = self.get_train_variables(X)
-        signal_proba_stages = numpy.zeros([self.n_estimators, len(X)])
-        for classifier in self.classifiers:
-            staged_predicitions = list(classifier.staged_predict_proba(X))
-            for i, stage_prediction in enumerate(staged_predicitions):
-                signal_proba_stages[i, :] += sigmoidFunction(stage_prediction[:, 1] - classifier.bdt_cuts_[i],
-                                                             self.smoothing)
-        signal_proba_stages /= self.efficiency_steps
-        result = []
-        for signal_proba in signal_proba_stages:
-            staged_prediction = numpy.zeros([len(X), 2])
-            staged_prediction[:, 1] = signal_proba
-            staged_prediction[:, 0] = 1.0 - signal_proba
-            result.append(staged_prediction)
-        return result
+        staged_probas = izip(* [bdt.staged_predict_proba(X) for bdt in self.classifiers])
+        staged_cuts   = izip(* [bdt.bdt_cuts_ for bdt in self.classifiers])
+        result = numpy.zeros([len(X), 2])
+        for predictions, cuts in izip(staged_probas, staged_cuts):
+            result[:, :] = 0.
+            for proba, cut in izip(predictions, cuts):
+                result[:, 1] += sigmoid_function(proba[:, 1] - cut, self.smoothing)
+            result[:, 1] /= self.efficiency_steps
+            result[:, 0] = 1.0 - result[:, 1]
+            yield result
 
 
 def test_uboost_classifier():
@@ -533,14 +524,14 @@ def test_uboost_classifier():
         assert abs(filtered - numpy.sum(trainY) * target_efficiency) < 5, "global cut is set wrongly"
 
         staged_filtered_upper = [numpy.sum(pred[:, 1] > cut - 1e-7) for pred, cut in \
-                                 zip(bdt_classifier.staged_predict_proba(trainX[trainY > 0.5]),
+                                 izip(bdt_classifier.staged_predict_proba(trainX[trainY > 0.5]),
                                      bdt_classifier.bdt_cuts_)]
         staged_filtered_lower = [numpy.sum(pred[:, 1] > cut + 1e-7) for pred, cut in \
-                                 zip(bdt_classifier.staged_predict_proba(trainX[trainY > 0.5]),
+                                 izip(bdt_classifier.staged_predict_proba(trainX[trainY > 0.5]),
                                      bdt_classifier.bdt_cuts_)]
 
         assert bdt_classifier.bdt_cut == bdt_classifier.bdt_cuts_[-1], 'something wrong with computed cuts'
-        for filter_lower, filter_upper in zip(staged_filtered_lower, staged_filtered_upper)[10:]:
+        for filter_lower, filter_upper in islice(izip(staged_filtered_lower, staged_filtered_upper), 10, 100):
             assert filter_lower - 1 <= sum(trainY) * target_efficiency <= filter_upper + 1, "stage cut is set wrongly"
 
     uboost_classifier = uBoostClassifier(uniform_variables=uniform_variables, n_neighbors=20, efficiency_steps=3,
