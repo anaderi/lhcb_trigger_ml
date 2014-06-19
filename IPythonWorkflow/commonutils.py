@@ -466,6 +466,17 @@ def roc_auc_score(y_true, y_score, sample_weight=None):
     return auc(fpr, tpr, reorder=True)
 
 
+def optimal_punzy(y_true, y_score, sample_weight=None):
+    """Returns maximal value for Punzy metrics: s / sqrt(s+b) """
+    sample_weight = check_sample_weight(y_true, sample_weight=sample_weight)
+    order = numpy.argsort(-y_score)
+    y_true, sample_weight = y_true[order], sample_weight[order]
+    s_cumulative = numpy.cumsum(sample_weight * y_true)
+    b_cumulative = numpy.cumsum(sample_weight * (1-y_true))
+    optimal = numpy.max(s_cumulative / numpy.sqrt(s_cumulative + b_cumulative))
+    return optimal
+
+
 def test_roc_curve(size=100):
     import sklearn.metrics
     y = (numpy.random.random(size) > 0.5) * 1
