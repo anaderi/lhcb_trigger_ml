@@ -1,6 +1,8 @@
 # About
+
 # This module contains functions to build reports:
-# training, getting predictions, building various plots
+# training, getting predictions,
+# building various plots, calculating metrics
 
 try:
     from collections import OrderedDict
@@ -14,6 +16,7 @@ import pylab
 from sklearn.metrics import auc
 from sklearn.utils.validation import check_arrays, column_or_1d
 from matplotlib import cm
+from scipy.stats import pearsonr
 
 from commonutils import compute_bdt_cut, Binner, roc_curve, roc_auc_score
 
@@ -28,20 +31,22 @@ __author__ = 'Alex Rogozhnikov'
 # IsBackgroundAsSignal - background, but classified as signal
 # ... and so on. Cute, right?
 
-def Efficiency(answer, prediction):
+def efficiency(y_true, y_pred, sample_weight=None):
+    if sample_weight is None:
+        sample_weight = numpy.ones(len(y_true))
     """Efficiency = right classified signal / everything that is really signal
     Efficiency == recall, returns -0.1 when ill-defined"""
-    assert len(answer) == len(prediction), "Different size of arrays"
-    isSignal =  numpy.sum(answer) - 1e-6
-    isSignalAsSignal = numpy.sum(answer * prediction) + 1e-7
+    assert len(y_true) == len(y_pred) == len(sample_weight), "Different size of arrays"
+    isSignal =  numpy.sum(y_true * sample_weight) - 1e-6
+    isSignalAsSignal = numpy.sum(y_true * y_pred * sample_weight) + 1e-7
     return isSignalAsSignal / isSignal
     # the same, but with notifications
     # return recall_score(answer, prediction)
 
 
-def BackgroundEfficiency(answer, prediction):
-    """BackgroundEfficiency = right classified bg / everything that is really bg"""
-    return Efficiency(1 - answer, 1 - prediction)
+def BackgroundEfficiency(answer, prediction, sample_weight=None):
+    """BackgroundEfficiency == right classified bg / everything that is really bg == fpr"""
+    return efficiency(1 - answer, 1 - prediction, sample_weight=sample_weight)
 
 
 def partOfIsSignal(answer, prediction):
@@ -51,7 +56,7 @@ def partOfIsSignal(answer, prediction):
 
 
 def partOfAsSignal(answer, prediction):
-    """Part of is signal = Is signal / total amount of events"""
+    """Part of is signal = classified as signal / total amount of events"""
     assert len(answer) == len(prediction), "Different size of arrays"
     return numpy.sum(prediction) * 1.0 / len(answer)
 
@@ -121,7 +126,7 @@ class Predictions(object):
             self.staged_predictions = OrderedDict()
             for name, classifier in classifiers_dict.iteritems():
                 try:
-                    self.staged_predictions[name] = list(classifier.staged_predict_proba(X))
+                    self.staged_predictions[name] = list([numpy.copy(x) for x in classifier.staged_predict_proba(X)])
                     self.predictions[name] = self.staged_predictions[name][-1]
                 except AttributeError:
                     self.predictions[name] = classifier.predict_proba(X)
@@ -171,6 +176,7 @@ class Predictions(object):
     def _map_on_staged_proba(self, function, step=1):
         """Applies a function to every step-th stage of each classifier
         returns: {name: Series[stage_name, result]}"""
+        # TODO test this function
         result = OrderedDict()
         for name, staged_proba in self._get_staged_proba().iteritems():
             result[name] = pandas.Series()
@@ -187,6 +193,20 @@ class Predictions(object):
         for name, staged_proba in selected_stages.iteritems():
             result[name] = staged_proba.apply(function)
         return result
+
+    def _plot_on_stages(self, plotting_function, stages=None):
+        """Plots in each line results for the same stage,
+        plotting_function should have following interface:
+        plotting_function(y_true, y_pred, sample_weight) """
+        selected_stages = pandas.DataFrame(self._get_stages(stages))
+        for stage_name, stage_preds in selected_stages.iterrows():
+            print('Stage ' + str(stage_name))
+            self._strip_figure(len(stage_preds))
+            for i, (name, probabilities) in enumerate(stage_preds.iteritems()):
+                pylab.subplot(1, len(stage_preds), i + 1)
+                pylab.title(name)
+                plotting_function(self.y, probabilities, sample_weight=self.sample_weight)
+            pylab.show()
 
     def roc(self, stages=None):
         proba_on_stages = pandas.DataFrame(self._get_stages(stages))
@@ -334,7 +354,7 @@ class Predictions(object):
                     pylab.show()
         return self
 
-    def correlation(self, var_name, stages=None, metrics=Efficiency, n_bins=20, thresholds=None, **kwargs):
+    def correlation(self, var_name, stages=None, metrics=efficiency, n_bins=20, thresholds=None, **kwargs):
         for stage, preds in pandas.DataFrame(self._get_stages(stages=stages)).iterrows():
             self._strip_figure(len(preds))
             print('stage ' + str(stage))
@@ -343,6 +363,26 @@ class Predictions(object):
                 plotScoreVariableCorrelation(predictions, self.y, numpy.ravel(self.X[var_name]), classifier_name=name,
                                              var_name=var_name, score_function=metrics, bins_number=n_bins,
                                              thresholds=thresholds, ** kwargs)
+        return self
+
+    def correlation_curves(self, var_name, center=None, step=1):
+        """ Correlation is built only for signal (by now, will be extended soon)
+        :param var_name: str
+        :param center: float
+        :param step: int
+        :return: returns self
+        """
+        pylab.title("Pearson correlation with " + str(var_name))
+        data = self.X.loc[self.is_signal, var_name]
+        if center is not None:
+            data = numpy.abs(data - center)
+        func = lambda pred: pearsonr(pred[self.is_signal, 1], data)[0]
+        correlations = self._map_on_staged_proba(func, step=step)
+        for classifier_name, staged_correlation in correlations.iteritems():
+            pylab.plot(staged_correlation.keys(), staged_correlation, label=classifier_name)
+        pylab.legend(loc="lower left")
+        pylab.xlabel("stage"), pylab.ylabel("Pearson correlation")
+
         return self
 
     def compute_metrics(self, stages=None, metrics=roc_auc_score, in_html=True):
@@ -414,7 +454,7 @@ def getStageOfStagedProbaDict(staged_predict_proba_dict, stage):
 
 
 def plotScoreVariableCorrelation(prediction_proba, answers, correlation_values, classifier_name="", var_name="",
-                                 score_function=Efficiency, bins_number=20, thresholds=None, show_legend=False):
+                                 score_function=efficiency, bins_number=20, thresholds=None, show_legend=False):
     """Different score functions available: Efficiency, Precision, Recall, F1Score,
     and other things from sklearn.metrics
     var_name - for example, 'mass', just a name for plotting. """
@@ -721,20 +761,16 @@ def plot_classes_distribution(X, y, var_names):
             raise ValueError("More than tow variables are not implemented")
 
 
-def testComputeMseAndBins(size=500):
+def test_bins(size=500):
+    n_bins = 10
     columns = ['var1', 'var2']
-    X = pandas.DataFrame(numpy.random.random((size, 2)), columns=columns)
-    y = numpy.random.random(size) > 0.5
-    proba = numpy.random.random((size, 2))
-    computeMseVariation(proba, y, X, columns, [0.3, 0.5, 0.7])
-    n_bins = 5
+    df = pandas.DataFrame(numpy.random.random((size, 2)), columns=columns)
     x_limits = numpy.linspace(0, 1, n_bins + 1)[1:-1]
-    bins = computeBinIndices(X, columns, [x_limits, x_limits])
+    bins = computeBinIndices(df, columns, [x_limits, x_limits])
     assert numpy.all(0 <= bins) and numpy.all(bins < n_bins * n_bins), "the bins with wrong indices appeared"
 
-    effs = computeLocalEfficienciesOfBins(proba, y, bins, n_bins * n_bins, .3)
+test_bins()
 
-testComputeMseAndBins()
 
 
 def test_all():
@@ -749,6 +785,7 @@ def test_all():
         classifiers['forest'] = RandomForestClassifier(n_estimators=20)
 
         classifiers.fit(trainX, trainY).test_on(testX, testY, low_memory=low_memory)\
+            .correlation_curves('column1', ).show() \
             .learning_curves().show() \
             .efficiency(trainX.columns[:1], n_bins=7).show() \
             .efficiency(trainX.columns[:2], n_bins=12).show() \
