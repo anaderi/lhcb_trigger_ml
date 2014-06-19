@@ -25,6 +25,7 @@ class HidingClassifier(BaseEstimator, ClassifierMixin):
         assert self.base_estimator is not None, "base estimator was not set"
         self._trained_estimator = clone(self.base_estimator)
         self._trained_estimator.fit(X[self.train_variables], y)
+        return self
 
     def predict(self, X):
         return self._trained_estimator.predict(X[self.train_variables])
@@ -215,6 +216,11 @@ def test_feature_splitter(size=2000):
     base_estimators = {'rf': RandomForestClassifier()}
     splitter = FeatureSplitter('column0', base_estimators=base_estimators, final_estimator=RandomForestClassifier())
     splitter.fit(trainX, trainY)
+
+    if __name__ == 'main':
+        # not print unless this is the start module
+        print = lambda x: x
+
     print(splitter.score(testX, testY))
     print(RandomForestClassifier().fit(trainX, trainY).score(testX, testY))
     print(DumbSplitter('column0', base_estimator=RandomForestClassifier()).fit(trainX, trainY).score(testX, testY))
@@ -225,7 +231,7 @@ def test_feature_splitter(size=2000):
     print(ChainClassifiers(chain).fit(trainX, trainY).score(testX, testY))
     print(LDA().fit(trainX, trainY).score(testX, testY))
 
-test_feature_splitter()
+# test_feature_splitter()
 
 
 
