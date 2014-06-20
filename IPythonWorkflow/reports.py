@@ -365,18 +365,20 @@ class Predictions(object):
                                              thresholds=thresholds, ** kwargs)
         return self
 
-    def correlation_curves(self, var_name, center=None, step=1):
+    def correlation_curves(self, var_name, center=None, step=1, on_signal=True):
         """ Correlation is built only for signal (by now, will be extended soon)
         :param var_name: str
         :param center: float
         :param step: int
         :return: returns self
         """
+        label = 1 if on_signal else 0
+        events = self.is_signal if on_signal else ~self.is_signal
         pylab.title("Pearson correlation with " + str(var_name))
-        data = self.X.loc[self.is_signal, var_name]
+        data = self.X.loc[events, var_name]
         if center is not None:
             data = numpy.abs(data - center)
-        func = lambda pred: pearsonr(pred[self.is_signal, 1], data)[0]
+        func = lambda pred: pearsonr(pred[events, label], data)[0]
         correlations = self._map_on_staged_proba(func, step=step)
         for classifier_name, staged_correlation in correlations.iteritems():
             pylab.plot(staged_correlation.keys(), staged_correlation, label=classifier_name)
