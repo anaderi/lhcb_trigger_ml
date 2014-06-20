@@ -359,47 +359,48 @@ class FlatnessLossFunction(LossFunction):
         return loss
 
     def negative_gradient(self, y, y_pred, **kw_args):
-        gradient = numpy.zeros(len(y))
-        needed_indices = (y > 0.5) == self.on_signal
+        ngradient = numpy.zeros(len(y))
+        needed_indices = (y > 0.5) if self.on_signal else (y < 0.5)
         n_needed = numpy.sum(needed_indices)
         y_pred = numpy.ravel(y_pred)
-        # sorted_pred = numpy.sort(y_pred[needed_indices])
+        sorted_global_pred = numpy.sort(y_pred[needed_indices])
+
         global_efficiencies = numpy.zeros(len(y), dtype=numpy.float)
         global_efficiencies[numpy.where(needed_indices)[0][y_pred[needed_indices].argsort()]] = \
             (numpy.arange(0, n_needed) + 0.5) / n_needed
 
         for bin_weight, indices_in_bin in zip(self.bin_weights, self.bin_indices):
             preds_in_bin = numpy.take(y_pred, indices_in_bin)
-            sort_indices = preds_in_bin.argsort()
-            indices_in_bin = indices_in_bin[sort_indices]
-            preds_in_bin = preds_in_bin[sort_indices]
+            order = preds_in_bin.argsort()
+            indices_in_bin, preds_in_bin = indices_in_bin[order], preds_in_bin[order]
 
             global_effs = global_efficiencies[indices_in_bin]
             local_effs = (numpy.arange(0, len(preds_in_bin)) + 0.5) / len(preds_in_bin)
             if self.new:
-                pass
+                target_predictions = commonutils.weighted_percentile(sorted_global_pred, local_effs, array_sorted=True)
+                bin_gradient = target_predictions - preds_in_bin
             else:
                 bin_gradient = self.power * numpy.abs(global_effs - local_effs) ** (self.power - 1) \
                                * numpy.sign(local_effs - global_effs)
 
-            # TODO multiply by derivative of F_global
-            gradient[indices_in_bin] += bin_weight * bin_gradient
+            # TODO multiply by derivative of F_global ?
+            ngradient[indices_in_bin] += bin_weight * bin_gradient
 
-        assert numpy.all(gradient[~needed_indices] == 0)
+        assert numpy.all(ngradient[~needed_indices] == 0)
 
         y_signed = 2 * y - 1
         if self.keep_debug_info:
             self.debug_dict['pred'].append(numpy.copy(y_pred))
-            self.debug_dict['fl_grad'].append(numpy.copy(gradient))
+            self.debug_dict['fl_grad'].append(numpy.copy(ngradient))
             self.debug_dict['ada_grad'].append(y_signed * numpy.exp(- y_signed * y_pred))
         # adding ada
         ada_sqrt = math.sqrt(self.ada_coefficient)
-        gradient = gradient / ada_sqrt + ada_sqrt * y_signed * numpy.exp(- y_signed * y_pred)
+        ngradient = ngradient / ada_sqrt + ada_sqrt * y_signed * numpy.exp(- y_signed * y_pred)
 
         if not self.allow_negative_gradients:
-            gradient = y_signed * numpy.clip(y_signed * gradient, 0, 1e5)
+            ngradient = y_signed * numpy.clip(y_signed * ngradient, 0, 1e5)
 
-        return gradient
+        return ngradient
 
     # def update_terminal_regions(self, tree, X, y, residual, y_pred, sample_mask, learning_rate=1.0, k=0):
         # the standard version is used
@@ -627,8 +628,9 @@ def testGradientBoosting(samples=1000):
     loss4 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
     loss5 = DistanceBasedKnnFunction(uniform_variables, knn=10, distance_dependence=lambda r: numpy.exp(-0.1 * r))
     loss6 = FlatnessLossFunction(uniform_variables, ada_coefficient=1)
+    loss7 = FlatnessLossFunction(uniform_variables, ada_coefficient=1, new=True)
 
-    for loss in [loss1, loss2, loss3, loss4, loss5, loss6]:
+    for loss in [loss1, loss2, loss3, loss4, loss5, loss6, loss7]:
         result = MyGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2,
                                               subsample=0.7, n_estimators=n_estimators, train_variables=None)\
             .fit(trainX[:samples], trainY[:samples]).score(testX, testY)
