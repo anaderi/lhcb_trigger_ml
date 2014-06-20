@@ -260,7 +260,7 @@ class DistanceBasedKnnFunction(KnnLossFunction):
 
 class FlatnessLossFunction(LossFunction):
     def __init__(self, uniform_variables, bins=10, on_signal=True, power=2., ada_coefficient=1.,
-                 allow_negative_gradients=True, keep_debug_info=False):
+                 allow_negative_gradients=True, keep_debug_info=False, new=False):
         """
         This loss function contains separately penalty for non-flatness and ada_coefficient.
         The penalty for non-flatness is using bins.
@@ -281,6 +281,8 @@ class FlatnessLossFunction(LossFunction):
         self.ada_coefficient = ada_coefficient
         self.allow_negative_gradients = allow_negative_gradients
         self.keep_debug_info = keep_debug_info
+        # TODO not create a new flatness loss
+        self.new = new
         LossFunction.__init__(self, 1)
 
     def fit(self, X, y):
@@ -309,7 +311,6 @@ class FlatnessLossFunction(LossFunction):
         if self.keep_debug_info:
             self.debug_dict = defaultdict(list)
         return self
-
 
 
     def computeIndicesInBin(self, X, y):
@@ -375,9 +376,11 @@ class FlatnessLossFunction(LossFunction):
 
             global_effs = global_efficiencies[indices_in_bin]
             local_effs = (numpy.arange(0, len(preds_in_bin)) + 0.5) / len(preds_in_bin)
-
-            bin_gradient = self.power * numpy.abs(global_effs - local_effs) ** (self.power - 1) \
-                           * numpy.sign(local_effs - global_effs)
+            if self.new:
+                pass
+            else:
+                bin_gradient = self.power * numpy.abs(global_effs - local_effs) ** (self.power - 1) \
+                               * numpy.sign(local_effs - global_effs)
 
             # TODO multiply by derivative of F_global
             gradient[indices_in_bin] += bin_weight * bin_gradient
