@@ -466,11 +466,9 @@ def roc_auc_score(y_true, y_score, sample_weight=None):
     return auc(fpr, tpr, reorder=True)
 
 
-def optimal_sensitivity(y_true, y_score, sample_weight=None, change_labels=False):
+def optimal_sensitivity(y_true, y_score, sample_weight=None):
     """Returns maximal value for sensitivity metrics: s / sqrt(s+b) """
     sample_weight = check_sample_weight(y_true, sample_weight=sample_weight)
-    if change_labels:
-        y_true, y_score = 1 - y_true, 1.- y_score
     order = numpy.argsort(-y_score)
     y_true, sample_weight = y_true[order], sample_weight[order]
     s_cumulative = numpy.cumsum(sample_weight * y_true)
