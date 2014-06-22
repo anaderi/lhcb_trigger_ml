@@ -47,6 +47,7 @@ def check_sample_weight(y_true, sample_weight):
 def my_train_test_split(*arrays, **kw_args):
     """Does the same thing as train_test_split, but preserves columns in DataFrames.
     Uses the same parameters: test_size, train_size, random_state
+    :param arrays: list[numpy.array | pandas.DataFrame]
     """
     assert len(arrays) > 0, "at least one array should be given"
     length = len(arrays[0])
@@ -240,7 +241,7 @@ def build_normalizer(signal, sample_weight=None):
 
 
 def test_build_normalizer(checks=10):
-    predictions = RandomState().normal(size=2000)
+    predictions = numpy.array(RandomState().normal(size=2000))
     result = build_normalizer(predictions)(predictions)
     assert numpy.all(result[numpy.argsort(predictions)] == sorted(result))
     assert numpy.all(result >= 0)
@@ -271,12 +272,12 @@ def compute_cut_for_efficiency(efficiency, y_true, y_pred, sample_weight=None):
     :param efficiency: float or numpy.array with target efficiencies, shape = [n_effs]
     :param y_true: array-like, shape = [n_samples], labels (zeros ans ones)
     :param y_pred: array-like, shape = [n_samples], predictions or scores (float)
-    :param sample_weight: None or array-like, shape = [n_samples]
+    :param sample_weight: None | array-like, shape = [n_samples]
     :return: float or numpy.array, shape = [n_effs]
     """
     sample_weight = check_sample_weight(y_true, sample_weight)
     assert len(y_true) == len(y_pred), 'lengths are different'
-
+    efficiency = numpy.array(efficiency)
     is_signal = y_true > 0.5
     y_pred, sample_weight = y_pred[is_signal], sample_weight[is_signal]
     return weighted_percentile(y_pred, 1. - efficiency, sample_weight=sample_weight)
@@ -290,7 +291,7 @@ def test_compute_cut():
         cut = compute_cut_for_efficiency(eff, labels, predictions)
         assert numpy.sum(predictions > cut) / len(predictions) == eff, 'the cut was set wrongly'
 
-    weights = random.exponential(size=100)
+    weights = numpy.array(random.exponential(size=100))
     for eff in random.uniform(size=100):
         cut = compute_cut_for_efficiency(eff, labels, predictions, sample_weight=weights)
         lower = numpy.sum(weights[predictions > cut + 1]) / numpy.sum(weights)
@@ -307,12 +308,12 @@ def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
         y_true: an array of zeros and ones, shape = [n_samples]
         y_pred: prediction probabilities returned by classifier, shape = [n_samples, 2]
     """
+    if sample_weight is not None:
+        raise ValueError("sample weight is not supported")
     assert len(y_true) == len(y_pred), "different size"
     signal_probas = y_pred[y_true > 0.5, 1]
-    percentiles = 100 - target_efficiency * 100
-    if isinstance(percentiles, numpy.ndarray):
-        percentiles = list(percentiles)
-    return numpy.percentile(signal_probas, percentiles)
+    percentiles = 1. - target_efficiency
+    return weighted_percentile(signal_probas, percentiles)
 
 
 def compute_groups_efficiencies(global_cut, knn_indices, answers, prediction_proba,
@@ -342,7 +343,7 @@ def sigmoid_function(x, width):
         return (x > 0) * 1.0
 
 
-def generateSample(n_samples, n_features, distance=2.0):
+def generate_sample(n_samples, n_features, distance=2.0):
     """Generates some test distribution,
     signal and background distributions are gaussian with same dispersion and different centers,
     all variables are independent (gaussian correlation matrix is identity)"""
@@ -356,6 +357,9 @@ def generateSample(n_samples, n_features, distance=2.0):
     X = pandas.DataFrame(X, columns=columns)
     return X, y
 
+# supporting deprecated name
+generateSample = generate_sample
+
 
 def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, n_neighbors=50):
     """For each event returns the knn closest signal(!) events. No matter of what class the event is.
@@ -364,8 +368,7 @@ def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, n_neighbors
         dataframe: should contain these variables
         is_signal: is boolean numpy.array, shape = [n_samples]
     Returns:
-        ndarray of shape [len(dataframe), knn],
-        each row contains indices of closest signal events
+        numpy.array of shape [len(dataframe), knn], each row contains indices of closest signal events
     """
     assert len(dataframe) == len(is_signal), "Different lengths"
     signal_indices = numpy.where(is_signal)[0]
@@ -389,7 +392,7 @@ def computeKnnIndicesOfSameClass(uniform_variables, X, y, n_neighbours=50):
 
 
 def test_compute_knn_indices(n_events=100):
-    X, y = generateSample(n_events, 10, distance=.5)
+    X, y = generate_sample(n_events, 10, distance=.5)
     is_signal = y > 0.5
     signal_indices = numpy.where(is_signal)[0]
     uniform_columns = X.columns[:1]
@@ -423,7 +426,7 @@ def smear_dataset(testX, smeared_variables=None, smearing_factor=0.1):
     result = pandas.DataFrame.copy(testX)
     for var in smeared_variables:
         sigma = math.sqrt(numpy.var(result[var]))
-        result[var] += RandomState().normal(0, smearing_factor * sigma, len(result))
+        result[var] += RandomState().normal(0, smearing_factor * sigma, size=len(result))
     return result
 
 
@@ -442,9 +445,8 @@ def memory_usage():
 
 def roc_curve(y_true, y_score, sample_weight=None):
     """ The same as sklearn.metrics.roc_curve, but this one supports weights    """
-    if sample_weight is None:
-        sample_weight = numpy.ones(len(y_score))
-    assert len(y_true) == len(y_score) == len(sample_weight), 'the lengths are different'
+    sample_weight = check_sample_weight(y_true, sample_weight)
+    assert len(y_true) == len(y_score), 'the lengths are different'
     assert set(y_true) == {0, 1}, "the labels should be 0 and 1, labels are " + str(set(y_true))
     order = numpy.argsort(y_score)[::-1]
     thresholds = y_score[order]
@@ -505,5 +507,3 @@ def export_root_to_csv(filename, branches=None):
         result.append(new_file_name)
     print("Successfully converted")
     return result
-
-
