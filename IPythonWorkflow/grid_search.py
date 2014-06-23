@@ -1,5 +1,7 @@
 # About
-# this module is implementation of optimized grid_search
+
+# this module is implementation of optimized grid_search,
+# which uses some metropolis-like algorithm
 
 from __future__ import division
 from __future__ import print_function
@@ -14,6 +16,7 @@ from sklearn.cross_validation import StratifiedKFold
 from sklearn.grid_search import _check_param_grid
 from sklearn.metrics.metrics import roc_auc_score
 from sklearn.utils.random import check_random_state
+
 import commonutils
 
 try:
@@ -26,7 +29,7 @@ __author__ = 'Alex Rogozhnikov'
 
 
 def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
-                        score_function, sample_weight=None):
+                        score_function, sample_weight=None, label=1):
     k_folder = StratifiedKFold(y=y, n_folds=folds)
     score = 0.
     for train_indices, test_indices in islice(k_folder, fold_checks):
@@ -34,125 +37,90 @@ def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
         testX, testY = X.irow(test_indices), y[test_indices]
         estimator = sklearn.clone(base_estimator).set_params(**params_dict)
         if sample_weight is None:
-            estimator.fit(X=trainX, y=trainY)
+            estimator.fit(trainX, trainY)
             proba = estimator.predict_proba(testX)
-            score += score_function(testY, proba[:, 1])
+            score += score_function(testY, proba[:, label])
         else:
             train_weights, test_weights = sample_weight[train_indices], sample_weight[test_indices]
-            estimator.fit(X=trainX, y=trainY, sample_weight=train_weights)
+            estimator.fit(trainX, trainY, sample_weight=train_weights)
             proba = estimator.predict_proba(testX)
-            score += score_function(testY, proba[:, 1], sample_weight=test_weights)
+            score += score_function(testY, proba[:, label], sample_weight=test_weights)
     return score / fold_checks
 
 
-
-
 class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
-    """Optimal search over specified parameter values for an estimator. Metropolis-like algorithm is used
-
-    Important members are fit, predict.
-
-    GridSearchCV implements a "fit" method and a "predict" method like
-    any classifier except that the parameters of the classifier
-    used to predict is optimized by cross-validation.
-
-    Parameters
-    ----------
-    estimator : object type that implements the "fit" and "predict" methods
-        A object of that type is instantiated for each grid point.
-
-    param_grid : dict
-        Dictionary with parameters names (string) as keys and lists of
-        parameter settings to try as values. The closest values are considered
-
-    scoring : string, callable or None, optional, default: None
-        A string (see model evaluation documentation) or
-        a scorer callable object / function with signature
-        ``scorer(estimator, X, y)``.
-
-    fit_params : dict, optional
-        Parameters to pass to the fit method.
-
-    n_jobs : int, optional
-        Number of jobs to run in parallel (default 1).
-
-    pre_dispatch : int, or string, optional
-        Controls the number of jobs that get dispatched during parallel
-        execution. Reducing this number can be useful to avoid an
-        explosion of memory consumption when more jobs get dispatched
-        than CPUs can process. This parameter can be:
-
-            - None, in which case all the jobs are immediately
-              created and spawned. Use this for lightweight and
-              fast-running jobs, to avoid delays due to on-demand
-              spawning of the jobs
-
-            - An int, giving the exact number of total jobs that are
-              spawned
-
-            - A string, giving an expression as a function of n_jobs,
-              as in '2*n_jobs'
-
-    iid : boolean, optional
-        If True, the data is assumed to be identically distributed across
-        the folds, and the loss minimized is the total loss per sample,
-        and not the mean loss across the folds.
-
-    cv : integer or cross-validation generator, optional
-        If an integer is passed, it is the number of folds (default 3).
-        Specific cross-validation objects can be passed, see
-        sklearn.cross_validation module for the list of possible objects
-
-    refit : boolean
-        Refit the best estimator with the entire dataset.
-        If "False", it is impossible to make predictions using
-        this GridSearchCV instance after fitting.
-
-    n_evaluations : integer
-        The number of attempts of evaluations
-
-
-    Attributes
-    ----------
-    `grid_scores_` : list of named tuples
-        Contains scores for all parameter combinations in param_grid.
-        Each entry corresponds to one parameter setting.
-        Each named tuple has the attributes:
-
-            * ``parameters``, a dict of parameter settings
-            * ``mean_validation_score``, the mean score over the
-              cross-validation folds
-            * ``cv_validation_scores``, the list of scores for each fold
-
-    `best_estimator_` : estimator
-        Estimator that was chosen by the search, i.e. estimator
-        which gave highest score (or smallest loss if specified)
-        on the left out data.
-
-    `best_score_` : float
-        Score of best_estimator on the left out data.
-
-    `best_params_` : dict
-        Parameter setting that gave the best results on the hold out data.
-
-    Notes
-    ------
-    The parameters selected are those that maximize the score of the left out
-    data, unless an explicit score is passed in which case it is used instead.
-
-    If `n_jobs` was set to a value higher than one, the data is copied for each
-    point in the grid (and not `n_jobs` times). This is done for efficiency
-    reasons if individual jobs take very little time, but may raise errors if
-    the dataset is large and not enough memory is available.  A workaround in
-    this case is to set `pre_dispatch`. Then, the memory is copied only
-    `pre_dispatch` many times. A reasonable value for `pre_dispatch` is `2 *
-    n_jobs`.
-
-    """
-
     def __init__(self, estimator, param_grid, score_function=None, folds=3, fold_checks=1, n_evaluations=40,
                  complete_cv=False, random_state=None, ipc_profile=None):
-        """ipc_profile is name of IPython cluster profile, None for local training """
+        """Optimal search over specified parameter values for an estimator. Metropolis-like algorithm is used
+        Important members are fit, predict.
+
+        GridSearchCV implements a "fit" method and a "predict" method like any classifier except that
+        the parameters of the classifier used to predict is optimized by cross-validation.
+
+        Parameters
+        ----------
+        estimator : object of type that implements the "fit" and "predict" methods
+            A new object of that type is cloned for each point.
+
+        param_grid : dict
+            Dictionary with parameters names (string) as keys and lists of
+            parameter settings to try as values. The closest values in the list are considered
+            to give the closest results
+
+        score_function : string, callable or None, optional, default: None
+            A string (see model evaluation documentation) or
+            a scorer callable object / function with signature
+            ``scorer(estimator, X, y)``.
+
+        folds: integer, 'k' used in k-folding while validating
+
+        fold_checks: integer, not greater than folds, the number of checks we do by cross-validating
+
+        n_evaluations : integer
+            The number of attempts of evaluations, will be truncated
+
+        complete_cv: boolean (default False)
+
+        cv : integer or cross-validation generator, optional
+            If an integer is passed, it is the number of folds (default 3).
+            Specific cross-validation objects can be passed, see
+            sklearn.cross_validation module for the list of possible objects
+
+        random_state: int or None or RandomState object,
+            used to generate random numbers
+
+        ipc_profile: str, the name of IPython parallel cluster profile to use,
+            or None to perform computations locally
+
+        Attributes
+        ----------
+        `grid_scores_` : list of named tuples
+            Contains scores for all parameter combinations in param_grid.
+            Each entry corresponds to one parameter setting.
+            Each named tuple has the attributes:
+
+                * ``parameters``, a dict of parameter settings
+                * ``mean_validation_score``, the mean score over the
+                  cross-validation folds
+                * ``cv_validation_scores``, the list of scores for each fold
+
+        `best_estimator_` : estimator
+            Estimator that was chosen by the search, i.e. estimator
+            which gave highest score (or smallest loss if specified)
+            on the left out data.
+
+        `best_score_` : float
+            Score of best_estimator on the left out data.
+
+        `best_params_` : dict
+            Parameter setting that gave the best results on the hold out data.
+
+        Notes
+        ------
+        The parameters selected are those that maximize the score of the left out
+        data, unless an explicit score is passed in which case it is used instead.
+        """
+
         self.base_estimator = estimator
         self.param_grid = param_grid
         self.dimensions = list([len(param_values) for param, param_values in param_grid.iteritems()])
@@ -282,7 +250,8 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
         if reorder:
             sequence = sorted(sequence, key=lambda x: -x[1])
         for state_indices, value in sequence:
-            state_string = ", ".join([d[0] + '=' + str(d[1]) for d in self._indices_to_parameters(state_indices).iteritems()])
+            state_string = ", ".join([name_value[0] + '=' + str(name_value[1]) for name_value
+                                      in self._indices_to_parameters(state_indices).iteritems()])
             print("{0:.3f}:  {1}".format(value, state_string))
 
     @property
@@ -310,22 +279,28 @@ class TestClassifier(BaseEstimator, ClassifierMixin):
         return numpy.zeros([len(X), 2]) + self.a * self.b * self.c * self.d * self.sign
 
 
-def MeanMetrics(y, pred, sample_weight=None):
+def mean_score(y, pred, sample_weight=None):
     """ This metrics was created for testing purposes"""
     return numpy.mean(pred)
 
 
 def test_optimization(size=10, n_evaluations=150):
+    trainX, trainY = commonutils.generate_sample(2000, 10, distance=0.5)
+
     grid_1d = numpy.linspace(0.1, 1, num=size)
     grid = {'a': grid_1d, 'b': grid_1d, 'c': grid_1d, 'd': grid_1d}
     grid = OrderedDict(grid)
 
-    grid_cv = GridOptimalSearchCV(TestClassifier(), grid, n_evaluations=n_evaluations, score_function=MeanMetrics)
-    trainX, trainY = commonutils.generateSample(2000, 10, distance=0.5)
+    grid_cv = GridOptimalSearchCV(TestClassifier(), grid, n_evaluations=n_evaluations, score_function=mean_score)
     grid_cv.fit(trainX, trainY)
-
     assert 0.8 <= grid_cv.best_score_ <= 1., 'Too poor optimization : %.2f' % grid_cv.best_score_
-    assert MeanMetrics(trainY, grid_cv.predict_proba(trainX)[:, 1]) == grid_cv.best_score_, 'something is wrong'
+    assert mean_score(trainY, grid_cv.predict_proba(trainX)[:, 1]) == grid_cv.best_score_, 'something is wrong'
+
+    grid_cv = GridOptimalSearchCV(TestClassifier(sign=-1), grid, n_evaluations=n_evaluations, score_function=mean_score)
+    grid_cv.fit(trainX, trainY)
+    assert -0.05 <= grid_cv.best_score_ <= 0.0, 'Too poor optimization : %.2f' % grid_cv.best_score_
+    assert mean_score(trainY, grid_cv.predict_proba(trainX)[:, 1]) == grid_cv.best_score_, 'something is wrong'
+
 
 test_optimization()
 
@@ -340,15 +315,12 @@ def test_grid_search():
             'algorithm': ['SAMME', 'SAMME.R']}
     grid = OrderedDict(grid)
 
-    trainX, trainY = commonutils.generateSample(2000, 10, distance=0.5)
+    trainX, trainY = commonutils.generate_sample(2000, 10, distance=0.5)
     grid_cv = GridOptimalSearchCV(AdaBoostClassifier(), grid, n_evaluations=10)
     grid_cv.fit(trainX, trainY)
     grid_cv.predict_proba(trainX)
     grid_cv.predict(trainX)
 
-    x = grid_cv.results_dataframe_
-    print(x.shape)
-
-
+    _ = grid_cv.results_dataframe_.shape
 
 test_grid_search()
