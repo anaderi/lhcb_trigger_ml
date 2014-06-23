@@ -43,8 +43,6 @@ def get_train_test_data_for_bin(bins_data, bin_index, mode='outer'):
     return binFitX, binCorrX, binFitY, binCorrY
 
 
-
-
 class BinningUniformClassifier(BaseEstimator, ClassifierMixin):
     """The meta-classifier, which tries to make efficiency uniform on the mass or some other variable"""
     def __init__(self, base_estimator, uniform_variables=None, n_bins=10, mode='outer',
