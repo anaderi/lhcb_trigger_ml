@@ -15,7 +15,7 @@ from sklearn.neighbors.unsupervised import NearestNeighbors
 from sklearn.tree._tree import DTYPE
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays, column_or_1d
-from commonutils import generateSample
+from commonutils import generate_sample
 import commonutils
 import reports
 
@@ -118,6 +118,206 @@ class SimpleKnnLossFunction(KnnLossFunction):
             w[is_signal] = len(is_signal) / 2. / sum(is_signal)
             w[~is_signal] = len(is_signal) / 2. / sum(1 - is_signal)
         return A, w
+
+
+class SimpleKnnLossFunctionEyeBg(KnnLossFunction):
+    def __init__(self, uniform_variables, knn=5, distinguish_classes=True, diagonal=0.):
+        """A matrix is square, each row corresponds to a single event in train dataset,
+        in each row we put ones to the closest neighbours of that event for signal. For background
+        we have identity matrix.
+
+        If distinguish_classes==True, only events of the same class are chosen.
+        """
+        self.knn = knn
+        self.distinguish_classes = distinguish_classes
+        self.diagonal = diagonal
+        KnnLossFunction.__init__(self, uniform_variables)
+
+    def compute_parameters(self, trainX, trainY):
+        is_signal = trainY > 0.5
+        if self.distinguish_classes:
+            knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, self.knn)
+        if not self.distinguish_classes:
+            is_signal = numpy.ones(len(trainY), dtype=numpy.bool)
+            knn_indices = commonutils.computeSignalKnnIndices(self.uniform_variables, trainX, is_signal, self.knn)
+
+        bg_index = numpy.where(~ is_signal)[0]
+
+        j = 0
+        k = 0
+        ind_ptr = [0]
+        x = set(bg_index)
+        column_indices_help = []
+        for i in range(len(trainX)):
+            if i in x:
+                column_indices_help.append(bg_index[j])
+                ind_ptr.append(k + 1)
+                k += 1
+                j += 1
+            else:
+                for n in knn_indices[i]:
+                    column_indices_help.append(n)
+                ind_ptr.append(k + self.knn)
+                k += self.knn
+
+        column_indices = numpy.array(column_indices_help)
+
+        data = numpy.ones(len(column_indices))
+
+        A = sparse.csr_matrix((data, column_indices, ind_ptr), shape=(len(trainX), len(trainX)))
+        w = numpy.ones(len(trainX))
+        return A, w
+
+
+class SimpleKnnLossFunctionKnnOnDiagonalSignal(KnnLossFunction):
+    def __init__(self, uniform_variables, knn=5, distinguish_classes=True, diagonal=0.):
+        """A matrix is square, each row corresponds to a single event in train dataset,
+        in each row we put ones to the closest neighbours of that event for signal. For background we
+        have identidy matrix times self.knn.
+
+        If distinguish_classes==True, only events of the same class are chosen.
+        """
+        self.knn = knn
+        self.distinguish_classes = distinguish_classes
+        self.diagonal = diagonal
+        KnnLossFunction.__init__(self, uniform_variables)
+
+    def compute_parameters(self, trainX, trainY):
+        is_signal = trainY > 0.5
+        if self.distinguish_classes:
+            knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, self.knn)
+        if not self.distinguish_classes:
+            is_signal = numpy.ones(len(trainY), dtype=numpy.bool)
+            knn_indices = commonutils.computeSignalKnnIndices(self.uniform_variables, trainX, is_signal, self.knn)
+
+        bg_index = numpy.where(is_signal == False)[0]
+
+        j = 0
+        k = 0
+        ind_ptr = [0]
+        x = set(bg_index)
+        column_indices_help = []
+        for i in range(len(trainX)):
+            if (i in x):
+                column_indices_help.append(bg_index[j])
+                ind_ptr.append(k + 1)
+                k += 1
+                j += 1
+            else:
+                for n in knn_indices[i]:
+                    column_indices_help.append(n)
+                ind_ptr.append(k + self.knn)
+                k += self.knn
+
+        column_indices = numpy.array(column_indices_help)
+
+        data = numpy.ones(len(column_indices))
+        data[bg_index] = self.knn
+
+        A = sparse.csr_matrix((data, column_indices, ind_ptr), shape=(len(trainX), len(trainX)))
+        w = numpy.ones(len(trainX))
+        return A, w
+
+
+class SimpleKnnLossFunctionKnnOnDiagonalBg(KnnLossFunction):
+    def __init__(self, uniform_variables, knn=5, distinguish_classes=True, diagonal=0.):
+        """A matrix is square, each row corresponds to a single event in train dataset,
+        in each row we put ones to the closest neighbours of that event for signal. For background we
+        have identidy matrix times self.knn.
+
+        If distinguish_classes==True, only events of the same class are chosen.
+        """
+        self.knn = knn
+        self.distinguish_classes = distinguish_classes
+        self.diagonal = diagonal
+        KnnLossFunction.__init__(self, uniform_variables)
+
+    def compute_parameters(self, trainX, trainY):
+        is_signal = trainY > 0.5
+        if self.distinguish_classes:
+            knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, self.knn)
+        if not self.distinguish_classes:
+            is_signal = numpy.ones(len(trainY), dtype=numpy.bool)
+            knn_indices = commonutils.computeSignalKnnIndices(self.uniform_variables, trainX, is_signal, self.knn)
+
+        bg_index = numpy.where(is_signal == True)[0]
+
+        j = 0
+        k = 0
+        ind_ptr = [0]
+        x = set(bg_index)
+        column_indices_help = []
+        for i in range(len(trainX)):
+            if i in x:
+                column_indices_help.append(bg_index[j])
+                ind_ptr.append(k + 1)
+                k += 1
+                j += 1
+            else:
+                for n in knn_indices[i]:
+                    column_indices_help.append(n)
+                ind_ptr.append(k + self.knn)
+                k += self.knn
+
+        column_indices = numpy.array(column_indices_help)
+
+        data = numpy.ones(len(column_indices))
+        data[bg_index] = self.knn
+
+        A = sparse.csr_matrix((data, column_indices, ind_ptr), shape=(len(trainX), len(trainX)))
+
+        w = numpy.ones(len(trainX))
+        return A, w
+
+
+class SimpleKnnLossFunctionEyeSignal(KnnLossFunction):
+    def __init__(self, uniform_variables, knn=5, distinguish_classes=True, diagonal=0.):
+        """A matrix is square, each row corresponds to a single event in train dataset,
+        in each row we put ones to the closest neighbours of that event for background.
+        For signal we have identity matrix.
+
+        If distinguish_classes==True, only events of the same class are chosen.
+        """
+        self.knn = knn
+        self.distinguish_classes = distinguish_classes
+        self.diagonal = diagonal
+        KnnLossFunction.__init__(self, uniform_variables)
+
+    def compute_parameters(self, trainX, trainY):
+        is_signal = trainY > 0.5
+        if self.distinguish_classes:
+            knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, self.knn)
+        if not self.distinguish_classes:
+            is_signal = numpy.ones(len(trainY), dtype=numpy.bool)
+            knn_indices = commonutils.computeSignalKnnIndices(self.uniform_variables, trainX, is_signal, self.knn)
+
+        bg_index = numpy.where(is_signal == True)[0]
+
+        j = 0
+        k = 0
+        ind_ptr = [0]
+        x = set(bg_index)
+        column_indices_help = []
+        for i in range(len(trainX)):
+            if i in x:
+                column_indices_help.append(bg_index[j])
+                ind_ptr.append(k + 1)
+                k += 1
+                j += 1
+            else:
+                for n in knn_indices[i]:
+                    column_indices_help.append(n)
+                ind_ptr.append(k + self.knn)
+                k += self.knn
+
+        column_indices = numpy.array(column_indices_help)
+        data = numpy.ones(len(column_indices))
+
+        A = sparse.csr_matrix((data, column_indices, ind_ptr), shape=(len(trainX), len(trainX)))
+
+        w = numpy.ones(len(trainX))
+        return A, w
+
 
 
 class PairwiseKnnLossFunction(KnnLossFunction):
@@ -319,13 +519,13 @@ class FlatnessLossFunction(LossFunction):
         bin_limits = []
         for var in self.uniform_variables:
             bin_limits.append(numpy.linspace(numpy.min(X[var][y > .5]), numpy.max(X[var][y > .5]), self.bins + 1)[1:-1])
-        bin_indices = reports.computeBinIndices(X, self.uniform_variables, bin_limits)
+        bin_indices = reports.compute_bin_indices(X, self.uniform_variables, bin_limits)
         n_bins = numpy.prod([len(limits) + 1 for limits in bin_limits])
 
         bin_limits2 = []
         for axis_limits in bin_limits:
             bin_limits2.append((axis_limits[1:] + axis_limits[:-1]) / 2.)
-        bin_indices2 = reports.computeBinIndices(X, self.uniform_variables, bin_limits2) + n_bins
+        bin_indices2 = reports.compute_bin_indices(X, self.uniform_variables, bin_limits2) + n_bins
         assert len(X) == len(y) == len(bin_indices) == len(bin_indices2), "different size"
         n_bins += numpy.prod([len(limits) + 1 for limits in bin_limits2])
 
@@ -359,27 +559,31 @@ class FlatnessLossFunction(LossFunction):
         return loss
 
     def negative_gradient(self, y, y_pred, **kw_args):
-        ngradient = numpy.zeros(len(y))
-        needed_indices = (y > 0.5) if self.on_signal else (y < 0.5)
-        n_needed = numpy.sum(needed_indices)
         y_pred = numpy.ravel(y_pred)
+        ngradient = numpy.zeros(len(y))
+
+        needed_indices = (y > 0.5) if self.on_signal else (y < 0.5)
+
         sorted_global_pred = numpy.sort(y_pred[needed_indices])
 
-        global_efficiencies = numpy.zeros(len(y), dtype=numpy.float)
-        global_efficiencies[numpy.where(needed_indices)[0][y_pred[needed_indices].argsort()]] = \
-            (numpy.arange(0, n_needed) + 0.5) / n_needed
+        global_efficiencies = numpy.searchsorted(sorted_global_pred, y_pred)
+        global_efficiencies = (global_efficiencies + 0.5) / numpy.sum(needed_indices)
+        global_efficiencies[~needed_indices] = 0.
+        # global_efficiencies = numpy.zeros(len(y))
+        # global_efficiencies[numpy.where(needed_indices)[0][y_pred[needed_indices].argsort()]] = \
+        #     (numpy.arange(0, n_needed) + 0.5) / n_needed
 
         for bin_weight, indices_in_bin in zip(self.bin_weights, self.bin_indices):
             preds_in_bin = numpy.take(y_pred, indices_in_bin)
             order = preds_in_bin.argsort()
             indices_in_bin, preds_in_bin = indices_in_bin[order], preds_in_bin[order]
-
-            global_effs = global_efficiencies[indices_in_bin]
             local_effs = (numpy.arange(0, len(preds_in_bin)) + 0.5) / len(preds_in_bin)
+
             if self.new:
                 target_predictions = commonutils.weighted_percentile(sorted_global_pred, local_effs, array_sorted=True)
                 bin_gradient = target_predictions - preds_in_bin
             else:
+                global_effs = global_efficiencies[indices_in_bin]
                 bin_gradient = self.power * numpy.abs(global_effs - local_effs) ** (self.power - 1) \
                                * numpy.sign(local_effs - global_effs)
 
@@ -544,7 +748,6 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
 
         return self
 
-
     def _check_params(self):
         """Check validity of parameters and raise ValueError if not valid. """
         # everything connected with loss was moved to self.fit
@@ -552,7 +755,7 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
             raise ValueError("n_estimators must be greater than 0")
         if self.learning_rate <= 0.0:
             raise ValueError("learning_rate must be greater than 0")
-        if not (0.0 < self.alpha and self.alpha < 1.0):
+        if not (0.0 < self.alpha < 1.0):
             raise ValueError("alpha must be in (0.0, 1.0)")
 
         # we enable to pass simply LossFunction object
@@ -592,10 +795,8 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
         return GradientBoostingClassifier.staged_predict_proba(self, self.get_train_variables(X))
 
 
-
-
-def testGradient(loss, size=1000):
-    X, y = commonutils.generateSample(size, 10)
+def test_gradient(loss, size=1000):
+    X, y = commonutils.generate_sample(size, 10)
     loss.fit(X, y)
     pred = numpy.random.random(size)
     epsilon = 1e-7
@@ -612,12 +813,11 @@ def testGradient(loss, size=1000):
     assert numpy.all(abs(n_gradient + gradient) < 1e-3), "Problem with functional gradient"
 
 
-
-def testGradientBoosting(samples=1000):
+def test_gradient_boosting(samples=1000):
     # Generating some samples correlated with first variable
     distance = 0.6
-    testX, testY = generateSample(samples, 10, distance)
-    trainX, trainY = generateSample(samples, 10, distance)
+    testX, testY = generate_sample(samples, 10, distance)
+    trainX, trainY = generate_sample(samples, 10, distance)
     # We will try to get uniform distribution along this variable
     uniform_variables = ['column0']
     n_estimators = 20
@@ -642,5 +842,5 @@ def testGradientBoosting(samples=1000):
 
     print('uniform gradient boosting is ok')
 
-testGradientBoosting()
+test_gradient_boosting()
 
