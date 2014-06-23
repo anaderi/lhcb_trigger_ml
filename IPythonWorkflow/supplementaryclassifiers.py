@@ -210,15 +210,16 @@ def test_feature_splitter(size=2000):
     from sklearn.lda import LDA
     from sklearn.qda import QDA
 
-    X, y = commonutils.generateSample(size, 10, distance=0.5)
+    X, y = commonutils.generate_sample(size, 10, distance=0.5)
     X['column0'] = numpy.clip(numpy.array(X['column0']).astype(numpy.int), -2, 2)
     trainX, testX, trainY, testY = commonutils.my_train_test_split(X, y)
     base_estimators = {'rf': RandomForestClassifier()}
     splitter = FeatureSplitter('column0', base_estimators=base_estimators, final_estimator=RandomForestClassifier())
     splitter.fit(trainX, trainY)
 
-    if __name__ == 'main':
-        # not print unless this is the start module
+    global print
+    if __name__ != '__main__':
+        # not print unless this in the start module
         print = lambda x: x
 
     print(splitter.score(testX, testY))
@@ -231,7 +232,8 @@ def test_feature_splitter(size=2000):
     print(ChainClassifiers(chain).fit(trainX, trainY).score(testX, testY))
     print(LDA().fit(trainX, trainY).score(testX, testY))
 
-# test_feature_splitter()
+
+test_feature_splitter()
 
 
 
