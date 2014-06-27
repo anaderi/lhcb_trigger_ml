@@ -8,10 +8,10 @@ from __future__ import print_function
 from __future__ import division
 
 import math
-import pandas
-import numpy
-from numpy.random.mtrand import RandomState
 import io
+import numpy
+import pandas
+from numpy.random.mtrand import RandomState
 import sklearn.cross_validation
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.neighbors.unsupervised import NearestNeighbors
@@ -44,10 +44,23 @@ def check_sample_weight(y_true, sample_weight):
         return sample_weight
 
 
+def map_on_cluster(ipc_profile, *args, **kw_args):
+    """The same as map, but the first argument is ipc_profile
+    :type ipc_profile: str | None, the IPython cluster profile to use.
+    :return: the result of mapping
+    """
+    if ipc_profile is None:
+        return map(*args, **kw_args)
+    else:
+        from IPython.parallel import Client
+        return Client(ipc_profile).load_balanced_view().map_sync(*args, **kw_args)
+
+
+#TODO delete "my_"
 def my_train_test_split(*arrays, **kw_args):
     """Does the same thing as train_test_split, but preserves columns in DataFrames.
     Uses the same parameters: test_size, train_size, random_state
-    :param arrays: list[numpy.array | pandas.DataFrame]
+    :type arrays: list[numpy.array | pandas.DataFrame]
     """
     assert len(arrays) > 0, "at least one array should be given"
     length = len(arrays[0])
@@ -75,6 +88,7 @@ def my_train_test_split(*arrays, **kw_args):
 #     return my_train_test_split(common_df, answers, **kw_args)
 
 def weighted_percentile(array, percentiles, sample_weight=None, array_sorted=False, old_style=False):
+    array = numpy.array(array)
     sample_weight = check_sample_weight(array, sample_weight)
     if not array_sorted:
         order = numpy.argsort(array)
@@ -147,6 +161,7 @@ class Binner:
         Initially an array of values is given, which is then splitted into 'bins_number' equal parts,
         and thus we are computing limits (boundaries of bins)."""
         percentiles = [i / n_bins for i in range(1, n_bins)]
+        sample_weight = check_sample_weight(values,  sample_weight=sample_weight)
         self.limits = weighted_percentile(values, percentiles, sample_weight=sample_weight)
 
     def get_bins(self, values):
@@ -217,8 +232,8 @@ def build_normalizer(signal, sample_weight=None):
         # this one should be uniform in [0,1]
         hist(normalizer(signal))
     Parameters:
-        signal: array-like, shape = [n_samples]
-        sample_weight: array-like, shape = [n_samples], the weights associated to events.
+    :type signal: numpy.array, shape = [n_samples] with floats
+    :type sample_weight: numpy.array, shape = [n_samples], non-negative weights associated to events.
     """
     sample_weight = check_sample_weight(signal, sample_weight)
     assert numpy.all(sample_weight >= 0.), 'sample weight must be non-negative'
@@ -267,12 +282,13 @@ test_build_normalizer()
 
 # Functions primarily for uBoost
 
+
 def compute_cut_for_efficiency(efficiency, y_true, y_pred, sample_weight=None):
     """ Computes such cut(s), that provide given signal efficiency.
-    :param efficiency: float or numpy.array with target efficiencies, shape = [n_effs]
-    :param y_true: array-like, shape = [n_samples], labels (zeros ans ones)
-    :param y_pred: array-like, shape = [n_samples], predictions or scores (float)
-    :param sample_weight: None | array-like, shape = [n_samples]
+    :type efficiency: float or numpy.array with target efficiencies, shape = [n_effs]
+    :type y_true: array-like, shape = [n_samples], labels (zeros ans ones)
+    :type y_pred: array-like, shape = [n_samples], predictions or scores (float)
+    :type sample_weight: None | array-like, shape = [n_samples]
     :return: float or numpy.array, shape = [n_effs]
     """
     sample_weight = check_sample_weight(y_true, sample_weight)
@@ -303,17 +319,16 @@ test_compute_cut()
 
 def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
     """Computes cut which gives fixed efficiency.
-    Parameters:
-        target_efficiency: float from 0 to 1 or numpy.array with floats in [0,1]
-        y_true: an array of zeros and ones, shape = [n_samples]
-        y_pred: prediction probabilities returned by classifier, shape = [n_samples, 2]
+    :type target_efficiency: float from 0 to 1 or numpy.array with floats in [0,1]
+    :type y_true: an array of zeros and ones, shape = [n_samples]
+    :type y_pred: prediction probabilities returned by classifier, shape = [n_samples, 2]
     """
     if sample_weight is not None:
         raise ValueError("sample weight is not supported")
     assert len(y_true) == len(y_pred), "different size"
-    signal_probas = y_pred[y_true > 0.5, 1]
+    signal_proba = y_pred[y_true > 0.5, 1]
     percentiles = 1. - target_efficiency
-    return weighted_percentile(signal_probas, percentiles)
+    return weighted_percentile(signal_proba, percentiles)
 
 
 def compute_groups_efficiencies(global_cut, knn_indices, answers, prediction_proba,
@@ -330,11 +345,9 @@ def compute_groups_efficiencies(global_cut, knn_indices, answers, prediction_pro
 
 
 def sigmoid_function(x, width):
-    """ Sigmoid function is smoothing oh Heaviside function, the lesser width,
-        the closer we are to Heaviside function
-    Parameters:
-        x: array-like with floats, arbitrary shape
-        width: float, if width == 0, this is simply Heaviside function
+    """ Sigmoid function is smoothing oh Heaviside function, the lesser width, the closer we are to Heaviside function
+    :type x: array-like with floats, arbitrary shape
+    :type width: float, if width == 0, this is simply Heaviside function
     """
     assert width >= 0, 'the width should be non-negative'
     if abs(width) > 0.0001:
@@ -363,12 +376,10 @@ generateSample = generate_sample
 
 def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, n_neighbors=50):
     """For each event returns the knn closest signal(!) events. No matter of what class the event is.
-    Parameters:
-        uniform_variables: list of names of variables, using which we want to compute the distance
-        dataframe: should contain these variables
-        is_signal: is boolean numpy.array, shape = [n_samples]
-    Returns:
-        numpy.array of shape [len(dataframe), knn], each row contains indices of closest signal events
+    :type uniform_variables: list of names of variables, using which we want to compute the distance
+    :type dataframe: pandas.DataFrame, should contain these variables
+    :type is_signal: numpy.array, shape = [n_samples] with booleans
+    :rtype numpy.array, shape [len(dataframe), knn], each row contains indices of closest signal events
     """
     assert len(dataframe) == len(is_signal), "Different lengths"
     signal_indices = numpy.where(is_signal)[0]
