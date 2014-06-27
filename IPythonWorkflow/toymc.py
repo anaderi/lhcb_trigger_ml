@@ -262,7 +262,7 @@ def test_on_dataframe(df, excluded_features=None, clustering_features=None, inte
         mean1 = numpy.mean(data[column])
         mean2 = numpy.mean(toy_data[column])
         std1 = numpy.std(data[column])
-        std2 = numpy.std(data[column])
+        std2 = numpy.std(toy_data[column])
         mean_rows.append([mean1, mean2, mean2 - mean1, abs((mean1-mean2) * 100. / mean1),
                           std1, std2, std2 - std1, abs((std2 - std1) * 100. / std1)])
 
