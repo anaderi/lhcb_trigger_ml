@@ -9,6 +9,7 @@ the analysis is performed in __IPython__ notebooks - commonly used in machine le
 # Brief demos:
 * [Dalitz Demo](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/IPythonWorkflow/DalitzDemo.ipynb) (several uniforming classifiers on dataset from uBoost paper)
 * [Decay of tau into three muons](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/IPythonWorkflow/TauIntoMuons.ipynb)
+* [Generation of toy Monte-Carlo](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/IPythonWorkflow/Demo_ToyMonteCarlo.ipynb)
 * Any other notebook from repository can be viewed: just paste its link to [nbviewer](http://nbviewer.ipython.org)  
 
 # Main points
