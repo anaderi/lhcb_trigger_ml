@@ -275,8 +275,8 @@ def test_on_dataframe(df, excluded_features=None, clustering_features=None, inte
     for i, first_column in enumerate(data.columns, ):
         for second_column in data.columns[i:]:
             cov_index.append((first_column, second_column))
-            data_cov = pearsonr(data[first_column], data[second_column])
-            toy_cov = pearsonr(toy_data[first_column], toy_data[second_column])
+            data_cov = pearsonr(data[first_column], data[second_column])[0]
+            toy_cov = pearsonr(toy_data[first_column], toy_data[second_column])[0]
             cov_rows.append([data_cov, toy_cov, toy_cov-data_cov, abs((data_cov - toy_cov) * 100. / data_cov)])
     display_html(pandas.DataFrame(cov_rows, index=cov_index, columns=['original', 'toy', 'difference', 'error, %']))
 
