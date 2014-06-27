@@ -273,7 +273,7 @@ def test_on_dataframe(df, excluded_features=None, clustering_features=None, inte
     cov_index = []
     cov_rows = []
     for i, first_column in enumerate(data.columns, ):
-        for second_column in data.columns[i:]:
+        for second_column in data.columns[i+1:]:
             cov_index.append((first_column, second_column))
             data_cov = pearsonr(data[first_column], data[second_column])[0]
             toy_cov = pearsonr(toy_data[first_column], toy_data[second_column])[0]
