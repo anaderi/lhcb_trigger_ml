@@ -4,9 +4,8 @@ from __future__ import print_function
 import math
 import numpy
 import pandas
-from numpy.random.mtrand import randint
 from sklearn.neighbors import NearestNeighbors
-from commonutils import map_on_cluster
+from commonutils import map_on_cluster, check_sample_weight
 
 __author__ = 'Alex Rogozhnikov'
 
@@ -15,26 +14,32 @@ __author__ = 'Alex Rogozhnikov'
 # This module contains procedures to generate Toy Monte-Carlo
 # by using modified SMOTE approach
 
+# TODO test whether we really need to symmetrize, in the other case everything can be simplified
+# TODO use classifier-based measure of quality
+# TODO random state
 
-def count_probabilities(weights, knn):
+
+def count_probabilities(primary_weights, secondary_weights, knn):
     """Computes probabilities of all points to be chosen as the second point in pair
-    :type weights: numpy.array, shape = [n_samples],
-        the second element is chosen between knn according to this weights
+    :type primary_weights: numpy.array, shape = [n_samples],
+        the first event is generated according to these weights
+    :type secondary_weights: numpy.array, shape = [n_samples],
+        the second event is chosen between knn of first according to this weights
     :type knn: dict, {event_id: list of neighbors ids}.
     :rtype: numpy.array, shape = [n_samples], the probabilities
     """
     size = len(knn)
-    weights = numpy.array(weights)
-    probabilities = numpy.zeros(size)
+    primary_weights /= numpy.sum(primary_weights)
+    secondary_weights = numpy.array(secondary_weights)
+    probabilities = numpy.zeros(size, dtype=float)
     for index, neighbours in knn.iteritems():
-        knn_weights = numpy.take(weights, neighbours)
-        knn_proba = knn_weights / numpy.sum(knn_weights) / size
+        knn_weights = numpy.take(secondary_weights, neighbours)
+        knn_proba = knn_weights / numpy.sum(knn_weights) * primary_weights[index]
         probabilities[neighbours] += knn_proba
     return probabilities
 
 
-# TODO test whether we really need to symmetrize
-def generate_toymc(data, size, knn=4, symmetrize=True, power=2.0, reweighting_iterations=5):
+def generate_toymc(data, size, knn=4, symmetrize=True, power=2.0, reweighting_iterations=5, sample_weight=None):
     """Generates toy Monte-Carlo, the dataset with distribution very close to the original one
 
     :type data: numpy.array | pandas.DataFrame, the original distribution
@@ -52,6 +57,9 @@ def generate_toymc(data, size, knn=4, symmetrize=True, power=2.0, reweighting_it
 
     data = pandas.DataFrame(data)
     input_length = len(data)
+
+    sample_weight = check_sample_weight(data, sample_weight=sample_weight)
+    sample_weight /= numpy.sum(sample_weight)
 
     if input_length <= 2:
         # unable to generate new events with only one-two given
@@ -86,20 +94,21 @@ def generate_toymc(data, size, knn=4, symmetrize=True, power=2.0, reweighting_it
         for i, neighbours_i in old_neighbours.iteritems():
             two_side_neighbours[i] = numpy.unique(neighbours_i)
 
-    weights = numpy.ones(len(neighbours), dtype=float)
+    secondary_weights = numpy.ones(len(neighbours), dtype=float)
     for _ in range(reweighting_iterations):
-        probabilities = count_probabilities(weights, two_side_neighbours)
-        weights *= (probabilities ** -0.5)
+        probabilities = count_probabilities(sample_weight, secondary_weights, two_side_neighbours)
+        secondary_weights *= ((sample_weight / probabilities) ** 0.5)
 
     # generating indices and weights
-    k_1 = randint(0, input_length, size)
+    k_1 = numpy.random.choice(input_length, p=sample_weight, size=size)
+        # randint(0, input_length, size)
     t_1 = 0.6 * numpy.random.random(size) ** power
     t_2 = 1. - t_1
 
-    k_2 = numpy.zeros(size, dtype=numpy.int)
+    k_2 = numpy.zeros(size, dtype=int)
     for i in range(size):
         neighs = two_side_neighbours[k_1[i]]
-        neigh_weights = numpy.take(weights, neighs)
+        neigh_weights = numpy.take(secondary_weights, neighs)
         neigh_weights /= numpy.sum(neigh_weights)
         # selected_neigh = getRandom(neighs, weights)
         k_2[i] = numpy.random.choice(neighs, p=neigh_weights)
@@ -167,36 +176,36 @@ def generate_toymc_with_special_features(data, size, clustering_features=None, i
     return result
 
 
-def compare_covariance_3d(data, toy_data, n_features=6):
-    import pylab
-    data_cov = numpy.cov(data.T)[:n_features,:n_features]
-    toy_cov = numpy.cov(toy_data.T)[:n_features,:n_features]
-
-    pylab.figure(figsize=(12, 5))
-    assert data_cov.shape == toy_cov.shape, "different size of matrices"
-    vars1, vars2 = data_cov.shape
-    x, y = range(vars1), range(vars2)
-    X, Y = numpy.meshgrid(x, y)
-    X = X.flatten()
-    Y = Y.flatten()
-    Z_min = numpy.zeros_like(X)
-    Z_max_left = data_cov.flatten()
-    Z_max_right = toy_cov.flatten()
-
-    maximal_cov = max(numpy.max(toy_cov), numpy.max(data_cov))
-
-    pylab.subplot(121, projection='3d')
-    pylab.bar3d(X - 0.5, Y - 0.5, Z_min, 1, 1, Z_max_left,  color='b', zsort='average')
-    pylab.zlim(0, maximal_cov)
-    pylab.title("Original MC")
-    pylab.view_init(35, 225 + 30)
-
-    pylab.subplot(122, projection='3d')
-    pylab.bar3d(X - 0.5, Y - 0.5, Z_min, 1, 1, Z_max_right, color='b', zsort='average')
-    pylab.zlim(0, maximal_cov)
-    pylab.title("Toy MC")
-    pylab.view_init(35, 225 + 30)
-    pylab.show()
+# def compare_covariance_3d(data, toy_data, n_features=6):
+#     import pylab
+#     data_cov = numpy.cov(data.T)[:n_features,:n_features]
+#     toy_cov = numpy.cov(toy_data.T)[:n_features,:n_features]
+#
+#     pylab.figure(figsize=(12, 5))
+#     assert data_cov.shape == toy_cov.shape, "different size of matrices"
+#     vars1, vars2 = data_cov.shape
+#     x, y = range(vars1), range(vars2)
+#     X, Y = numpy.meshgrid(x, y)
+#     X = X.flatten()
+#     Y = Y.flatten()
+#     Z_min = numpy.zeros_like(X)
+#     Z_max_left = data_cov.flatten()
+#     Z_max_right = toy_cov.flatten()
+#
+#     maximal_cov = max(numpy.max(toy_cov), numpy.max(data_cov))
+#
+#     pylab.subplot(121, projection='3d')
+#     pylab.bar3d(X - 0.5, Y - 0.5, Z_min, 1, 1, Z_max_left,  color='b', zsort='average')
+#     pylab.zlim(0, maximal_cov)
+#     pylab.title("Original MC")
+#     pylab.view_init(35, 225 + 30)
+#
+#     pylab.subplot(122, projection='3d')
+#     pylab.bar3d(X - 0.5, Y - 0.5, Z_min, 1, 1, Z_max_right, color='b', zsort='average')
+#     pylab.zlim(0, maximal_cov)
+#     pylab.title("Toy MC")
+#     pylab.view_init(35, 225 + 30)
+#     pylab.show()
 
 
 def test_on_dataframe(df, excluded_features=None, clustering_features=None, integer_features=None):
@@ -245,23 +254,26 @@ def test_on_dataframe(df, excluded_features=None, clustering_features=None, inte
     pylab.show()
 
     print("\nMEANS")
-    index = []
-    df_rows = []
-
+    mean_index = []
+    mean_rows = []
     for column in data.columns:
-        index.append(column)
+        mean_index.append(column)
         mean1 = numpy.mean(data[column])
         mean2 = numpy.mean(toy_data[column])
-        df_rows.append([mean1, mean2, mean1 - mean2, abs((mean1-mean2) * 100. / mean1)])
+        mean_rows.append([mean1, mean2, mean2 - mean1, abs((mean1-mean2) * 100. / mean1)])
 
-    df = pandas.DataFrame(df_rows, index=index, columns=['original', 'toy', 'difference', 'error, %'])
-    display_html(df)
+    display_html(pandas.DataFrame(mean_rows, index=mean_index, columns=['original', 'toy', 'difference', 'error, %']))
 
-    # TODO better visualization of covariance, 3d isn't enough
-    # compare_covariance_3d(data, toy_data)
-
-    # print "Original MC covariance (first 6 vars):\n", origCovar
-    # print "ToyMC covariance (first 6 vars):\n", toyCovar
+    print("\nCOVARIANCES")
+    cov_index = []
+    cov_rows = []
+    for i, first_column in enumerate(data.columns, ):
+        for second_column in data.columns[i:]:
+            cov_index.append((first_column, second_column))
+            data_cov = numpy.cov(data[first_column], data[second_column])
+            toy_cov = numpy.cov(toy_data[first_column], toy_data[second_column])
+            cov_rows.append([data_cov, toy_cov, toy_cov-data_cov, abs((data_cov - toy_cov) / data_cov)])
+    display_html(pandas.DataFrame(cov_rows, index=cov_index, columns=['original', 'toy', 'difference', 'error, %']))
 
     for col, first_column in enumerate(data.columns[:4]):
         for second_column in data.columns[col + 1:4]:
@@ -270,7 +282,7 @@ def test_on_dataframe(df, excluded_features=None, clustering_features=None, inte
             y_min = numpy.min(data[second_column])
             y_max = numpy.max(data[second_column])
 
-            pylab.figure(figsize = (12, 5))
+            pylab.figure(figsize=(12, 5))
             pylab.subplot(121)
             pylab.plot(data[first_column], data[second_column], '.', alpha=0.1)
             pylab.xlim(x_min, x_max), pylab.ylim(y_min, y_max)
@@ -284,10 +296,6 @@ def test_on_dataframe(df, excluded_features=None, clustering_features=None, inte
             pylab.suptitle(str(first_column) + " vs " + str(second_column))
             pylab.show()
 
-import pandas
-test_on_dataframe(pandas.DataFrame(numpy.random.normal(size=(1000,10))))
-
-
 
 def test_toy_monte_carlo(size=100):
     df = pandas.DataFrame(numpy.random.random((size, 40)))
@@ -297,6 +305,7 @@ def test_toy_monte_carlo(size=100):
 
 
 if __name__ == '__main__':
+    test_on_dataframe(pandas.DataFrame(numpy.random.normal(size=(1000, 10))))
     import cProfile
     cProfile.run("test_toy_monte_carlo(10000)")
 else:
