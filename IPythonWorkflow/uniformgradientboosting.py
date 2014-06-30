@@ -1,11 +1,15 @@
 from __future__ import print_function
 from __future__ import division
-from collections import defaultdict
+
+from collections import defaultdict, OrderedDict
+from itertools import izip
+import numbers
 from time import time
 import itertools
 import math
 import scipy.sparse as sparse
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.base import BaseEstimator
+from sklearn.ensemble import GradientBoostingClassifier as GBClassifier
 from sklearn.ensemble._gradient_boosting import _random_sample_mask
 from sklearn.ensemble.gradient_boosting import LossFunction, LOSS_FUNCTIONS, MultinomialDeviance, \
     LogOddsEstimator, BinomialDeviance
@@ -15,14 +19,14 @@ from sklearn.neighbors.unsupervised import NearestNeighbors
 from sklearn.tree._tree import DTYPE
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays, column_or_1d
-from commonutils import generate_sample
+from commonutils import generate_sample, check_sample_weight
 import commonutils
 import reports
 
 __author__ = 'Alex Rogozhnikov'
 
 
-class KnnLossFunction(LossFunction):
+class KnnLossFunction(LossFunction, BaseEstimator):
     def __init__(self, uniform_variables):
         """KnnLossFunction is a base class to be inherited by other loss functions,
         which choose the particular A matrix and w vector. The formula of loss is:
@@ -198,7 +202,7 @@ class SimpleKnnLossFunctionKnnOnDiagonalSignal(KnnLossFunction):
         x = set(bg_index)
         column_indices_help = []
         for i in range(len(trainX)):
-            if (i in x):
+            if i in x:
                 column_indices_help.append(bg_index[j])
                 ind_ptr.append(k + 1)
                 k += 1
@@ -223,7 +227,7 @@ class SimpleKnnLossFunctionKnnOnDiagonalBg(KnnLossFunction):
     def __init__(self, uniform_variables, knn=5, distinguish_classes=True, diagonal=0.):
         """A matrix is square, each row corresponds to a single event in train dataset,
         in each row we put ones to the closest neighbours of that event for signal. For background we
-        have identidy matrix times self.knn.
+        have identity matrix times self.knn.
 
         If distinguish_classes==True, only events of the same class are chosen.
         """
@@ -400,6 +404,7 @@ class AdaLossFunction(KnnLossFunction):
     def compute_parameters(self, trainX, trainY):
         return sparse.eye(len(trainX), len(trainX)), numpy.ones(len(trainX))
 
+
 class DistanceBasedKnnFunction(KnnLossFunction):
     def __init__(self, uniform_variables, knn=None, distance_dependence=None, large_preds_penalty=0.,
                  row_normalize=False):
@@ -458,67 +463,97 @@ class DistanceBasedKnnFunction(KnnLossFunction):
         return A, numpy.ones(A.shape[0])
 
 
-class FlatnessLossFunction(LossFunction):
-    def __init__(self, uniform_variables, bins=10, on_signal=True, power=2., ada_coefficient=1.,
-                 allow_negative_gradients=True, keep_debug_info=False, new=False):
+def compute_efficiencies(mask, y_pred, sample_weight):
+    """For each event computes it position among other events by prediction. """
+    order = numpy.argsort(y_pred[mask])
+    weights = sample_weight[mask][order]
+    efficiencies = (numpy.cumsum(weights) - 0.5 * weights) / numpy.sum(weights)
+    return efficiencies[numpy.argsort(order)]
+
+
+def test_compute_efficiency(size=100):
+    y_pred = numpy.random.random(size)
+    mask = numpy.random.random(size) > 0.5
+    effs = compute_efficiencies(mask, y_pred, sample_weight=numpy.ones(size))
+    assert len(effs) == numpy.sum(mask)
+    assert len(effs) == len(set(effs))
+    assert numpy.all(effs[numpy.argsort(y_pred[mask])] == numpy.sort(effs))
+    effs2 = compute_efficiencies(numpy.where(mask)[0], y_pred, sample_weight=numpy.ones(size))
+    assert numpy.all(effs == effs2)
+    print("Compute efficiency is ok")
+
+test_compute_efficiency()
+
+
+
+class FlatnessLossFunction(LossFunction, BaseEstimator):
+    def __init__(self, uniform_variables, bins=10, uniform_label=1, power=2., ada_coefficient=1.,
+                 allow_wrong_signs=True, keep_debug_info=False, sign=1):
         """
         This loss function contains separately penalty for non-flatness and ada_coefficient.
         The penalty for non-flatness is using bins.
 
         :param uniform_variables: the vars, along which we want to obtain uniformity
         :param bins: the number of bins along each axis
-        :param on_signal: if True, we penalize non-uniformity in signal, else -- in bg
+        :param uniform_label: int | list(int), the labels for which we want to obtain uniformity
         :param power: the loss contains the difference | F - F_bin |^p, where p is power
         :param ada_coefficient: coefficient of ada_loss added to this one. The greater the coefficient,
             the less we tend to uniformity.
-        :param allow_negative_gradients: defines whether gradient may different sign from the "sign of class"
+        :param allow_wrong_signs: defines whether gradient may different sign from the "sign of class"
             (i.e. may have negative gradient on signal)
         """
         self.uniform_variables = uniform_variables
         self.bins = bins
-        self.on_signal = on_signal
+        self.uniform_label = numpy.array([uniform_label]) if isinstance(uniform_label, numbers.Number)  \
+            else numpy.array(uniform_label)
         self.power = power
         self.ada_coefficient = ada_coefficient
-        self.allow_negative_gradients = allow_negative_gradients
+        self.allow_wrong_signs = allow_wrong_signs
         self.keep_debug_info = keep_debug_info
-        # TODO not create a new flatness loss
-        self.new = new
+        self.sign = sign
         LossFunction.__init__(self, 1)
 
-    def fit(self, X, y):
-        indices_dict = self.computeIndicesInBin(X, y)
-        # cleaning the bins - deleting tiny or empty bins, canonizing
-        self.bin_indices = []
-        occurences = numpy.zeros(len(X))
-        for bin, indices in indices_dict.iteritems():
-            if len(indices) < 5:
-                # ignoring very small bins
-                continue
-            np_indices = numpy.array(indices)
-            self.bin_indices.append(np_indices)
-            occurences[np_indices] += 1
+    def fit(self, X, y, sample_weight=None):
+        # TODO add weights
+        assert len(X) == len(y), 'The lengths are different'
+        sample_weight = check_sample_weight(y,  sample_weight=sample_weight)
 
-        needed_indices = (y > 0.5) == self.on_signal
+        self.bin_indices = defaultdict(list)
+        self.bin_weights = defaultdict(list)
+        occurences = numpy.zeros(len(X), dtype=int)
+
+        for label in numpy.array(self.uniform_label):
+            indices_dict = self.compute_indices_in_bin(X, y, sample_weight=sample_weight, label=label)
+            # cleaning the bins - deleting tiny or empty bins, canonizing
+            for bin, indices in indices_dict.iteritems():
+                if len(indices) < 5:
+                    # ignoring very small bins
+                    continue
+                self.bin_indices[label].append(numpy.array(indices))
+                self.bin_weights[label].append(numpy.mean(sample_weight[indices]))
+                occurences[indices] += 1
+
+        y = numpy.array(y, dtype=int)
+        needed_indices = numpy.in1d(y, self.uniform_label)
         out_of_bins = numpy.sum((occurences == 0) & needed_indices)
         if out_of_bins > 0.01 * len(X):
             print("warning: %i events are out of all bins" % out_of_bins)
 
-        event_weights = 1. / (occurences + 1e-10)
-        # bin weight is some mean of weights of its events
-        self.bin_weights = numpy.zeros(len(self.bin_indices))
-        for i, bin_indices in enumerate(self.bin_indices):
-            self.bin_weights[i] = numpy.mean(event_weights[bin_indices])
+        self.sample_weight = sample_weight
+        self.event_weights = sample_weight / (occurences + 1e-10)
         if self.keep_debug_info:
             self.debug_dict = defaultdict(list)
         return self
 
-
-    def computeIndicesInBin(self, X, y):
+    def compute_indices_in_bin(self, X, y, sample_weight, label):
         """Returns a dictionary, each value is a list with indices inside this bin,
         template method, may be overriden in descendants"""
+        # TODO move to separate function
+        needed_indices = y == label
         bin_limits = []
         for var in self.uniform_variables:
-            bin_limits.append(numpy.linspace(numpy.min(X[var][y > .5]), numpy.max(X[var][y > .5]), self.bins + 1)[1:-1])
+            bin_limits.append(numpy.linspace(numpy.min(X[var][needed_indices]),
+                                             numpy.max(X[var][needed_indices]), self.bins + 1)[1:-1])
         bin_indices = reports.compute_bin_indices(X, self.uniform_variables, bin_limits)
         n_bins = numpy.prod([len(limits) + 1 for limits in bin_limits])
 
@@ -531,7 +566,7 @@ class FlatnessLossFunction(LossFunction):
 
         indices_in_bin = defaultdict(list)
         for i, bin in itertools.chain(enumerate(bin_indices), enumerate(bin_indices2)):
-            if (y[i] > 0.5) == self.on_signal:
+            if y[i] in self.uniform_label:
                 indices_in_bin[bin].append(i)
 
         return indices_in_bin
@@ -540,8 +575,10 @@ class FlatnessLossFunction(LossFunction):
         # computing the common distribution of signal
         # taking only signal by now
         # this is approximate computation!
+        raise NotImplementedError("Will be implemented later")
+        # TODO implement
         pred = numpy.ravel(pred)
-        needed_indices = (y > 0.5) == self.on_signal
+        needed_indices = numpy.in1d(y, self.uniform_label)
         sorted_pred = numpy.sort(pred[needed_indices])
         loss = 0
 
@@ -560,51 +597,38 @@ class FlatnessLossFunction(LossFunction):
 
     def negative_gradient(self, y, y_pred, **kw_args):
         y_pred = numpy.ravel(y_pred)
-        ngradient = numpy.zeros(len(y))
+        neg_gradient = numpy.zeros(len(y))
 
-        needed_indices = (y > 0.5) if self.on_signal else (y < 0.5)
+        for label in self.uniform_label:
+            label_mask = y_pred == label
+            global_efficiencies = numpy.zeros(len(y_pred), dtype=float)
+            global_efficiencies[label_mask] = compute_efficiencies(label_mask, y_pred, sample_weight=self.sample_weight)
 
-        sorted_global_pred = numpy.sort(y_pred[needed_indices])
-
-        global_efficiencies = numpy.searchsorted(sorted_global_pred, y_pred)
-        global_efficiencies = (global_efficiencies + 0.5) / numpy.sum(needed_indices)
-        global_efficiencies[~needed_indices] = 0.
-        # global_efficiencies = numpy.zeros(len(y))
-        # global_efficiencies[numpy.where(needed_indices)[0][y_pred[needed_indices].argsort()]] = \
-        #     (numpy.arange(0, n_needed) + 0.5) / n_needed
-
-        for bin_weight, indices_in_bin in zip(self.bin_weights, self.bin_indices):
-            preds_in_bin = numpy.take(y_pred, indices_in_bin)
-            order = preds_in_bin.argsort()
-            indices_in_bin, preds_in_bin = indices_in_bin[order], preds_in_bin[order]
-            local_effs = (numpy.arange(0, len(preds_in_bin)) + 0.5) / len(preds_in_bin)
-
-            if self.new:
-                target_predictions = commonutils.weighted_percentile(sorted_global_pred, local_effs, array_sorted=True)
-                bin_gradient = target_predictions - preds_in_bin
-            else:
+            for bin_weight, indices_in_bin in zip(self.bin_weights[label], self.bin_indices[label]):
+                assert numpy.all(label_mask[indices_in_bin]), "TODO delete"
+                local_effs = compute_efficiencies(indices_in_bin, y_pred, sample_weight=self.sample_weight)
                 global_effs = global_efficiencies[indices_in_bin]
-                bin_gradient = self.power * numpy.abs(global_effs - local_effs) ** (self.power - 1) \
-                               * numpy.sign(local_effs - global_effs)
+                bin_gradient = self.sign * self.power * numpy.sign(global_effs - local_effs) \
+                               * numpy.abs(global_effs - local_effs) ** (self.power - 1)
 
-            # TODO multiply by derivative of F_global ?
-            ngradient[indices_in_bin] += bin_weight * bin_gradient
+                # TODO multiply by derivative of F_global ?
+                neg_gradient[indices_in_bin] += bin_weight * bin_gradient
 
-        assert numpy.all(ngradient[~needed_indices] == 0)
+        assert numpy.all(neg_gradient[~numpy.in1d(y, self.uniform_label)] == 0)
 
         y_signed = 2 * y - 1
         if self.keep_debug_info:
             self.debug_dict['pred'].append(numpy.copy(y_pred))
-            self.debug_dict['fl_grad'].append(numpy.copy(ngradient))
+            self.debug_dict['fl_grad'].append(numpy.copy(neg_gradient))
             self.debug_dict['ada_grad'].append(y_signed * numpy.exp(- y_signed * y_pred))
         # adding ada
         ada_sqrt = math.sqrt(self.ada_coefficient)
-        ngradient = ngradient / ada_sqrt + ada_sqrt * y_signed * numpy.exp(- y_signed * y_pred)
+        neg_gradient = neg_gradient / ada_sqrt + ada_sqrt * y_signed * numpy.exp(- y_signed * y_pred)
 
-        if not self.allow_negative_gradients:
-            ngradient = y_signed * numpy.clip(y_signed * ngradient, 0, 1e5)
+        if not self.allow_wrong_signs:
+            neg_gradient = y_signed * numpy.clip(y_signed * neg_gradient, 0, 1e5)
 
-        return ngradient
+        return neg_gradient
 
     # def update_terminal_regions(self, tree, X, y, residual, y_pred, sample_mask, learning_rate=1.0, k=0):
         # the standard version is used
@@ -613,8 +637,6 @@ class FlatnessLossFunction(LossFunction):
         # terminal_region = numpy.where(terminal_regions == leaf)[0]
         tree.value[leaf, 0, 0] = numpy.clip(tree.value[leaf, 0, 0], -10, 10)
         # TODO think of real minimization
-        # print tree.value[leaf, 0, 0]
-        # tree.value[leaf, 0, 0] = numpy.median(y.take(terminal_region, axis=0) - pred.take(terminal_region, axis=0))
 
     def init_estimator(self, X=None, y=None):
         return LogOddsEstimator()
@@ -624,7 +646,7 @@ class FlatnessLossFunction(LossFunction):
 
 
 
-class MyGradientBoostingClassifier(GradientBoostingClassifier):
+class MyGradientBoostingClassifier(GBClassifier):
     def __init__(self, loss='deviance', learning_rate=0.1, n_estimators=100,
                  subsample=1.0, min_samples_split=2, min_samples_leaf=1,
                  max_depth=3, init=None, random_state=None,
@@ -636,7 +658,7 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
         :param loss: LossFunction or string
         """
         self.train_variables = train_variables
-        GradientBoostingClassifier.__init__(self, loss=loss, learning_rate=learning_rate, n_estimators=n_estimators,
+        GBClassifier.__init__(self, loss=loss, learning_rate=learning_rate, n_estimators=n_estimators,
             subsample=subsample, min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf,
             max_depth=max_depth, init=init, random_state=random_state, max_features=max_features, verbose=verbose)
 
@@ -722,7 +744,6 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
 
         # perform boosting iterations
         for i in range(self.n_estimators):
-
             # subsampling
             if do_oob:
                 sample_mask = _random_sample_mask(n_samples, n_inbag, random_state)
@@ -786,13 +807,13 @@ class MyGradientBoostingClassifier(GradientBoostingClassifier):
             self.init_ = self.loss_.init_estimator()
 
     def predict(self, X):
-        return GradientBoostingClassifier.predict(self, self.get_train_variables(X))
+        return GBClassifier.predict(self, self.get_train_variables(X))
 
     def predict_proba(self, X):
-        return GradientBoostingClassifier.predict_proba(self, self.get_train_variables(X))
+        return GBClassifier.predict_proba(self, self.get_train_variables(X))
 
     def staged_predict_proba(self, X):
-        return GradientBoostingClassifier.staged_predict_proba(self, self.get_train_variables(X))
+        return GBClassifier.staged_predict_proba(self, self.get_train_variables(X))
 
 
 def test_gradient(loss, size=1000):
@@ -828,9 +849,8 @@ def test_gradient_boosting(samples=1000):
     loss4 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
     loss5 = DistanceBasedKnnFunction(uniform_variables, knn=10, distance_dependence=lambda r: numpy.exp(-0.1 * r))
     loss6 = FlatnessLossFunction(uniform_variables, ada_coefficient=1)
-    loss7 = FlatnessLossFunction(uniform_variables, ada_coefficient=1, new=True)
 
-    for loss in [loss1, loss2, loss3, loss4, loss5, loss6, loss7]:
+    for loss in [loss1, loss2, loss3, loss4, loss5, loss6]:
         result = MyGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2,
                                               subsample=0.7, n_estimators=n_estimators, train_variables=None)\
             .fit(trainX[:samples], trainY[:samples]).score(testX, testY)
