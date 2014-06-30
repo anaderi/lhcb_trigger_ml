@@ -519,6 +519,7 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
         sample_weight = check_sample_weight(y,  sample_weight=sample_weight)
 
         self.bin_indices = defaultdict(list)
+        # The weight of bin is sum of ene
         self.bin_weights = defaultdict(list)
         occurences = numpy.zeros(len(X), dtype=int)
 
@@ -575,21 +576,22 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
         # computing the common distribution of signal
         # taking only signal by now
         # this is approximate computation!
-        raise NotImplementedError("Will be implemented later")
-        # TODO implement
+        # TODO implement, this is wrong implementation
         pred = numpy.ravel(pred)
-        needed_indices = numpy.in1d(y, self.uniform_label)
-        sorted_pred = numpy.sort(pred[needed_indices])
         loss = 0
 
-        for bin_weight, indices_in_bin in zip(self.bin_weights, self.bin_indices):
-            probs_in_bin = numpy.take(pred, indices_in_bin)
-            probs_in_bin = numpy.sort(probs_in_bin)
-            positions = numpy.searchsorted(sorted_pred, probs_in_bin)
-            global_effs = positions / float(len(sorted_pred))
-            local_effs = (numpy.arange(0, len(probs_in_bin)) + 0.5) / len(probs_in_bin)
-            bin_loss = numpy.sum((global_effs - local_effs) ** self.power)
-            loss += bin_loss * bin_weight
+        for label in self.uniform_label:
+            needed_indices = y == label
+            sorted_pred = numpy.sort(pred[needed_indices])
+
+            for bin_weight, indices_in_bin in zip(self.bin_weights[label], self.bin_indices[label]):
+                probs_in_bin = numpy.take(pred, indices_in_bin)
+                probs_in_bin = numpy.sort(probs_in_bin)
+                positions = numpy.searchsorted(sorted_pred, probs_in_bin)
+                global_effs = positions / float(len(sorted_pred))
+                local_effs = (numpy.arange(0, len(probs_in_bin)) + 0.5) / len(probs_in_bin)
+                bin_loss = numpy.sum((global_effs - local_effs) ** self.power)
+                loss += bin_loss * bin_weight
 
         # Ada loss now
         loss += self.ada_coefficient * numpy.sum(numpy.exp(-y * pred))
@@ -600,7 +602,7 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
         neg_gradient = numpy.zeros(len(y))
 
         for label in self.uniform_label:
-            label_mask = y_pred == label
+            label_mask = y == label
             global_efficiencies = numpy.zeros(len(y_pred), dtype=float)
             global_efficiencies[label_mask] = compute_efficiencies(label_mask, y_pred, sample_weight=self.sample_weight)
 
@@ -620,10 +622,10 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
         if self.keep_debug_info:
             self.debug_dict['pred'].append(numpy.copy(y_pred))
             self.debug_dict['fl_grad'].append(numpy.copy(neg_gradient))
-            self.debug_dict['ada_grad'].append(y_signed * numpy.exp(- y_signed * y_pred))
+            self.debug_dict['ada_grad'].append(y_signed * self.sample_weight * numpy.exp(- y_signed * y_pred))
         # adding ada
         ada_sqrt = math.sqrt(self.ada_coefficient)
-        neg_gradient = neg_gradient / ada_sqrt + ada_sqrt * y_signed * numpy.exp(- y_signed * y_pred)
+        neg_gradient = neg_gradient / ada_sqrt + ada_sqrt * y_signed * self.sample_weight * numpy.exp(-y_signed * y_pred)
 
         if not self.allow_wrong_signs:
             neg_gradient = y_signed * numpy.clip(y_signed * neg_gradient, 0, 1e5)
@@ -655,7 +657,7 @@ class MyGradientBoostingClassifier(GBClassifier):
         GradientBoosting from sklearn, which is modified to work with KnnLossFunction and it's versions.
         Train variables are variables used in training trees.
 
-        :param loss: LossFunction or string
+        :type loss: LossFunction | str
         """
         self.train_variables = train_variables
         GBClassifier.__init__(self, loss=loss, learning_rate=learning_rate, n_estimators=n_estimators,
@@ -848,7 +850,7 @@ def test_gradient_boosting(samples=1000):
     loss3 = AdaLossFunction()
     loss4 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
     loss5 = DistanceBasedKnnFunction(uniform_variables, knn=10, distance_dependence=lambda r: numpy.exp(-0.1 * r))
-    loss6 = FlatnessLossFunction(uniform_variables, ada_coefficient=1)
+    loss6 = FlatnessLossFunction(uniform_variables, ada_coefficient=1, sign=1)
 
     for loss in [loss1, loss2, loss3, loss4, loss5, loss6]:
         result = MyGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2,
