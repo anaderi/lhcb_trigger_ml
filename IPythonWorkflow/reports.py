@@ -185,7 +185,10 @@ class Predictions(object):
         return result
 
     def _map_on_stages(self, function, stages=None):
-        """Returns a DataFrame """
+        """
+        :type function: takes prediction proba of shape [n_samples, n_classes] and returns something
+        :type stages: list(int) | NoneType, the list of stages we calculate metrics on
+        :rtype : pandas.DataFrame, with calculated results"""
         # TODO rewrite without get_stages
         selected_stages = self._get_stages(stages)
         result = OrderedDict()
@@ -343,12 +346,21 @@ class Predictions(object):
         return self
 
     def correlation(self, var_name, stages=None, metrics=efficiency_score, n_bins=20, thresholds=None):
+        """ Plots the dependence of efficiency / sensitivity / whatever vs one of the variables
+        :type var_name: str, the name of variable
+        :type stages: list(int) | NoneType
+        :type metrics: function
+        :type n_bins: int, the number of bins
+        :type thresholds: list(float) | NoneType
+        :rtype: Predictions, returns self
+        """
+        thresholds = [0.2, 0.4, 0.5, 0.6, 0.8] if thresholds is None else thresholds
         for stage, predictions in pandas.DataFrame(self._get_stages(stages=stages)).iterrows():
             self._strip_figure(len(predictions))
             print('stage ' + str(stage))
-            for i, (name, predictions) in enumerate(predictions.iteritems()):
+            for i, (name, proba) in enumerate(predictions.iteritems()):
                 pylab.subplot(1, len(predictions), i + 1)
-                plot_score_variable_correlation(self.y, predictions, numpy.array(self.X[var_name]), cuts=thresholds,
+                plot_score_variable_correlation(self.y, proba, numpy.ravel(self.X[var_name]), cuts=thresholds,
                                                 classifier_name=name, var_name=var_name, score_function=metrics,
                                                 bins_number=n_bins)
         return self
@@ -434,10 +446,7 @@ def plot_score_variable_correlation(y_true, y_pred, correlation_values, cuts, sa
         x_values = []
         y_values = []
         for bin_data in bins_data:
-            bin_masses = bin_data[0]
-            bin_y_true = bin_data[1]
-            bin_proba  = bin_data[2]
-            bin_weight = bin_data[3]
+            bin_masses, bin_y_true, bin_proba, bin_weight = bin_data
             y_values.append(score_function(bin_y_true, bin_proba[:, 1] > cut, sample_weight=bin_weight))
             x_values.append(numpy.mean(bin_masses))
         pylab.plot(x_values, y_values, '.-', label="cut = %0.3f" % cut)
@@ -490,6 +499,38 @@ def compute_bin_indices(X, var_names, bin_limits):
         bin_indices *= (len(bin_limits_axis) + 1)
         bin_indices += numpy.searchsorted(bin_limits_axis, X[var_name])
     return bin_indices
+
+
+def bin_to_group_indices(bin_indices, mask):
+    """ Transforms bin_indices into group indices
+    :type bin_indices: numpy.array, each element in index of bin this event belongs, shape = [n_samples]
+    :type mask: numpy.array, boolean mask of indices to split into bins, shape = [n_samples]
+    :rtype: list(numpy.array), each element is indices of elements in some bin
+    """
+    assert len(bin_indices) == len(mask), "Different length"
+    bins_id = numpy.unique(bin_indices)
+    result = list()
+    for bin_id in bins_id:
+        result.append(numpy.where(mask & (bin_indices == bin_id))[0])
+    return result
+
+
+def test_bin_to_group_indices(size=100, bins=10):
+    bin_indices = RandomState().randint(0, bins, size=size)
+    mask = RandomState().randint(0, 1, size=size) > 0.5
+    group_indices = bin_to_group_indices(bin_indices, mask=mask)
+    assert numpy.sum([len(group) for group in group_indices]) == numpy.sum(mask)
+    indices = set()
+    for group in group_indices:
+        assert numpy.all(mask[group])
+        for index in group:
+            assert index not in indices
+        indices.update(group)
+
+test_bin_to_group_indices()
+
+
+
 
 
 def compute_efficiencies_on_bins(signal_proba, signal_mask, bin_indices, n_total_bins, cut, sample_weight=None):

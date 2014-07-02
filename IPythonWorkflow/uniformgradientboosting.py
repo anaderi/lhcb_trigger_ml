@@ -486,20 +486,22 @@ test_compute_efficiency()
 
 
 
+
+
 class FlatnessLossFunction(LossFunction, BaseEstimator):
     def __init__(self, uniform_variables, bins=10, uniform_label=1, power=2., ada_coefficient=1.,
-                 allow_wrong_signs=True, keep_debug_info=False, sign=1):
+                 allow_wrong_signs=True, keep_debug_info=False):
         """
         This loss function contains separately penalty for non-flatness and ada_coefficient.
         The penalty for non-flatness is using bins.
 
-        :param uniform_variables: the vars, along which we want to obtain uniformity
-        :param bins: the number of bins along each axis
-        :param uniform_label: int | list(int), the labels for which we want to obtain uniformity
-        :param power: the loss contains the difference | F - F_bin |^p, where p is power
-        :param ada_coefficient: coefficient of ada_loss added to this one. The greater the coefficient,
+        :type uniform_variables: the vars, along which we want to obtain uniformity
+        :type bins: the number of bins along each axis
+        :type uniform_label: int | list(int), the labels for which we want to obtain uniformity
+        :type power: the loss contains the difference | F - F_bin |^p, where p is power
+        :type ada_coefficient: coefficient of ada_loss added to this one. The greater the coefficient,
             the less we tend to uniformity.
-        :param allow_wrong_signs: defines whether gradient may different sign from the "sign of class"
+        :type allow_wrong_signs: defines whether gradient may different sign from the "sign of class"
             (i.e. may have negative gradient on signal)
         """
         self.uniform_variables = uniform_variables
@@ -510,7 +512,6 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
         self.ada_coefficient = ada_coefficient
         self.allow_wrong_signs = allow_wrong_signs
         self.keep_debug_info = keep_debug_info
-        self.sign = sign
         LossFunction.__init__(self, 1)
 
     def fit(self, X, y, sample_weight=None):
@@ -518,20 +519,21 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
         assert len(X) == len(y), 'The lengths are different'
         sample_weight = check_sample_weight(y,  sample_weight=sample_weight)
 
-        self.bin_indices = defaultdict(list)
+        self.group_indices = defaultdict(list)
         # The weight of bin is sum of ene
-        self.bin_weights = defaultdict(list)
+        self.group_weights = defaultdict(list)
         occurences = numpy.zeros(len(X), dtype=int)
 
-        for label in numpy.array(self.uniform_label):
-            indices_dict = self.compute_indices_in_bin(X, y, sample_weight=sample_weight, label=label)
-            # cleaning the bins - deleting tiny or empty bins, canonizing
-            for bin, indices in indices_dict.iteritems():
+        for label in self.uniform_label:
+            group_indices = self.compute_groups_indices(X, y, sample_weight=sample_weight, label=label)
+            # cleaning the bins - deleting tiny or empty groups, canonizing
+            for indices in group_indices:
                 if len(indices) < 5:
-                    # ignoring very small bins
+                    # ignoring very small groups
                     continue
-                self.bin_indices[label].append(numpy.array(indices))
-                self.bin_weights[label].append(numpy.mean(sample_weight[indices]))
+                assert numpy.all((y == label)[indices])
+                self.group_indices[label].append(numpy.array(indices))
+                self.group_weights[label].append(numpy.mean(sample_weight[indices]))
                 occurences[indices] += 1
 
         y = numpy.array(y, dtype=int)
@@ -546,31 +548,20 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
             self.debug_dict = defaultdict(list)
         return self
 
-    def compute_indices_in_bin(self, X, y, sample_weight, label):
-        """Returns a dictionary, each value is a list with indices inside this bin,
-        template method, may be overriden in descendants"""
-        # TODO move to separate function
-        needed_indices = y == label
+    def compute_groups_indices(self, X, y, sample_weight, label):
+        """Returns a list, each element is events' indices in some group."""
+        mask = y == label
         bin_limits = []
         for var in self.uniform_variables:
-            bin_limits.append(numpy.linspace(numpy.min(X[var][needed_indices]),
-                                             numpy.max(X[var][needed_indices]), self.bins + 1)[1:-1])
-        bin_indices = reports.compute_bin_indices(X, self.uniform_variables, bin_limits)
-        n_bins = numpy.prod([len(limits) + 1 for limits in bin_limits])
-
-        bin_limits2 = []
-        for axis_limits in bin_limits:
-            bin_limits2.append((axis_limits[1:] + axis_limits[:-1]) / 2.)
-        bin_indices2 = reports.compute_bin_indices(X, self.uniform_variables, bin_limits2) + n_bins
-        assert len(X) == len(y) == len(bin_indices) == len(bin_indices2), "different size"
-        n_bins += numpy.prod([len(limits) + 1 for limits in bin_limits2])
-
-        indices_in_bin = defaultdict(list)
-        for i, bin in itertools.chain(enumerate(bin_indices), enumerate(bin_indices2)):
-            if y[i] in self.uniform_label:
-                indices_in_bin[bin].append(i)
-
-        return indices_in_bin
+            bin_limits.append(numpy.linspace(numpy.min(X[var][mask]), numpy.max(X[var][mask]), 2 * self.bins + 1))
+        result = list()
+        for shift in [0, 1]:
+            bin_limits2 = []
+            for axis_limits in bin_limits:
+                bin_limits2.append(axis_limits[1 + shift:-1:2])
+            bin_indices = reports.compute_bin_indices(X, self.uniform_variables, bin_limits2)
+            result += reports.bin_to_group_indices(bin_indices, mask=mask)
+        return result
 
     def __call__(self, y, pred):
         # computing the common distribution of signal
@@ -584,7 +575,7 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
             needed_indices = y == label
             sorted_pred = numpy.sort(pred[needed_indices])
 
-            for bin_weight, indices_in_bin in zip(self.bin_weights[label], self.bin_indices[label]):
+            for bin_weight, indices_in_bin in zip(self.group_weights[label], self.group_indices[label]):
                 probs_in_bin = numpy.take(pred, indices_in_bin)
                 probs_in_bin = numpy.sort(probs_in_bin)
                 positions = numpy.searchsorted(sorted_pred, probs_in_bin)
@@ -606,12 +597,12 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
             global_efficiencies = numpy.zeros(len(y_pred), dtype=float)
             global_efficiencies[label_mask] = compute_efficiencies(label_mask, y_pred, sample_weight=self.sample_weight)
 
-            for bin_weight, indices_in_bin in zip(self.bin_weights[label], self.bin_indices[label]):
+            for bin_weight, indices_in_bin in zip(self.group_weights[label], self.group_indices[label]):
                 assert numpy.all(label_mask[indices_in_bin]), "TODO delete"
                 local_effs = compute_efficiencies(indices_in_bin, y_pred, sample_weight=self.sample_weight)
                 global_effs = global_efficiencies[indices_in_bin]
-                bin_gradient = self.sign * self.power * numpy.sign(global_effs - local_effs) \
-                               * numpy.abs(global_effs - local_effs) ** (self.power - 1)
+                bin_gradient = self.power * numpy.sign(global_effs - local_effs) * \
+                               numpy.abs(local_effs - global_effs) ** (self.power - 1)
 
                 # TODO multiply by derivative of F_global ?
                 neg_gradient[indices_in_bin] += bin_weight * bin_gradient
@@ -850,9 +841,10 @@ def test_gradient_boosting(samples=1000):
     loss3 = AdaLossFunction()
     loss4 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
     loss5 = DistanceBasedKnnFunction(uniform_variables, knn=10, distance_dependence=lambda r: numpy.exp(-0.1 * r))
-    loss6 = FlatnessLossFunction(uniform_variables, ada_coefficient=1, sign=1)
+    loss6 = FlatnessLossFunction(uniform_variables, ada_coefficient=1)
+    loss7 = FlatnessLossFunction(uniform_variables, ada_coefficient=3, uniform_label=[0,1])
 
-    for loss in [loss1, loss2, loss3, loss4, loss5, loss6]:
+    for loss in [loss1, loss2, loss3, loss4, loss5, loss6, loss7]:
         result = MyGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2,
                                               subsample=0.7, n_estimators=n_estimators, train_variables=None)\
             .fit(trainX[:samples], trainY[:samples]).score(testX, testY)
