@@ -2,7 +2,8 @@
 
 # this module contains implementation of uBoost algorithm in sklearn-way
 # Two classifiers are proposed:
-# uBoostBDT - the modified version of AdaBoost
+# uBoostBDT - the modified version of AdaBoost, that targets to obtain the uniformity at some specific
+# uBoost - combination of uBoostBDTs for different efficiencies
 
 from collections import defaultdict
 import math
@@ -15,7 +16,7 @@ from sklearn.utils.validation import check_arrays
 from itertools import izip, islice
 
 from commonutils import compute_groups_efficiencies, compute_bdt_cut, sigmoid_function, \
-    generateSample, computeSignalKnnIndices
+    generate_sample, computeSignalKnnIndices
 
 
 __author__ = 'Alex Rogozhnikov'
@@ -197,7 +198,7 @@ class uBoostBDT:
         # Boosting itself
         self._boost_discrete(X_train_variables, y, sample_weight)
         # compute BDT cut
-        self.bdt_cut = compute_bdt_cut(self.target_efficiency, y, self.predict_proba(X))
+        self.bdt_cut = compute_bdt_cut(self.target_efficiency, y, self.predict_proba(X)[:, 1])
         assert self.bdt_cut == self.bdt_cuts_[-1], "BDT cut doesn't appear to coincide with staged one"
 
         return self
@@ -260,13 +261,14 @@ class uBoostBDT:
             # assert numpy.all(cumulative_score == self.predict_score(X)), "wrong prediction"
             predict_proba = self.score_to_proba(cumulative_score)
 
-            global_cut = compute_bdt_cut(self.target_efficiency, y, predict_proba)
+            global_cut = compute_bdt_cut(self.target_efficiency, y, predict_proba[:, 1])
             self.bdt_cuts_.append(global_cut)
             local_efficiencies = compute_groups_efficiencies(global_cut, self.knn_indices, y, predict_proba,
-                                                          smoothing_width=self.smoothing)
+                                                             smoothing_width=self.smoothing)
 
             # another way to compute efficiencies
             # TODO think of weights, we should take weights into account when computing efficiencies
+            # TODO separate normalization for classes?
             # global_cut2 = commonutils.compute_cut_for_efficiency(self.target_efficiency, y, cumulative_score)
             # cumulative_score2 = numpy.zeros([len(cumulative_score), 2])
             # cumulative_score2[:, 1] = cumulative_score
@@ -290,6 +292,9 @@ class uBoostBDT:
             if self.keep_debug_info:
                 self.debug_dict['weights'].append(sample_weight.copy())
                 self.debug_dict['local_efficiencies'].append(local_efficiencies.copy())
+
+        if not self.keep_debug_info:
+            self.knn_indices = None
 
     def get_train_vars(self, X):
         """Gets the DataFrame and returns only columns that should be used in fitting / predictions"""
@@ -469,14 +474,14 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
 
         if self.ipc_profile is not None:
             from IPython.parallel import Client
-            client = Client(profile=self.ipc_profile)
-            self.classifiers = client.load_balanced_view().map_sync(_train_classifier, self.classifiers,
+            lb_view = Client(profile=self.ipc_profile).load_balanced_view()
+            self.classifiers = lb_view.map_sync(_train_classifier, self.classifiers,
                                     [X_train_vars] * self.efficiency_steps, [y] * self.efficiency_steps,
                                     [sample_weight] * self.efficiency_steps, [neighbours_matrix] * self.efficiency_steps)
         else:
-            self.classifiers = map(_train_classifier, self.classifiers,
-                                   [X_train_vars] * self.efficiency_steps, [y] * self.efficiency_steps,
-                                   [sample_weight] * self.efficiency_steps, [neighbours_matrix] * self.efficiency_steps)
+            self.classifiers = map(_train_classifier, self.classifiers, [X_train_vars] * self.efficiency_steps,
+                                   [y] * self.efficiency_steps, [sample_weight] * self.efficiency_steps,
+                                   [neighbours_matrix] * self.efficiency_steps)
         return self
 
     def predict(self, X):
@@ -487,7 +492,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         result = numpy.zeros([len(X), 2])
         for efficiency, classifier in zip(self.target_efficiencies, self.classifiers):
             result[:, 1] += sigmoid_function(classifier.predict_proba(X_train_vars)[:, 1] - classifier.bdt_cut,
-                                            self.smoothing)
+                                             self.smoothing)
 
         result[:, 1] /= self.efficiency_steps
         result[:, 0] = 1.0 - result[:, 1]
@@ -509,8 +514,8 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
 
 def test_uboost_classifier():
     # Generating some samples correlated with first variable
-    testX, testY = generateSample(2000, 10, 0.6)
-    trainX, trainY = generateSample(2000, 10, 0.6)
+    testX, testY = generate_sample(2000, 10, 0.6)
+    trainX, trainY = generate_sample(2000, 10, 0.6)
     # We will try to get uniform distribution along this variable
     uniform_variables = ['column0']
 
@@ -525,10 +530,10 @@ def test_uboost_classifier():
 
         staged_filtered_upper = [numpy.sum(pred[:, 1] > cut - 1e-7) for pred, cut in \
                                  izip(bdt_classifier.staged_predict_proba(trainX[trainY > 0.5]),
-                                     bdt_classifier.bdt_cuts_)]
+                                      bdt_classifier.bdt_cuts_)]
         staged_filtered_lower = [numpy.sum(pred[:, 1] > cut + 1e-7) for pred, cut in \
                                  izip(bdt_classifier.staged_predict_proba(trainX[trainY > 0.5]),
-                                     bdt_classifier.bdt_cuts_)]
+                                      bdt_classifier.bdt_cuts_)]
 
         assert bdt_classifier.bdt_cut == bdt_classifier.bdt_cuts_[-1], 'something wrong with computed cuts'
         for filter_lower, filter_upper in islice(izip(staged_filtered_lower, staged_filtered_upper), 10, 100):
