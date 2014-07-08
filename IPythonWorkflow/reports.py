@@ -42,7 +42,7 @@ def efficiency_score(y_true, y_pred, sample_weight=None):
     Efficiency == recall, returns -0.1 when ill-defined"""
     sample_weight = check_sample_weight(y_true, sample_weight=sample_weight)
     assert len(y_true) == len(y_pred), "Different size of arrays"
-    isSignal =  numpy.sum(y_true * sample_weight) - 1e-6
+    isSignal = numpy.sum(y_true * sample_weight) - 1e-6
     isSignalAsSignal = numpy.sum(y_true * y_pred * sample_weight) + 1e-7
     return isSignalAsSignal / isSignal
     # the same, but with notifications
@@ -188,7 +188,7 @@ class Predictions(object):
         """
         :type function: takes prediction proba of shape [n_samples, n_classes] and returns something
         :type stages: list(int) | NoneType, the list of stages we calculate metrics on
-        :rtype : pandas.DataFrame, with calculated results"""
+        :rtype: pandas.DataFrame, with calculated results"""
         # TODO rewrite without get_stages
         selected_stages = self._get_stages(stages)
         result = OrderedDict()
@@ -273,13 +273,13 @@ class Predictions(object):
     def efficiency(self, uniform_variables, stages=None, target_efficiencies=None, n_bins=20, label=1):
         target_efficiencies = self._check_efficiencies(target_efficiencies)
         if len(uniform_variables) not in {1, 2}:
-            raise ValueError("More than two variables are not implemented, you got a 3d-monitor?")
+            raise ValueError("More than two variables are not implemented, you have a 3d-monitor?")
 
         mask = self.y == label
         bin_indices = self._compute_bin_indices(uniform_variables, n_bins, mask=mask)
 
         def compute_bin_efficiencies(prediction_proba, target_eff):
-            cut = compute_bdt_cut(target_eff, mask, prediction_proba)
+            cut = compute_bdt_cut(target_eff, mask, prediction_proba[:, label])
             return compute_efficiencies_on_bins(prediction_proba[:, label], mask, bin_indices,
                                                 n_total_bins=n_bins ** len(uniform_variables), cut=cut)
 
@@ -299,6 +299,7 @@ class Predictions(object):
                         pylab.plot(x_limits, local_effs, label='eff=%.2f' % eff)
                         pylab.title(name)
                         pylab.xlabel(uniform_variables[0]), pylab.ylabel('efficiency')
+                        pylab.ylim(ymin=0.)
         else:
             x_limits, y_limits = self._compute_bin_centers(uniform_variables, n_bins=n_bins, mask=mask)
             for target_efficiency in target_efficiencies:

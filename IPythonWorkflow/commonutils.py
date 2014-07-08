@@ -12,6 +12,7 @@ import io
 import numpy
 import pandas
 from numpy.random.mtrand import RandomState
+from scipy.special import expit
 import sklearn.cross_validation
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.neighbors.unsupervised import NearestNeighbors
@@ -56,8 +57,7 @@ def map_on_cluster(ipc_profile, *args, **kw_args):
         return Client(ipc_profile).load_balanced_view().map_sync(*args, **kw_args)
 
 
-#TODO delete "my_"
-def my_train_test_split(*arrays, **kw_args):
+def train_test_split(*arrays, **kw_args):
     """Does the same thing as train_test_split, but preserves columns in DataFrames.
     Uses the same parameters: test_size, train_size, random_state
     :type arrays: list[numpy.array | pandas.DataFrame]
@@ -77,15 +77,9 @@ def my_train_test_split(*arrays, **kw_args):
             result.append(array[test_indices])
     return result
 
+# Declaring alias
+my_train_test_split = train_test_split
 
-# TODO delete
-# def split_on_test_and_train(signal_df, bg_df, **kw_args):
-#     """Useful way to split data when is given as two DataFrames """
-#     assert set(signal_df.columns) == set(bg_df.columns), 'Different set  of columns'
-#     common_df = pandas.concat([signal_df, bg_df], ignore_index=True)
-#     answers = numpy.concatenate([numpy.ones(len(signal_df)), numpy.zeros(len(bg_df))])
-#     assert len(answers) == len(common_df), 'Something gone wrong during splitting'
-#     return my_train_test_split(common_df, answers, **kw_args)
 
 def weighted_percentile(array, percentiles, sample_weight=None, array_sorted=False, old_style=False):
     array = numpy.array(array)
@@ -320,13 +314,13 @@ test_compute_cut()
 def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
     """Computes cut which gives fixed efficiency.
     :type target_efficiency: float from 0 to 1 or numpy.array with floats in [0,1]
-    :type y_true: an array of zeros and ones, shape = [n_samples]
-    :type y_pred: prediction probabilities returned by classifier, shape = [n_samples, 2]
+    :type y_true: numpy.array, of zeros and ones, shape = [n_samples]
+    :type y_pred: numpy.array, prediction probabilities returned by classifier, shape = [n_samples, 2]
     """
     if sample_weight is not None:
         raise ValueError("sample weight is not supported")
     assert len(y_true) == len(y_pred), "different size"
-    signal_proba = y_pred[y_true > 0.5, 1]
+    signal_proba = y_pred[y_true > 0.5]
     percentiles = 1. - target_efficiency
     return weighted_percentile(signal_proba, percentiles)
 
@@ -351,7 +345,7 @@ def sigmoid_function(x, width):
     """
     assert width >= 0, 'the width should be non-negative'
     if abs(width) > 0.0001:
-        return 1.0 / (1.0 + numpy.exp(-x / width))
+        return expit(numpy.clip(x / width, -500, 500))
     else:
         return (x > 0) * 1.0
 
@@ -518,3 +512,6 @@ def export_root_to_csv(filename, branches=None):
         result.append(new_file_name)
     print("Successfully converted")
     return result
+
+
+# def compute_bin_indices(X, mask, sample_weight=None, ):
