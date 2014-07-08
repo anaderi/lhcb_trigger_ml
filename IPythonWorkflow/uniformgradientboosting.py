@@ -44,7 +44,7 @@ class KnnLossFunction(LossFunction, BaseEstimator):
         assert len(y) == len(pred) == self.A.shape[1], "something is wrong with sizes"
         y_signed = 2 * y - 1
         exponents = numpy.exp(- self.A.dot(y_signed * numpy.ravel(pred)))
-        return (self.w * exponents).sum()
+        return numpy.sum(self.w * exponents)
 
     def negative_gradient(self, y, pred, **kwargs):
         """Computing negative gradient"""
@@ -66,8 +66,7 @@ class KnnLossFunction(LossFunction, BaseEstimator):
         return self
 
     def compute_parameters(self, trainX, trainY):
-        """This method should be overloaded in descendant,
-         and should return A, w (matrix and vector)"""
+        """This method should be overloaded in descendant, and should return A, w (matrix and vector)"""
         raise NotImplementedError()
 
     def init_estimator(self, X=None, y=None):
@@ -92,17 +91,17 @@ class KnnLossFunction(LossFunction, BaseEstimator):
 
 
 class SimpleKnnLossFunction(KnnLossFunction):
-    def __init__(self, uniform_variables, knn=5, uniform_label=1, distinguish_classes=True):
+    def __init__(self, uniform_variables, knn=10, uniform_label=1, distinguish_classes=True, row_norm=1.):
         """A matrix is square, each row corresponds to a single event in train dataset, in each row we put ones
         to the closest neighbours of that event if this event from class along which we want to have uniform prediction.
         :type uniform_variables: list(str), the features, along which uniformity is desired
         :type knn: int, the number of nonzero elements in the row, corresponding to event in 'uniform class'
         :type uniform_label: int | list(int), the label (labels) of 'uniform classes'
-        :type diagonal: float,
         :type distinguish_classes: bool, if True, 1's will be placed only for
         """
         self.knn = knn
         self.distinguish_classes = distinguish_classes
+        self.row_norm = row_norm
         self.uniform_label = [uniform_label] if isinstance(uniform_label, numbers.Number) else uniform_label
         KnnLossFunction.__init__(self, uniform_variables)
 
@@ -114,15 +113,16 @@ class SimpleKnnLossFunction(KnnLossFunction):
             label_mask = trainY == label
             n_label = numpy.sum(label_mask)
             if self.distinguish_classes:
-                knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, label_mask, self.knn)
+                knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, label_mask,
+                                                                       n_neighbours=self.knn)
             else:
                 mask = numpy.ones(len(trainY), dtype=numpy.bool)
                 knn_indices = commonutils.computeSignalKnnIndices(self.uniform_variables, trainX, mask, self.knn)
             knn_indices = knn_indices[label_mask, :]
             ind_ptr = numpy.arange(0, n_label * self.knn + 1, self.knn)
             column_indices = knn_indices.flatten()
-            data = numpy.ones(n_label * self.knn, dtype=float) / self.knn
-            A_part = sparse.csr_matrix(sparse.csr_matrix((data, column_indices, ind_ptr), shape=[n_label, len(trainX)]))
+            data = numpy.ones(n_label * self.knn, dtype=float) * self.row_norm / self.knn
+            A_part = sparse.csr_matrix((data, column_indices, ind_ptr), shape=[n_label, len(trainX)])
             w_part = numpy.mean(numpy.take(sample_weight, knn_indices), axis=1)
             assert A_part.shape[0] == len(w_part)
             A_parts.append(A_part)
@@ -133,8 +133,8 @@ class SimpleKnnLossFunction(KnnLossFunction):
             n_label = numpy.sum(label_mask)
             ind_ptr = numpy.arange(0, n_label + 1)
             column_indices = numpy.where(label_mask)[0].flatten()
-            data = numpy.ones(n_label, dtype=float)
-            A_part = sparse.csr_matrix(sparse.csr_matrix((data, column_indices, ind_ptr), shape=[n_label, len(trainX)]))
+            data = numpy.ones(n_label, dtype=float) * self.row_norm
+            A_part = sparse.csr_matrix((data, column_indices, ind_ptr), shape=[n_label, len(trainX)])
             w_part = sample_weight[label_mask]
             A_parts.append(A_part)
             w_parts.append(w_part)
@@ -147,8 +147,8 @@ class SimpleKnnLossFunction(KnnLossFunction):
 class SimpleKnnLossFunctionEyeBg(KnnLossFunction):
     def __init__(self, uniform_variables, knn=5, distinguish_classes=True, diagonal=0.):
         """A matrix is square, each row corresponds to a single event in train dataset,
-        in each row we put ones to the closest neighbours of that event for signal. For background
-        we have identity matrix.
+        in each row we put ones to the closest neighbours of that event for signal.
+        For background we have identity matrix.
 
         If distinguish_classes==True, only events of the same class are chosen.
         """
@@ -620,7 +620,7 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
                 assert numpy.all(label_mask[indices_in_bin]), "TODO delete"
                 local_effs = compute_efficiencies(indices_in_bin, y_pred, sample_weight=self.sample_weight)
                 global_effs = global_efficiencies[indices_in_bin]
-                bin_gradient = self.power * numpy.sign(global_effs - local_effs) * \
+                bin_gradient = self.power * numpy.sign(local_effs - global_effs) * \
                                numpy.abs(local_effs - global_effs) ** (self.power - 1)
 
                 # TODO multiply by derivative of F_global ?
@@ -860,8 +860,8 @@ def test_gradient_boosting(samples=1000):
     loss3 = AdaLossFunction()
     loss4 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
     loss5 = DistanceBasedKnnFunction(uniform_variables, knn=10, distance_dependence=lambda r: numpy.exp(-0.1 * r))
-    loss6 = FlatnessLossFunction(uniform_variables, ada_coefficient=3)
-    loss7 = FlatnessLossFunction(uniform_variables, ada_coefficient=3, uniform_label=[0,1])
+    loss6 = FlatnessLossFunction(uniform_variables, ada_coefficient=0.5)
+    loss7 = FlatnessLossFunction(uniform_variables, ada_coefficient=0.5, uniform_label=[0,1])
 
     for loss in [loss1, loss2, loss3, loss4, loss5, loss6, loss7]:
         result = MyGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2,
