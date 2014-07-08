@@ -296,10 +296,10 @@ class Predictions(object):
                         continue
                     pylab.subplot(1, len(stage), i + 1)
                     for eff, local_effs in zip(target_efficiencies, eff_stage_data):
+                        pylab.ylim(0, 1)
                         pylab.plot(x_limits, local_effs, label='eff=%.2f' % eff)
                         pylab.title(name)
                         pylab.xlabel(uniform_variables[0]), pylab.ylabel('efficiency')
-                        pylab.ylim(ymin=0.)
         else:
             x_limits, y_limits = self._compute_bin_centers(uniform_variables, n_bins=n_bins, mask=mask)
             for target_efficiency in target_efficiencies:
