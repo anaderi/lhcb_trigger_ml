@@ -215,24 +215,27 @@ class uBoostBDT:
             pass
         return estimator
 
+    def _generate_bagging(self, sample_weight):
+        masked_sample_weight = sample_weight.copy()
+        n_samples = len(sample_weight)
+        if isinstance(self.bagging, bool) and self.bagging is True:
+            indices = self.random_generator.randint(0, n_samples, n_samples)
+            sample_counts = numpy.bincount(indices, minlength=n_samples)
+            masked_sample_weight *= sample_counts
+        elif isinstance(self.bagging, float):
+            masked_sample_weight *= (self.random_generator.rand(n_samples) > 1 - self.bagging)
+        else:
+            assert isinstance(self.bagging, bool) and self.bagging is False,\
+               "something wrong was passed as bagging"
+        return masked_sample_weight
+
     def _boost_discrete(self, X, y, sample_weight):
         """Implement a single boost using the SAMME discrete algorithm,
         which is modified in uBoost way"""
         cumulative_score = numpy.zeros(len(X))
         for iboost in xrange(self.n_estimators):
             estimator = self._make_estimator()
-
-            # generating bagging, mask is to prevent overfitting
-            masked_sample_weight = sample_weight.copy()
-            n_samples = len(X)
-            if isinstance(self.bagging, bool) and self.bagging is True:
-                indices = self.random_generator.randint(0, n_samples, n_samples)
-                sample_counts = numpy.bincount(indices, minlength=n_samples)
-                masked_sample_weight *= sample_counts
-            elif isinstance(self.bagging, float):
-                masked_sample_weight *= (self.random_generator.rand(len(X)) > 1 - self.bagging)
-            else:
-                assert isinstance(self.bagging, bool) and self.bagging is False, "something wrong was passed as bagging"
+            masked_sample_weight = self._generate_bagging(sample_weight)
 
             estimator.fit(X, y, sample_weight=masked_sample_weight)
 
