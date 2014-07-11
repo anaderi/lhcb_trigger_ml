@@ -8,6 +8,7 @@
 from collections import defaultdict
 import math
 import numpy
+import numpy as np
 from sklearn.base import BaseEstimator, clone
 from sklearn.ensemble.weight_boosting import ClassifierMixin
 from sklearn.tree import DecisionTreeClassifier
@@ -229,6 +230,36 @@ class uBoostBDT:
                "something wrong was passed as bagging"
         return masked_sample_weight
 
+    def _apply_ubooost_in_place(self, sample_weight, local_efficiencies, y):
+        # another way to compute efficiencies
+        # TODO think of weights, we should take weights into account when computing efficiencies
+        # TODO separate normalization for classes?
+        # global_cut2 = commonutils.compute_cut_for_efficiency(
+        #     self.target_efficiency, y, cumulative_score)
+        # cumulative_score2 = numpy.zeros([len(cumulative_score), 2])
+        # cumulative_score2[:, 1] = cumulative_score
+        # assert self.score_to_proba(
+        #     numpy.array([global_cut2]))[0, 1] == global_cut, ' cuts are different '
+        # local_efficiencies2 = compute_groups_efficiencies(
+        #    global_cut2, self.knn_indices, y, cumulative_score2,
+        #                                                   smoothing_width=self.smoothing)
+        # assert numpy.all(local_efficiencies == local_efficiencies2),\
+        #    'The computed efficiencies are different'
+
+        e_prime = numpy.sum(sample_weight * numpy.abs(
+            local_efficiencies - self.target_efficiency))
+        # TODO why do we have nominator here?
+        # beta = math.log((1.0 - e_prime) / e_prime)
+        beta = math.log(1. / e_prime)
+        if self.boost_only_signal:
+            sample_weight *= numpy.exp((
+                self.target_efficiency - local_efficiencies) * y * (beta * self.uniforming_rate))
+        else:
+            sample_weight *= numpy.exp((
+                self.target_efficiency - local_efficiencies) * (beta * self.uniforming_rate))
+
+        sample_weight /= numpy.sum(sample_weight)
+
     def _boost_discrete(self, X, y, sample_weight):
         """Implement a single boost using the SAMME discrete algorithm,
         which is modified in uBoost way"""
@@ -256,7 +287,8 @@ class uBoostBDT:
             # Stop if the error is at least as bad as random guessing <-- I've deleted that
 
             # Boost weight using AdaBoost SAMME alg
-            estimator_weight = self.learning_rate * (numpy.log((1. - estimator_error) / estimator_error))
+            estimator_weight = self.learning_rate * (
+                numpy.log((1. - estimator_error) / estimator_error))
             self.estimator_weights_[iboost] = estimator_weight
 
             # correcting the weights according to predictions
@@ -271,31 +303,10 @@ class uBoostBDT:
 
             global_cut = compute_bdt_cut(self.target_efficiency, y, predict_proba[:, 1])
             self.bdt_cuts_.append(global_cut)
-            local_efficiencies = compute_groups_efficiencies(global_cut, self.knn_indices, y, predict_proba,
-                                                             smoothing_width=self.smoothing)
+            local_efficiencies = compute_groups_efficiencies(
+                global_cut, self.knn_indices, y, predict_proba, smoothing_width=self.smoothing)
 
-            # another way to compute efficiencies
-            # TODO think of weights, we should take weights into account when computing efficiencies
-            # TODO separate normalization for classes?
-            # global_cut2 = commonutils.compute_cut_for_efficiency(self.target_efficiency, y, cumulative_score)
-            # cumulative_score2 = numpy.zeros([len(cumulative_score), 2])
-            # cumulative_score2[:, 1] = cumulative_score
-            # assert self.score_to_proba(numpy.array([global_cut2]))[0, 1] == global_cut, ' cuts are different '
-            # local_efficiencies2 = compute_groups_efficiencies(global_cut2, self.knn_indices, y, cumulative_score2,
-            #                                                   smoothing_width=self.smoothing)
-            # assert numpy.all(local_efficiencies == local_efficiencies2), 'The computed efficiencies are different'
-
-
-            e_prime = numpy.sum(sample_weight * numpy.abs(local_efficiencies - self.target_efficiency))
-            # TODO why do we have nominator here?
-            # beta = math.log((1.0 - e_prime) / e_prime)
-            beta = math.log(1. / e_prime)
-            if self.boost_only_signal:
-                sample_weight *= numpy.exp((self.target_efficiency - local_efficiencies) * y * (beta * self.uniforming_rate))
-            else:
-                sample_weight *= numpy.exp((self.target_efficiency - local_efficiencies) * (beta * self.uniforming_rate))
-
-            sample_weight /= numpy.sum(sample_weight)
+            self._apply_ubooost_in_place(sample_weight, local_efficiencies, y)
 
             if self.keep_debug_info:
                 self.debug_dict['weights'].append(sample_weight.copy())
