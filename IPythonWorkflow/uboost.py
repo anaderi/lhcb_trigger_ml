@@ -37,7 +37,8 @@ class uBoostBDT:
                  train_variables=None,
                  smoothing=0.0,
                  keep_debug_info=False,
-                 random_state=None):
+                 random_state=None,
+                 algorithm="SAMME"):
         """
         uBoostBDT is AdaBoostClassifier, which is modified to have flat efficiency
         of signal (class=1) along some variables. Efficiency is only guaranteed at the cut,
@@ -127,6 +128,7 @@ class uBoostBDT:
         self.smoothing = smoothing
         self.keep_debug_info = keep_debug_info
         self.random_state = random_state
+        self.algorithm = algorithm
 
     def fit(self, X, y, sample_weight=None, neighbours_matrix=None):
         """Build a boosted classifier from the training set (X, y).
@@ -162,6 +164,20 @@ class uBoostBDT:
             raise ValueError("learning_rate must be greater than zero")
         if (sample_weight is not None) and sample_weight.sum() <= 0:
             raise ValueError("Attempting to fit with a non-positive weighted number of samples.")
+
+        # Check that algorithm is supported
+        if self.algorithm not in ('SAMME', 'SAMME.R'):
+            raise ValueError("algorithm %s is not supported"
+                             % self.algorithm)
+
+        if self.algorithm == 'SAMME.R':
+            if not hasattr(self.base_estimator_, 'predict_proba'):
+                raise TypeError(
+                    "AdaBoostClassifier with algorithm='SAMME.R' requires "
+                    "that the weak learner supports the calculation of class "
+                    "probabilities with a predict_proba method.\n"
+                    "Please change the base estimator or set "
+                    "algorithm='SAMME' instead.")
 
         assert numpy.all((y == 0) | (y == 1)), "only two-class classification is possible"
 
