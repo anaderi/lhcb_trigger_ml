@@ -180,7 +180,7 @@ class uBoostBDT:
         else:
             # Normalize existing weights
             assert numpy.all(sample_weight >= 0.), 'the weights should be non-negative'
-            sample_weight = numpy.copy(sample_weight) / numpy.sum(sample_weight)
+            sample_weight /= numpy.sum(sample_weight)
 
         # Clear any previous fit results
         self.estimators_ = []
