@@ -56,7 +56,8 @@ class uBoostBDT:
 
         bagging: float or bool (default=True), bagging usually speeds up the convergence
             and prevents overfitting (see http://en.wikipedia.org/wiki/Bootstrap_aggregating)
-            if True, usual bootstrap aggregating is used (sampling with replacement at each iteration, size=len(X))
+            if True, usual bootstrap aggregating is used
+            (sampling with replacement at each iteration, size=len(X))
             if float, used sampling with replacement, the size of generated set is bagging * len(X)
             if False, usual boosting is used
 
@@ -164,16 +165,18 @@ class uBoostBDT:
         assert numpy.all((y == 0) | (y == 1)), "only two-class classification is possible"
 
         if neighbours_matrix is not None:
-            assert numpy.shape(neighbours_matrix) == (len(X), self.n_neighbors), "Wrong shape of neighbours_matrix"
+            assert numpy.shape(neighbours_matrix) == (len(X), self.n_neighbors), \
+              "Wrong shape of neighbours_matrix"
             self.knn_indices = neighbours_matrix
         else:
             assert self.uniform_variables is not None, "uniform_variables should be set"
             # computing knn matrix
-            self.knn_indices = computeSignalKnnIndices(self.uniform_variables, X, y > 0.5, self.n_neighbors)
+            self.knn_indices = computeSignalKnnIndices(
+                self.uniform_variables, X, y > 0.5, self.n_neighbors)
 
         if sample_weight is None:
             # Initialize weights to 1 / n_samples
-            sample_weight = numpy.zeros(len(X), dtype=numpy.float) + 1. / len(X)
+            sample_weight = numpy.ones(len(X), dtype=numpy.float) / len(X)
         else:
             # Normalize existing weights
             assert numpy.all(sample_weight >= 0.), 'the weights should be non-negative'
@@ -557,4 +560,3 @@ def test_uboost_classifier():
 
 
 test_uboost_classifier()
-
