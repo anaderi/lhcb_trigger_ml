@@ -206,19 +206,21 @@ class uBoostBDT:
 
         return self
 
+    def _make_estimator(self, append=True):
+        estimator = clone(self.base_estimator)
+        self.estimators_.append(estimator)
+        try:
+            estimator.set_params(random_state=self.random_state)
+        except ValueError:
+            pass
+        return estimator
+
     def _boost_discrete(self, X, y, sample_weight):
         """Implement a single boost using the SAMME discrete algorithm,
         which is modified in uBoost way"""
         cumulative_score = numpy.zeros(len(X))
         for iboost in xrange(self.n_estimators):
-            # creating new estimator
-            estimator = clone(self.base_estimator)
-            self.estimators_.append(estimator)
-
-            try:
-                estimator.set_params(random_state=self.random_state)
-            except ValueError:
-                pass
+            estimator = self._make_estimator()
 
             # generating bagging, mask is to prevent overfitting
             masked_sample_weight = sample_weight.copy()
