@@ -171,9 +171,9 @@ class uBoostBDT:
                              % self.algorithm)
 
         if self.algorithm == 'SAMME.R':
-            if not hasattr(self.base_estimator_, 'predict_proba'):
+            if not hasattr(self.base_estimator, 'predict_proba'):
                 raise TypeError(
-                    "AdaBoostClassifier with algorithm='SAMME.R' requires "
+                    "uBoostBDT with algorithm='SAMME.R' requires "
                     "that the weak learner supports the calculation of class "
                     "probabilities with a predict_proba method.\n"
                     "Please change the base estimator or set "
@@ -213,10 +213,13 @@ class uBoostBDT:
         # Some dictionary to keep all intermediate weights, efficiencies and so on
         if self.keep_debug_info:
             self.debug_dict = defaultdict(list)
-        # Setting up random generator
+
         self.random_generator = check_random_state(self.random_state)
-        # Boosting itself
-        self._boost_discrete(X_train_variables, y, sample_weight)
+
+        if self.algorithm == "SAMME":
+            self._boost_discrete(X_train_variables, y, sample_weight)
+        else:
+            self._boost_real(X_train_variables, y, sample_weight)
         # compute BDT cut
         self.bdt_cut = compute_bdt_cut(self.target_efficiency, y, self.predict_proba(X)[:, 1])
         assert self.bdt_cut == self.bdt_cuts_[-1], "BDT cut doesn't appear to coincide with staged one"
@@ -547,7 +550,59 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
             yield result
 
 
-def test_uboost_classifier():
+def test_uboost_classifier_real():
+    # Generating some samples correlated with first variable
+    testX, testY = generate_sample(2000, 10, 0.6)
+    trainX, trainY = generate_sample(2000, 10, 0.6)
+    # We will try to get uniform distribution along this variable
+    uniform_variables = ['column0']
+
+    base_classifier = DecisionTreeClassifier(min_samples_leaf=10, max_depth=12)
+
+    for target_efficiency in [0.1, 0.3, 0.5, 0.7, 0.9]:
+        bdt_classifier = uBoostBDT(
+            uniform_variables=uniform_variables,
+            target_efficiency=target_efficiency,
+            n_neighbors=20,
+            n_estimators=20,
+            base_estimator=base_classifier,
+            algorithm="SAMME.R")
+        bdt_classifier.fit(trainX, trainY)
+        filtered = numpy.sum(bdt_classifier.predict_proba(trainX[trainY > 0.5])[:, 1] > bdt_classifier.bdt_cut)
+        assert abs(filtered - numpy.sum(trainY) * target_efficiency) < 5, "global cut is set wrongly"
+
+        staged_filtered_upper = [numpy.sum(pred[:, 1] > cut - 1e-7) for pred, cut in \
+                                 izip(bdt_classifier.staged_predict_proba(trainX[trainY > 0.5]),
+                                      bdt_classifier.bdt_cuts_)]
+        staged_filtered_lower = [numpy.sum(pred[:, 1] > cut + 1e-7) for pred, cut in \
+                                 izip(bdt_classifier.staged_predict_proba(trainX[trainY > 0.5]),
+                                      bdt_classifier.bdt_cuts_)]
+
+        assert bdt_classifier.bdt_cut == bdt_classifier.bdt_cuts_[-1], 'something wrong with computed cuts'
+        for filter_lower, filter_upper in islice(izip(staged_filtered_lower, staged_filtered_upper), 10, 100):
+            assert filter_lower - 1 <= sum(trainY) * target_efficiency <= filter_upper + 1, "stage cut is set wrongly"
+
+    uboost_classifier = uBoostClassifier(uniform_variables=uniform_variables, n_neighbors=20, efficiency_steps=3,
+                                         n_estimators=20)
+
+    bdt_classifier = uBoostBDT(
+        uniform_variables=uniform_variables,
+        n_neighbors=20,
+        n_estimators=20,
+        base_estimator=base_classifier,
+        algorithm="SAMME.R")
+
+    for classifier in [bdt_classifier, uboost_classifier]:
+        classifier.fit(trainX, trainY)
+        proba1 = classifier.predict_proba(testX)
+        proba2 = list(classifier.staged_predict_proba(testX))[-1]
+        assert numpy.all(abs(proba1 - proba2) < 0.001), "something wrong with predictions"
+
+    assert len(bdt_classifier.feature_importances_) == trainX.shape[1]
+
+    print 'real uboost is ok'
+
+def test_uboost_classifier_discrete():
     # Generating some samples correlated with first variable
     testX, testY = generate_sample(2000, 10, 0.6)
     trainX, trainY = generate_sample(2000, 10, 0.6)
@@ -588,7 +643,8 @@ def test_uboost_classifier():
 
     assert len(bdt_classifier.feature_importances_) == trainX.shape[1]
 
-    print 'uboost is ok'
+    print 'discrete uboost is ok'
 
-
-test_uboost_classifier()
+if __name__ == '__main__':
+    test_uboost_classifier_discrete()
+    test_uboost_classifier_real()
