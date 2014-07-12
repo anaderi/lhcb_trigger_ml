@@ -224,7 +224,6 @@ def test_simple_optimizer(n_evaluations=60):
                                   param_grid={'x': range(11), 'y': range(11), 'z': range(11), 'w': range(11)},
                                   n_evaluations=n_evaluations)
     optimizer.optimize()
-    optimizer.print_results()
     assert len(optimizer.generator.grid_scores_) == n_evaluations
     assert len(optimizer.generator.queued_tasks_) == n_evaluations
     assert set(optimizer.generator.grid_scores_.keys()) == optimizer.generator.queued_tasks_
@@ -459,6 +458,5 @@ def test_grid_search():
     grid_cv.fit(trainX, trainY)
     grid_cv.predict_proba(trainX)
     grid_cv.predict(trainX)
-    print(grid_cv.grid_scores_)
 
 test_grid_search()
