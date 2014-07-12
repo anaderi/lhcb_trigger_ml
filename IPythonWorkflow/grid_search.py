@@ -7,9 +7,7 @@ from __future__ import division
 from __future__ import print_function
 from itertools import islice
 from warnings import warn
-from __builtin__ import open
 import numpy
-from numpy.lib._datasource import _FileOpeners
 import pandas
 import sklearn
 import logging
@@ -73,8 +71,11 @@ class AbstractParameterGenerator(object):
 
     def generate_batch_points(self, size):
         # may be overriden in descendants
+        state_indices = []
         for _ in range(size):
-            yield self.generate_next_point()
+            state_indices.append(self.generate_next_point())
+        state_dict = [self.indices_to_parameters(i) for i in state_indices]
+        return state_indices, state_dict
 
     def add_result(self, key, value):
         """key is an n-tuple with integers"""
