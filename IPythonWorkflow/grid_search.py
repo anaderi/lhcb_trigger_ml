@@ -74,8 +74,7 @@ class AbstractParameterGenerator(object):
         state_indices = []
         for _ in range(size):
             state_indices.append(self.generate_next_point())
-        state_dict = [self.indices_to_parameters(i) for i in state_indices]
-        return state_indices, state_dict
+        return zip(*state_indices)
 
     def add_result(self, key, value):
         """key is an n-tuple with integers"""
