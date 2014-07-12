@@ -370,7 +370,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                 assert len(result) == portion, "The length of result is very strange"
                 for state_indices, state_dict, score in zip(state_indices_array, state_dict_array, result):
                     self.generator.add_result(state_indices, score)
-                    self._log(score, ": ", ", ".join([k + '=' + str(v) for k, v in state_dict]))
+                    self._log(score, ": ", ", ".join([k + '=' + str(v) for k, v in state_dict.iteritems()]))
 
                 self.evaluations_done += portion
                 print("%i evaluations done" % self.evaluations_done)
