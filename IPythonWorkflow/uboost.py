@@ -12,6 +12,7 @@ obtain efficency uniformity at the specified level
 
 from collections import defaultdict
 import math
+from itertools import izip, islice
 import numpy as np
 from numpy.core.umath_tests import inner1d
 from sklearn.base import BaseEstimator, clone
@@ -19,13 +20,13 @@ from sklearn.ensemble.weight_boosting import ClassifierMixin
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays
-from itertools import izip, islice
 
 from commonutils import compute_groups_efficiencies,\
     sigmoid_function, generate_sample, computeSignalKnnIndices, compute_bdt_cut
 
 
-__author__ = 'Alex Rogozhnikov'
+__author__ = "Alex Rogozhnikov, Nikita Kazeev"
+__copyright__ = "Copyright 2014, Yandex"
 
 __all__ = [
     "uBoostBDT",
@@ -201,7 +202,7 @@ class uBoostBDT:
                     "algorithm='SAMME' instead.")
 
         assert np.all((y == 0) | (y == 1)),\
-            "only two-class classification is possible"
+            "only two-class classification is implemented"
 
         if neighbours_matrix is not None:
             assert np.shape(neighbours_matrix) == (len(X), self.n_neighbors), \
@@ -210,7 +211,6 @@ class uBoostBDT:
         else:
             assert self.uniform_variables is not None,\
                 "uniform_variables should be set"
-            # computing knn matrix
             self.knn_indices = computeSignalKnnIndices(
                 self.uniform_variables, X, y > 0.5, self.n_neighbors)
 
@@ -227,8 +227,9 @@ class uBoostBDT:
         self.estimators_ = []
         self.estimator_weights_ = np.zeros(self.n_estimators, dtype=np.float)
         self.estimator_errors_ = np.ones(self.n_estimators, dtype=np.float)
-        # BDT cuts, which correspond to global efficiency == target_efficiency
-        # on each iteration
+        # BDT cuts, if algorithm is SAMME, correspond to
+        # global efficiency == target_efficiency on each iteration.
+        # If SAMME.R - cuts for individual estimators
         self.bdt_cuts_ = []
 
         X_train_variables = self.get_train_vars(X)
@@ -247,8 +248,8 @@ class uBoostBDT:
             self.bdt_cut = compute_bdt_cut(
                 self.target_efficiency, y, self.predict_proba(X)[:, 1])
             assert self.bdt_cut == self.bdt_cuts_[-1],\
-                "BDT cut doesn't appear to coincide with staged one"
-        else:
+                "BDT cut doesn't appear to coincide with the staged one"
+        else:  # SAMME.R
             self._boost_real(X_train_variables, y, sample_weight)
             self.bdt_cut = compute_bdt_cut(
                 self.target_efficiency, y, self.predict_proba(X)[:, 1])
@@ -267,7 +268,7 @@ class uBoostBDT:
     def _generate_bagging(self, sample_weight):
         masked_sample_weight = sample_weight.copy()
         n_samples = len(sample_weight)
-        if isinstance(self.bagging, bool) and self.bagging is True:
+        if isinstance(self.bagging, bool) and self.bagging:
             indices = self.random_generator.randint(0, n_samples, n_samples)
             sample_counts = np.bincount(indices, minlength=n_samples)
             masked_sample_weight *= sample_counts
@@ -275,16 +276,15 @@ class uBoostBDT:
             masked_sample_weight *= (
                 self.random_generator.rand(n_samples) > 1 - self.bagging)
         else:
-            assert isinstance(self.bagging, bool) and self.bagging is False,\
+            assert isinstance(self.bagging, bool) and not self.bagging, \
                 "something wrong was passed as bagging"
         return masked_sample_weight
 
     def _apply_ubooost_in_place(self, sample_weight, local_efficiencies, y):
         """Applies uBoost local efficecy-based boost.
-        sample_weight - modified by an AdaBoost step sample weights,
+        sample_weight should be modified by an AdaBoost step sample weights,
         will be in-place changed by the procedure.
         """
-        # another way to compute efficiencies
         # TODO(alex) think of weights,
         #   we should take weights into account when computing efficiencies
         # TODO(alex) separate normalization for classes?
@@ -302,8 +302,8 @@ class uBoostBDT:
         #    'The computed efficiencies are different'
         e_prime = np.sum(sample_weight * np.abs(
             local_efficiencies - self.target_efficiency))
-        # TODO(Alex) why do we have nominator here?
         beta = np.log((1.0 - e_prime) / e_prime)
+        # TODO(Alex) why do we have nominator here?
         # beta = math.log(1. / e_prime)
         if self.boost_only_signal:
             sample_weight *= np.exp((
@@ -343,7 +343,7 @@ class uBoostBDT:
             # Stop if the error is at least as bad as random guessing
             # (Removed by Alex)
 
-            # Boost weight using AdaBoost SAMME alg
+            # Boost weight using AdaBoost SAMME algorithm
             estimator_weight = self.learning_rate * (
                 np.log((1. - estimator_error) / estimator_error))
             self.estimator_weights_[iboost] = estimator_weight
@@ -378,7 +378,6 @@ class uBoostBDT:
 
     def _boost_real(self, X, y, sample_weight):
         """A single boost using the SAMME.R algorithm"""
-        cumulative_score = np.zeros(len(X))
         for iboost in xrange(self.n_estimators):
             estimator = self._make_estimator()
             masked_sample_weight = self._generate_bagging(sample_weight)
@@ -490,7 +489,8 @@ class uBoostBDT:
         """
         return self.predict_proba(X).argmax(axis=1)
 
-    def _samme_r_proba(self, estimator, n_classes, X):
+    @staticmethod
+    def _samme_r_proba(estimator, n_classes, X):
         """Calculate algorithm 4, step 2, equation c) of Zhu et al [1].
 
         References
@@ -538,6 +538,9 @@ class uBoostBDT:
         Returns:
             array, shape = [n_features]
         """
+        assert self.algorithm == 'SAMME', \
+            "Not implemneted for SAMME.R"
+
         if self.estimators_ is None or len(self.estimators_) == 0:
             raise ValueError("Estimator not fitted,"
                              " call `fit` before `feature_importances_`.")
@@ -664,7 +667,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
 
         neighbours_matrix = computeSignalKnnIndices(
             self.uniform_variables, X, y > 0.5, n_neighbors=self.knn)
-        # TODO select some other targets ?
+        # TODO(Alex) select some other targets ?
         self.target_efficiencies = [(i + 1.0) / (self.efficiency_steps + 1.0)
                                     for i in range(self.efficiency_steps)]
         self.classifiers = []
@@ -719,6 +722,8 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         return result
 
     def staged_predict_proba(self, X):
+        assert self.algorithm == "SAMME", \
+            "Not implemented for SAMME.R"
         X = self.get_train_variables(X)
         staged_probas = izip(* [
             bdt.staged_predict_proba(X) for bdt in self.classifiers])
