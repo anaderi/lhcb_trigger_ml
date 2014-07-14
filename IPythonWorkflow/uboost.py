@@ -9,6 +9,7 @@ from collections import defaultdict
 import math
 import numpy
 import numpy as np
+from numpy.core.umath_tests import inner1d
 from sklearn.base import BaseEstimator, clone
 from sklearn.ensemble.weight_boosting import ClassifierMixin
 from sklearn.tree import DecisionTreeClassifier
@@ -16,8 +17,8 @@ from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays
 from itertools import izip, islice
 
-from commonutils import compute_groups_efficiencies, compute_bdt_cut, sigmoid_function, \
-    generate_sample, computeSignalKnnIndices
+from commonutils import compute_groups_real_efficiencies, compute_groups_discrete_efficiencies,\
+     sigmoid_function, generate_sample, computeSignalKnnIndices, compute_bdt_cut
 
 
 __author__ = 'Alex Rogozhnikov'
@@ -218,11 +219,12 @@ class uBoostBDT:
 
         if self.algorithm == "SAMME":
             self._boost_discrete(X_train_variables, y, sample_weight)
+            self.bdt_cut = compute_bdt_cut(self.target_efficiency, y, self.predict_proba(X)[:, 1])
+            assert self.bdt_cut == self.bdt_cuts_[-1],\
+               "BDT cut doesn't appear to coincide with staged one"
         else:
             self._boost_real(X_train_variables, y, sample_weight)
-        # compute BDT cut
-        self.bdt_cut = compute_bdt_cut(self.target_efficiency, y, self.predict_proba(X)[:, 1])
-        assert self.bdt_cut == self.bdt_cuts_[-1], "BDT cut doesn't appear to coincide with staged one"
+            self.bdt_cut = compute_bdt_cut(self.target_efficiency, y, self.predict_proba(X)[:, 1])
 
         return self
 
@@ -250,6 +252,11 @@ class uBoostBDT:
         return masked_sample_weight
 
     def _apply_ubooost_in_place(self, sample_weight, local_efficiencies, y):
+        """Applies uBoost local efficecy-based boost. sample_weight - modified by an
+        AdaBoost step sample weights, will be in-place changed by the procedure.
+        """
+
+
         # another way to compute efficiencies
         # TODO think of weights, we should take weights into account when computing efficiencies
         # TODO separate normalization for classes?
@@ -264,12 +271,11 @@ class uBoostBDT:
         #                                                   smoothing_width=self.smoothing)
         # assert numpy.all(local_efficiencies == local_efficiencies2),\
         #    'The computed efficiencies are different'
-
         e_prime = numpy.sum(sample_weight * numpy.abs(
             local_efficiencies - self.target_efficiency))
-        # TODO why do we have nominator here?
-        # beta = math.log((1.0 - e_prime) / e_prime)
-        beta = math.log(1. / e_prime)
+        # TODO(Alex) why do we have nominator here?
+        beta = np.log((1.0 - e_prime) / e_prime)
+        # beta = math.log(1. / e_prime)
         if self.boost_only_signal:
             sample_weight *= numpy.exp((
                 self.target_efficiency - local_efficiencies) * y * (beta * self.uniforming_rate))
@@ -322,8 +328,69 @@ class uBoostBDT:
 
             global_cut = compute_bdt_cut(self.target_efficiency, y, predict_proba[:, 1])
             self.bdt_cuts_.append(global_cut)
-            local_efficiencies = compute_groups_efficiencies(
+            local_efficiencies = compute_groups_discrete_efficiencies(
                 global_cut, self.knn_indices, y, predict_proba, smoothing_width=self.smoothing)
+
+            self._apply_ubooost_in_place(sample_weight, local_efficiencies, y)
+
+            if self.keep_debug_info:
+                self.debug_dict['weights'].append(sample_weight.copy())
+                self.debug_dict['local_efficiencies'].append(local_efficiencies.copy())
+
+        if not self.keep_debug_info:
+            self.knn_indices = None
+
+    def _boost_real(self, X, y, sample_weight):
+        """A single boost using the SAMME.R algorithm"""
+        cumulative_score = numpy.zeros(len(X))
+        for iboost in xrange(self.n_estimators):
+            estimator = self._make_estimator()
+            masked_sample_weight = self._generate_bagging(sample_weight)
+
+            estimator.fit(X, y, sample_weight=masked_sample_weight)
+
+            y_predict_proba = estimator.predict_proba(X)
+            assert (y_predict_proba >= 0).all()
+
+            if iboost == 0:
+                self.classes_ = getattr(estimator, 'classes_', None)
+                self.n_classes_ = len(self.classes_)
+
+            y_predict = self.classes_.take(np.argmax(y_predict_proba, axis=1),
+                                           axis=0)
+
+            # Instances incorrectly classified
+            incorrect = y_predict != y
+
+            # Error fraction
+            estimator_error = np.mean(
+                np.average(incorrect, weights=sample_weight, axis=0))
+
+            self.estimator_errors_[iboost] = estimator_error
+
+            n_classes = self.n_classes_
+            classes = self.classes_
+            y_codes = np.array([-1. / (n_classes - 1), 1.])
+            y_coding = y_codes.take(classes == y[:, np.newaxis])
+            y_predict_proba[y_predict_proba <= 0] = 1e-5
+
+            estimator_weight = (-1. * self.learning_rate
+                                * (((n_classes - 1.) / n_classes) *
+                                   inner1d(y_coding, np.log(y_predict_proba))))
+
+            if not iboost == self.n_estimators - 1:
+                # Only boost positive weights
+                sample_weight *= np.exp(estimator_weight *
+                                        ((sample_weight > 0) |
+                                        (estimator_weight < 0)))
+                sample_weight /= numpy.sum(sample_weight)
+
+            self.estimator_weights_[iboost] = 1.
+
+            global_cut = compute_bdt_cut(self.target_efficiency, y, y_predict_proba[:, 1])
+            self.bdt_cuts_.append(global_cut)
+            local_efficiencies = compute_groups_discrete_efficiencies(
+                global_cut, self.knn_indices, y, y_predict_proba, smoothing_width=self.smoothing)
 
             self._apply_ubooost_in_place(sample_weight, local_efficiencies, y)
 
@@ -342,6 +409,7 @@ class uBoostBDT:
             return X[self.train_variables]
 
     def predict_score(self, X):
+        assert self.algorithm == "SAMME", "SAMME.R not implemented for the operation"
         score = numpy.zeros(len(X))
         X = self.get_train_vars(X)
         for classifier, weight in zip(self.estimators_, self.estimator_weights_):
@@ -349,6 +417,7 @@ class uBoostBDT:
         return score
 
     def staged_predict_score(self, X):
+        assert self.algorithm == "SAMME", "SAMME.R not implemented for the operation"
         score = numpy.zeros(len(X))
         X = self.get_train_vars(X)
         for classifier, weight in zip(self.estimators_, self.estimator_weights_):
@@ -376,10 +445,41 @@ class uBoostBDT:
         """
         return self.predict_proba(X).argmax(axis=1)
 
+    def _samme_r_proba(self, estimator, n_classes, X):
+        """Calculate algorithm 4, step 2, equation c) of Zhu et al [1].
+
+        References
+        ----------
+        https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/ensemble/weight_boosting.py
+        .. [1] J. Zhu, H. Zou, S. Rosset, T. Hastie, "Multi-class AdaBoost", 2009.
+        """
+
+        proba = estimator.predict_proba(X)
+
+        # Displace zero probabilities so the log is defined.
+        # Also fix negative elements which may occur with
+        # negative sample weights.
+        proba[proba <= 0] = 1e-5
+        log_proba = np.log(proba)
+
+        return (n_classes - 1) * (log_proba - (1. / n_classes)
+                              * log_proba.sum(axis=1)[:, np.newaxis])
+
     def predict_proba(self, X):
-        return self.score_to_proba(self.predict_score(X))
+        if self.algorithm == 'SAMME':
+            return self.score_to_proba(self.predict_score(X))
+        else:
+            proba= sum(self._samme_r_proba(estimator, self.n_classes_, X)
+                        for estimator in self.estimators_)
+            proba /= self.estimator_weights_.sum()
+            proba = np.exp((1. / (self.n_classes_ - 1)) * proba)
+            normalizer = proba.sum(axis=1)[:, np.newaxis]
+            normalizer[normalizer == 0.0] = 1.0
+            proba /= normalizer
+            return  proba
 
     def staged_predict_proba(self, X):
+        assert self.algorithm == "SAMME", "SAMME.R not implemented for the operation"
         result = numpy.zeros([len(X), 2])
         for score in self.staged_predict_score(X):
             yield self.score_to_proba(score, old_result=result)
@@ -400,7 +500,8 @@ class uBoostBDT:
 
 
 def _train_classifier(classifier, X_train_vars, y, sample_weight, neighbours_matrix):
-    return classifier.fit(X_train_vars, y, sample_weight=sample_weight, neighbours_matrix=neighbours_matrix)
+    return classifier.fit(
+        X_train_vars, y, sample_weight=sample_weight, neighbours_matrix=neighbours_matrix)
 
 
 class uBoostClassifier(BaseEstimator, ClassifierMixin):
@@ -414,7 +515,8 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
                  boost_only_signal=True,
                  smoothing=None,
                  random_state=None,
-                 ipc_profile=None):
+                 ipc_profile=None,
+                 algorithm="SAMME"):
         """uBoost classifier, am algorithm of boosting targeted to obtain
         flat efficiency in signal along some variables. See [1] for details.
 
@@ -477,6 +579,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         self.boost_only_signal = boost_only_signal
         self.smoothing = smoothing
         self.ipc_profile = ipc_profile
+        self.algorithm = algorithm
 
     def get_train_variables(self, X):
         if self.train_variables is not None:
@@ -507,7 +610,8 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
                                    target_efficiency=efficiency, n_neighbors=self.knn,
                                    n_estimators=self.n_estimators, base_estimator=self.base_estimator,
                                    random_state=self.random_state, bagging=self.bagging,
-                                   boost_only_signal=self.boost_only_signal, smoothing=self.smoothing)
+                                   boost_only_signal=self.boost_only_signal, smoothing=self.smoothing,
+                                   algorithm=self.algorithm)
             self.classifiers.append(classifier)
 
         if self.ipc_profile is not None:
@@ -549,11 +653,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
             result[:, 0] = 1.0 - result[:, 1]
             yield result
 
-
-def test_uboost_classifier_real():
-    # Generating some samples correlated with first variable
-    testX, testY = generate_sample(2000, 10, 0.6)
-    trainX, trainY = generate_sample(2000, 10, 0.6)
+def test_uboost_classifier_real(trainX, trainY, testX, testY):
     # We will try to get uniform distribution along this variable
     uniform_variables = ['column0']
 
@@ -568,54 +668,31 @@ def test_uboost_classifier_real():
             base_estimator=base_classifier,
             algorithm="SAMME.R")
         bdt_classifier.fit(trainX, trainY)
-        filtered = numpy.sum(bdt_classifier.predict_proba(trainX[trainY > 0.5])[:, 1] > bdt_classifier.bdt_cut)
+        filtered = numpy.sum(bdt_classifier.predict_proba(trainX[trainY > 0.5])[:, 1] >
+                              bdt_classifier.bdt_cut)
         assert abs(filtered - numpy.sum(trainY) * target_efficiency) < 5, "global cut is set wrongly"
 
-        staged_filtered_upper = [numpy.sum(pred[:, 1] > cut - 1e-7) for pred, cut in \
-                                 izip(bdt_classifier.staged_predict_proba(trainX[trainY > 0.5]),
-                                      bdt_classifier.bdt_cuts_)]
-        staged_filtered_lower = [numpy.sum(pred[:, 1] > cut + 1e-7) for pred, cut in \
-                                 izip(bdt_classifier.staged_predict_proba(trainX[trainY > 0.5]),
-                                      bdt_classifier.bdt_cuts_)]
+    uboost_classifier = uBoostClassifier(
+        uniform_variables=uniform_variables, n_neighbors=20, efficiency_steps=5, n_estimators=20)
 
-        assert bdt_classifier.bdt_cut == bdt_classifier.bdt_cuts_[-1], 'something wrong with computed cuts'
-        for filter_lower, filter_upper in islice(izip(staged_filtered_lower, staged_filtered_upper), 10, 100):
-            assert filter_lower - 1 <= sum(trainY) * target_efficiency <= filter_upper + 1, "stage cut is set wrongly"
+    uboost_classifier.fit(trainX, trainY)
+    predict_proba = uboost_classifier.predict(testX)
+    error = np.sum(np.abs(predict_proba - testY))
+    print("SAMME.R error %.3f" % (error / float(len(testX))))
 
-    uboost_classifier = uBoostClassifier(uniform_variables=uniform_variables, n_neighbors=20, efficiency_steps=3,
-                                         n_estimators=20)
-
-    bdt_classifier = uBoostBDT(
-        uniform_variables=uniform_variables,
-        n_neighbors=20,
-        n_estimators=20,
-        base_estimator=base_classifier,
-        algorithm="SAMME.R")
-
-    for classifier in [bdt_classifier, uboost_classifier]:
-        classifier.fit(trainX, trainY)
-        proba1 = classifier.predict_proba(testX)
-        proba2 = list(classifier.staged_predict_proba(testX))[-1]
-        assert numpy.all(abs(proba1 - proba2) < 0.001), "something wrong with predictions"
-
-    assert len(bdt_classifier.feature_importances_) == trainX.shape[1]
-
-    print 'real uboost is ok'
-
-def test_uboost_classifier_discrete():
-    # Generating some samples correlated with first variable
-    testX, testY = generate_sample(2000, 10, 0.6)
-    trainX, trainY = generate_sample(2000, 10, 0.6)
+def test_uboost_classifier_discrete(trainX, trainY, testX, testY):
     # We will try to get uniform distribution along this variable
     uniform_variables = ['column0']
 
     base_classifier = DecisionTreeClassifier(min_samples_leaf=10, max_depth=12)
 
     for target_efficiency in [0.1, 0.3, 0.5, 0.7, 0.9]:
-        bdt_classifier = uBoostBDT(uniform_variables=uniform_variables, target_efficiency=target_efficiency,
-                                   n_neighbors=20, n_estimators=20, base_estimator=base_classifier)
+        bdt_classifier = uBoostBDT(
+            uniform_variables=uniform_variables, target_efficiency=target_efficiency,
+            n_neighbors=20, n_estimators=20, base_estimator=base_classifier)
         bdt_classifier.fit(trainX, trainY)
-        filtered = numpy.sum(bdt_classifier.predict_proba(trainX[trainY > 0.5])[:, 1] > bdt_classifier.bdt_cut)
+        filtered = numpy.sum(bdt_classifier.predict_proba(trainX[trainY > 0.5])[:, 1] > \
+                             bdt_classifier.bdt_cut)
         assert abs(filtered - numpy.sum(trainY) * target_efficiency) < 5, "global cut is set wrongly"
 
         staged_filtered_upper = [numpy.sum(pred[:, 1] > cut - 1e-7) for pred, cut in \
@@ -625,12 +702,15 @@ def test_uboost_classifier_discrete():
                                  izip(bdt_classifier.staged_predict_proba(trainX[trainY > 0.5]),
                                       bdt_classifier.bdt_cuts_)]
 
-        assert bdt_classifier.bdt_cut == bdt_classifier.bdt_cuts_[-1], 'something wrong with computed cuts'
-        for filter_lower, filter_upper in islice(izip(staged_filtered_lower, staged_filtered_upper), 10, 100):
-            assert filter_lower - 1 <= sum(trainY) * target_efficiency <= filter_upper + 1, "stage cut is set wrongly"
+        assert bdt_classifier.bdt_cut == bdt_classifier.bdt_cuts_[-1],\
+           'something wrong with computed cuts'
+        for filter_lower, filter_upper in islice(
+                izip(staged_filtered_lower, staged_filtered_upper), 10, 100):
+            assert filter_lower - 1 <= sum(trainY) * target_efficiency <= filter_upper + 1,\
+               "stage cut is set wrongly"
 
-    uboost_classifier = uBoostClassifier(uniform_variables=uniform_variables, n_neighbors=20, efficiency_steps=3,
-                                         n_estimators=20)
+    uboost_classifier = uBoostClassifier(
+        uniform_variables=uniform_variables, n_neighbors=20, efficiency_steps=5, n_estimators=20)
 
     bdt_classifier = uBoostBDT(uniform_variables=uniform_variables, n_neighbors=20, n_estimators=20,
                                base_estimator=base_classifier)
@@ -645,6 +725,13 @@ def test_uboost_classifier_discrete():
 
     print 'discrete uboost is ok'
 
+    uboost_classifier.fit(trainX, trainY)
+    predict_proba = uboost_classifier.predict(testX)
+    error = np.sum(np.abs(predict_proba - testY))
+    print("SAMME error %.3f" % (error / float(len(testX))))
+
 if __name__ == '__main__':
-    test_uboost_classifier_discrete()
-    test_uboost_classifier_real()
+    testX, testY = generate_sample(2000, 10, 0.6)
+    trainX, trainY = generate_sample(2000, 10, 0.6)
+    test_uboost_classifier_discrete(trainX, trainY, testX, testY)
+    test_uboost_classifier_real(trainX, trainY, testX, testY)
