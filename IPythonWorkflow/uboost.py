@@ -20,10 +20,11 @@ from sklearn.ensemble.weight_boosting import ClassifierMixin
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays
+from sklearn.ensemble.weight_boosting import AdaBoostClassifier
 
 from commonutils import compute_groups_efficiencies,\
     sigmoid_function, generate_sample, computeSignalKnnIndices, compute_bdt_cut
-
+from reports import Predictions, ClassifiersDict
 
 __author__ = "Alex Rogozhnikov, Nikita Kazeev"
 __copyright__ = "Copyright 2014, Yandex"
@@ -280,7 +281,7 @@ class uBoostBDT:
                 "something wrong was passed as bagging"
         return masked_sample_weight
 
-    def _apply_ubooost_in_place(self, sample_weight, local_efficiencies, y):
+    def _apply_uboost_in_place(self, sample_weight, local_efficiencies, y):
         """Applies uBoost local efficecy-based boost.
         sample_weight should be modified by an AdaBoost step sample weights,
         will be in-place changed by the procedure.
@@ -366,7 +367,7 @@ class uBoostBDT:
                 global_cut, self.knn_indices, y, predict_proba,
                 smoothing_width=self.smoothing)
 
-            self._apply_ubooost_in_place(sample_weight, local_efficiencies, y)
+            self._apply_uboost_in_place(sample_weight, local_efficiencies, y)
 
             if self.keep_debug_info:
                 self.debug_dict['weights'].append(sample_weight.copy())
@@ -429,7 +430,7 @@ class uBoostBDT:
                 global_cut, self.knn_indices, y, y_predict_proba,
                 smoothing_width=self.smoothing)
 
-            self._apply_ubooost_in_place(sample_weight, local_efficiencies, y)
+            self._apply_uboost_in_place(sample_weight, local_efficiencies, y)
 
             if self.keep_debug_info:
                 self.debug_dict['weights'].append(sample_weight.copy())
@@ -748,7 +749,7 @@ def calculate_efficency_non_uniformity(
     local_efficiencies = compute_groups_efficiencies(
         global_cut, knn_indices, Y, predict_proba, smoothing_width=0.)
     local_efficiencies -= np.mean(local_efficiencies)
-    return(np.max(np.abs(local_efficiencies)))
+    return np.std(local_efficiencies)
 
 
 def test_uboost_classifier_real(trainX, trainY, testX, testY):
@@ -771,23 +772,6 @@ def test_uboost_classifier_real(trainX, trainY, testX, testY):
             bdt_classifier.bdt_cut)
         assert abs(filtered - np.sum(trainY) * target_efficiency) < 5,\
             "global cut is set wrongly"
-
-    uboost_classifier = uBoostClassifier(
-        uniform_variables=uniform_variables,
-        n_neighbors=20,
-        efficiency_steps=5,
-        n_estimators=20,
-        algorithm="SAMME.R")
-
-    uboost_classifier.fit(trainX, trainY)
-    predict_proba = uboost_classifier.predict_proba(testX)
-    predict = uboost_classifier.predict(testX)
-    error = np.sum(np.abs(predict - testY))
-    print("SAMME.R error %.3f" % (error / float(len(testX))))
-
-    uniformity = calculate_efficency_non_uniformity(
-        testX, testY, predict_proba, uniform_variables, 20, 0.5)
-    print("SAMME.R non-uniformity %.3f" % uniformity)
 
 
 def test_uboost_classifier_discrete(trainX, trainY, testX, testY):
@@ -858,10 +842,34 @@ def test_uboost_classifier_discrete(trainX, trainY, testX, testY):
     print("SAMME non-uniformity %.3f" % uniformity)
 
 
+def test_classifiers(trainX, trainY, testX, testY):
+    uniform_variables = ['column0']
+    clf_Ada = AdaBoostClassifier(n_estimators=20)
+    clf_uBoost_SAMME = uBoostClassifier(
+        uniform_variables=uniform_variables,
+        n_neighbors=20,
+        efficiency_steps=5,
+        n_estimators=20,
+        algorithm="SAMME")
+    clf_uBoost_SAMME_R = uBoostClassifier(
+        uniform_variables=uniform_variables,
+        n_neighbors=20,
+        efficiency_steps=5,
+        n_estimators=20,
+        algorithm="SAMME.R")
+    clf_dict = ClassifiersDict({
+        "Ada": clf_Ada,
+        "uSAMME": clf_uBoost_SAMME,
+        "uSAMME.R": clf_uBoost_SAMME_R
+        })
+    clf_dict.fit(trainX, trainY)
+
+    predictions = Predictions(clf_dict, testX, testY)
+    predictions.print_mse(uniform_variables, in_html=False)
+
 if __name__ == '__main__':
     # Tests results depend significantly on the seed
-    np.random.seed(16)
+    np.random.seed(42)
     testX, testY = generate_sample(2000, 10, 0.6)
     trainX, trainY = generate_sample(2000, 10, 0.6)
-    test_uboost_classifier_discrete(trainX, trainY, testX, testY)
-    test_uboost_classifier_real(trainX, trainY, testX, testY)
+    test_classifiers(trainX, trainY, testX, testY)
