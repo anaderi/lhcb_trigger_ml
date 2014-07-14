@@ -325,7 +325,7 @@ def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
     return weighted_percentile(signal_proba, percentiles)
 
 def compute_groups_efficiencies(global_cut, knn_indices, answers, prediction_proba,
-                                         sample_weight=None, smoothing_width=0.0):
+                                sample_weight=None, smoothing_width=0.0):
     """Fast implementation in numpy"""
     assert len(answers) == len(prediction_proba), 'different size'
     sample_weight = check_sample_weight(answers, sample_weight)
@@ -510,6 +510,3 @@ def export_root_to_csv(filename, branches=None):
         result.append(new_file_name)
     print("Successfully converted")
     return result
-
-
-# def compute_bin_indices(X, mask, sample_weight=None, ):
