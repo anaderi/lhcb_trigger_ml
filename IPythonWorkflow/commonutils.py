@@ -324,16 +324,7 @@ def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
     percentiles = 1. - target_efficiency
     return weighted_percentile(signal_proba, percentiles)
 
-def compute_groups_real_efficiencies(knn_indices, answers, prediction_proba,
-                                     sample_weight=None):
-    assert len(answers) == len(prediction_proba), 'different size'
-    sample_weight = check_sample_weight(answers, sample_weight)
-    groups_predictions = numpy.take(prediction_proba[:, 1], knn_indices)
-    groups_weights = numpy.take(sample_weight, knn_indices)
-    # TODO test this new implementation
-    return numpy.average(groups_predictions - 0.5, weights=groups_weights, axis=1)
-
-def compute_groups_discrete_efficiencies(global_cut, knn_indices, answers, prediction_proba,
+def compute_groups_efficiencies(global_cut, knn_indices, answers, prediction_proba,
                                          sample_weight=None, smoothing_width=0.0):
     """Fast implementation in numpy"""
     assert len(answers) == len(prediction_proba), 'different size'
@@ -344,7 +335,6 @@ def compute_groups_discrete_efficiencies(global_cut, knn_indices, answers, predi
     # TODO test this new implementation
     return numpy.average(groups_predictions, weights=groups_weights, axis=1)
     # neigh_predictions.mean(axis=1)
-
 
 def sigmoid_function(x, width):
     """ Sigmoid function is smoothing oh Heaviside function, the lesser width, the closer we are to Heaviside function

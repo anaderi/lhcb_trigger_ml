@@ -17,7 +17,7 @@ from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays
 from itertools import izip, islice
 
-from commonutils import compute_groups_real_efficiencies, compute_groups_discrete_efficiencies,\
+from commonutils import compute_groups_efficiencies,\
      sigmoid_function, generate_sample, computeSignalKnnIndices, compute_bdt_cut
 
 
@@ -328,7 +328,7 @@ class uBoostBDT:
 
             global_cut = compute_bdt_cut(self.target_efficiency, y, predict_proba[:, 1])
             self.bdt_cuts_.append(global_cut)
-            local_efficiencies = compute_groups_discrete_efficiencies(
+            local_efficiencies = compute_groups_efficiencies(
                 global_cut, self.knn_indices, y, predict_proba, smoothing_width=self.smoothing)
 
             self._apply_ubooost_in_place(sample_weight, local_efficiencies, y)
@@ -389,7 +389,7 @@ class uBoostBDT:
 
             global_cut = compute_bdt_cut(self.target_efficiency, y, y_predict_proba[:, 1])
             self.bdt_cuts_.append(global_cut)
-            local_efficiencies = compute_groups_discrete_efficiencies(
+            local_efficiencies = compute_groups_efficiencies(
                 global_cut, self.knn_indices, y, y_predict_proba, smoothing_width=self.smoothing)
 
             self._apply_ubooost_in_place(sample_weight, local_efficiencies, y)
@@ -653,6 +653,15 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
             result[:, 0] = 1.0 - result[:, 1]
             yield result
 
+def calculate_efficency_non_uniformity(
+        X, Y, predict_proba, uniform_variables, n_neighbors, global_cut):
+    """Calclates the maximum local efficency deviation"""
+    knn_indices = computeSignalKnnIndices(uniform_variables, X, Y > 0.5, n_neighbors)
+    local_efficiencies = compute_groups_efficiencies(
+        global_cut, knn_indices, Y, predict_proba, smoothing_width=0.)
+    local_efficiencies -= np.mean(local_efficiencies)
+    return(np.max(np.abs(local_efficiencies)))
+
 def test_uboost_classifier_real(trainX, trainY, testX, testY):
     # We will try to get uniform distribution along this variable
     uniform_variables = ['column0']
@@ -673,12 +682,18 @@ def test_uboost_classifier_real(trainX, trainY, testX, testY):
         assert abs(filtered - numpy.sum(trainY) * target_efficiency) < 5, "global cut is set wrongly"
 
     uboost_classifier = uBoostClassifier(
-        uniform_variables=uniform_variables, n_neighbors=20, efficiency_steps=5, n_estimators=20)
+        uniform_variables=uniform_variables, n_neighbors=20, efficiency_steps=5, n_estimators=20,
+        algorithm="SAMME.R")
 
     uboost_classifier.fit(trainX, trainY)
-    predict_proba = uboost_classifier.predict(testX)
-    error = np.sum(np.abs(predict_proba - testY))
+    predict_proba = uboost_classifier.predict_proba(testX)
+    predict = uboost_classifier.predict(testX)
+    error = np.sum(np.abs(predict - testY))
     print("SAMME.R error %.3f" % (error / float(len(testX))))
+
+    uniformity = calculate_efficency_non_uniformity(
+        testX, testY, predict_proba, uniform_variables, 20, 0.5)
+    print("SAMME.R non-uniformity %.3f" % uniformity)
 
 def test_uboost_classifier_discrete(trainX, trainY, testX, testY):
     # We will try to get uniform distribution along this variable
@@ -723,14 +738,20 @@ def test_uboost_classifier_discrete(trainX, trainY, testX, testY):
 
     assert len(bdt_classifier.feature_importances_) == trainX.shape[1]
 
-    print 'discrete uboost is ok'
-
     uboost_classifier.fit(trainX, trainY)
-    predict_proba = uboost_classifier.predict(testX)
-    error = np.sum(np.abs(predict_proba - testY))
+    predict_proba = uboost_classifier.predict_proba(testX)
+    predict = uboost_classifier.predict(testX)
+    error = np.sum(np.abs(predict - testY))
     print("SAMME error %.3f" % (error / float(len(testX))))
 
+    uniformity = calculate_efficency_non_uniformity(
+        testX, testY, predict_proba, uniform_variables, 20, 0.5)
+    print("SAMME non-uniformity %.3f" % uniformity)
+
+
 if __name__ == '__main__':
+    # Tests results depend significantly on the seed
+    np.random.seed(16)
     testX, testY = generate_sample(2000, 10, 0.6)
     trainX, trainY = generate_sample(2000, 10, 0.6)
     test_uboost_classifier_discrete(trainX, trainY, testX, testY)
