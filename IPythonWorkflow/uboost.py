@@ -741,17 +741,6 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
             yield result
 
 
-def calculate_efficency_non_uniformity(
-        X, Y, predict_proba, uniform_variables, n_neighbors, global_cut):
-    """Calclates the maximum local efficency deviation"""
-    knn_indices = computeSignalKnnIndices(
-        uniform_variables, X, Y > 0.5, n_neighbors)
-    local_efficiencies = compute_groups_efficiencies(
-        global_cut, knn_indices, Y, predict_proba, smoothing_width=0.)
-    local_efficiencies -= np.mean(local_efficiencies)
-    return np.std(local_efficiencies)
-
-
 def test_uboost_classifier_real(trainX, trainY, testX, testY):
     # We will try to get uniform distribution along this variable
     uniform_variables = ['column0']
@@ -837,10 +826,6 @@ def test_uboost_classifier_discrete(trainX, trainY, testX, testY):
     error = np.sum(np.abs(predict - testY))
     print("SAMME error %.3f" % (error / float(len(testX))))
 
-    uniformity = calculate_efficency_non_uniformity(
-        testX, testY, predict_proba, uniform_variables, 20, 0.5)
-    print("SAMME non-uniformity %.3f" % uniformity)
-
 
 def test_classifiers(trainX, trainY, testX, testY):
     uniform_variables = ['column0']
@@ -873,3 +858,5 @@ if __name__ == '__main__':
     testX, testY = generate_sample(2000, 10, 0.6)
     trainX, trainY = generate_sample(2000, 10, 0.6)
     test_classifiers(trainX, trainY, testX, testY)
+    test_uboost_classifier_real(trainX, trainY, testX, testY)
+    test_uboost_classifier_discrete(trainX, trainY, testX, testY)
