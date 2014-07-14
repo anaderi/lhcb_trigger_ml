@@ -21,6 +21,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays
 from sklearn.ensemble.weight_boosting import AdaBoostClassifier
+import pylab as pl
 
 from commonutils import compute_groups_efficiencies,\
     sigmoid_function, generate_sample, computeSignalKnnIndices, compute_bdt_cut
@@ -526,11 +527,32 @@ class uBoostBDT:
             return proba
 
     def staged_predict_proba(self, X):
-        assert self.algorithm == "SAMME",\
-            "SAMME.R not implemented for the operation"
-        result = np.zeros([len(X), 2])
-        for score in self.staged_predict_score(X):
-            yield self.score_to_proba(score, old_result=result)
+        if self.algorithm == "SAMME":
+            result = np.zeros([len(X), 2])
+            for score in self.staged_predict_score(X):
+                yield self.score_to_proba(score, old_result=result)
+        else:  # SAMME.R
+            n_classes = self.n_classes_
+            proba = None
+            norm = 0.
+
+            for weight, estimator in zip(self.estimator_weights_,
+                                         self.estimators_):
+                norm += weight
+                if self.algorithm == 'SAMME.R':
+                    # The weights are all 1. for SAMME.R
+                    current_proba = self._samme_r_proba(
+                        estimator, n_classes, X)
+                if proba is None:
+                    proba = current_proba
+                else:
+                    proba += current_proba
+                real_proba = np.exp((1. / (n_classes - 1)) * (proba / norm))
+                normalizer = real_proba.sum(axis=1)[:, np.newaxis]
+                normalizer[normalizer == 0.0] = 1.0
+                real_proba /= normalizer
+
+                yield real_proba
 
     @property
     def feature_importances_(self):
@@ -723,8 +745,6 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         return result
 
     def staged_predict_proba(self, X):
-        assert self.algorithm == "SAMME", \
-            "Not implemented for SAMME.R"
         X = self.get_train_variables(X)
         staged_probas = izip(* [
             bdt.staged_predict_proba(X) for bdt in self.classifiers])
@@ -851,6 +871,8 @@ def test_classifiers(trainX, trainY, testX, testY):
 
     predictions = Predictions(clf_dict, testX, testY)
     predictions.print_mse(uniform_variables, in_html=False)
+    predictions.mse_curves(uniform_variables)
+    pl.show()
 
 if __name__ == '__main__':
     # Tests results depend significantly on the seed
