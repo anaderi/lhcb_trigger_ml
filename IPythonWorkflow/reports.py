@@ -94,7 +94,7 @@ class ClassifiersDict(OrderedDict):
             lb_view = client.load_balanced_view()
 
             result = lb_view.map_sync(train_classifier, self.iteritems(), [X] * len(self),  [y] * len(self),
-                                      sample_weight=[sample_weight] * len(self))
+                                      [sample_weight] * len(self))
             print("We spent %.2f seconds on parallel training" % (time.time() - start_time))
             for name, classifier in result:
                 self[name] = classifier
@@ -267,7 +267,7 @@ class Predictions(object):
             pylab.plot(mse_stages.keys(), mse_stages, label=name)
             pylab.xlabel("stage"), pylab.ylabel("MSE")
         pylab.ylim(ymin=0)
-        pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=3, fancybox=True, shadow=True)
+        pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.00), ncol=3, fancybox=True, shadow=True)
         return self
 
     def efficiency(self, uniform_variables, stages=None, target_efficiencies=None, n_bins=20, label=1):
@@ -368,11 +368,11 @@ class Predictions(object):
 
     def correlation_curves(self, var_name, center=None, step=1, label=1):
         """ Correlation is built only for signal (by now, will be extended soon)
-        :param var_name: str, correlation is computed for this variable
-        :param center: float|None, if float, the correlation is measured between |x - center| and prediction
-        :param step: int
-        :param label: int, label of class, the correlation is computed for the events of this class
-        :return: Predictions, returns self
+        :type var_name: str, correlation is computed for this variable
+        :type center: float|None, if float, the correlation is measured between |x - center| and prediction
+        :type step: int
+        :type label: int, label of class, the correlation is computed for the events of this class
+        :rtype: Predictions, returns self
         """
         mask = self.y == label
         pylab.title("Pearson correlation with " + str(var_name))
@@ -529,9 +529,6 @@ def test_bin_to_group_indices(size=100, bins=10):
         indices.update(group)
 
 test_bin_to_group_indices()
-
-
-
 
 
 def compute_efficiencies_on_bins(signal_proba, signal_mask, bin_indices, n_total_bins, cut, sample_weight=None):
