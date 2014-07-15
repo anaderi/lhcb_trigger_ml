@@ -11,6 +11,7 @@ import scipy.sparse as sparse
 from sklearn.base import BaseEstimator
 from sklearn.ensemble import GradientBoostingClassifier as GBClassifier
 from sklearn.ensemble._gradient_boosting import _random_sample_mask
+from sklearn.ensemble.forest import RandomForestRegressor
 from sklearn.ensemble.gradient_boosting import LossFunction, LOSS_FUNCTIONS, MultinomialDeviance, \
     LogOddsEstimator, BinomialDeviance
 import numpy
@@ -590,7 +591,7 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
         # computing the common distribution of signal
         # taking only signal by now
         # this is approximate computation!
-        # TODO implement, this is wrong implementation
+        # TODO reimplement, this is wrong implementation
         pred = numpy.ravel(pred)
         loss = 0
 
@@ -624,8 +625,8 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
                 assert numpy.all(label_mask[indices_in_bin]), "TODO delete"
                 local_effs = compute_efficiencies(indices_in_bin, y_pred, sample_weight=self.sample_weight)
                 global_effs = global_efficiencies[indices_in_bin]
-                bin_gradient = self.power * numpy.sign(local_effs - global_effs) * \
-                               numpy.abs(local_effs - global_effs) ** (self.power - 1)
+                bin_gradient = self.power * numpy.sign(local_effs - global_effs) \
+                               * numpy.abs(local_effs - global_effs) ** (self.power - 1)
 
                 # TODO multiply by derivative of F_global ?
                 neg_gradient[indices_in_bin] += bin_weight * bin_gradient
@@ -659,17 +660,21 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
         return LogOddsEstimator()
 
 
+class new_rf(RandomForestRegressor):
+    def predict(self, X):
+        return RandomForestRegressor.predict(self, X)[:, numpy.newaxis]
+
+
 class NewFlatnessLossFunction(FlatnessLossFunction, BaseEstimator):
     def __init__(self, uniform_variables, n_neighbours=100, uniform_label=1,  ada_coefficient=1.,
                  allow_wrong_signs=True, keep_debug_info=False, uniforming_factor=1., update_tree=True):
         """
-        :type uniform_label: int|list(int), labels of classes for which the uniformity of predictions is desired
+        :param int|list(int) uniform_label: labels of classes for which the uniformity of predictions is desired
         """
         self.uniform_variables = uniform_variables
         self.n_neighbours = n_neighbours
         self.uniform_label = numpy.array([uniform_label]) if isinstance(uniform_label, numbers.Number)  \
             else numpy.array(uniform_label)
-        # self.power = power
         self.ada_coefficient = ada_coefficient
         self.allow_wrong_signs = allow_wrong_signs
         self.keep_debug_info = keep_debug_info
@@ -695,6 +700,9 @@ class NewFlatnessLossFunction(FlatnessLossFunction, BaseEstimator):
 
     def __call__(self, y, pred):
         pass
+
+    def init_estimator(self, X=None, y=None):
+        return new_rf()
 
     def negative_gradient(self, y, y_pred, sample_weight=None, **kw_args):
         sample_weight = check_sample_weight(y, sample_weight=sample_weight)
@@ -742,8 +750,6 @@ class NewFlatnessLossFunction(FlatnessLossFunction, BaseEstimator):
 
 
 
-
-
 class MyGradientBoostingClassifier(GBClassifier):
     def __init__(self, loss='deviance', learning_rate=0.1, n_estimators=100,
                  subsample=1.0, min_samples_split=2, min_samples_leaf=1,
@@ -753,7 +759,7 @@ class MyGradientBoostingClassifier(GBClassifier):
         GradientBoosting from sklearn, which is modified to work with KnnLossFunction and it's versions.
         Train variables are variables used in training trees.
 
-        :type loss: LossFunction | str
+        :param LossFunction|str loss:
         """
         self.train_variables = train_variables
         GBClassifier.__init__(self, loss=loss, learning_rate=learning_rate, n_estimators=n_estimators,
