@@ -324,7 +324,7 @@ class Predictions(object):
                         ax.set_xlabel(uniform_variables[0]), ax.set_ylabel(uniform_variables[1])
                         ax.set_title(name)
                         pylab.colorbar(p, ax=ax)
-                    pyalab.legend()
+                    pylab.legend()
                     pylab.show()
         return self
 
