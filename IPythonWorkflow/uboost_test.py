@@ -3,6 +3,7 @@
 import pylab as pl
 import numpy as np
 from itertools import izip, islice
+import argparse
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble.weight_boosting import AdaBoostClassifier
 
@@ -97,7 +98,7 @@ def test_uboost_classifier_discrete(trainX, trainY, testX, testY):
     print("SAMME error %.3f" % (error / float(len(testX))))
 
 
-def test_classifiers(trainX, trainY, testX, testY):
+def test_classifiers(trainX, trainY, testX, testY, output_name_patern=None):
     uniform_variables = ['column0']
     clf_Ada = AdaBoostClassifier(n_estimators=50)
     clf_uBoost_SAMME = uBoostClassifier(
@@ -121,18 +122,38 @@ def test_classifiers(trainX, trainY, testX, testY):
 
     predictions = Predictions(clf_dict, testX, testY)
     predictions.print_mse(uniform_variables, in_html=False)
+    # TODO(kazeevn)
+    # Make reports save the plots. And rewrite it from using global
+    # pl.* calls.
     predictions.mse_curves(uniform_variables)
+    if output_name_patern is not None:
+        pl.savefig(output_name_patern % "mse_curves", bbox="tight")
     figure1 = pl.figure()
     predictions.learning_curves()
-#    figure2 = pl.figure()
+    if output_name_patern is not None:
+        pl.savefig(output_name_patern % "learning_curves", bbox="tight")
     predictions.efficiency(uniform_variables)
+    if output_name_patern is not None:
+        pl.savefig(output_name_patern % "efficiency_curves", bbox="tight")
 
-if __name__ == '__main__':
+def main():
+    parser = argparse.ArgumentParser(
+        description="Run some assert-based tests, "
+        "calculate MSE and plot local efficiencies for"
+        " AdaBoost, uBoost.SAMME and uBoost.SAMME.R")
+    parser.add_argument('-o', '--output-file', type=str,
+                        help=r"Filename pattern with one %s to save "
+                        "the plots to. Example: classifiers_%s.pdf")
+    args = parser.parse_args()
     # Tests results depend significantly on the seed
     np.random.seed(42)
     testX, testY = generate_sample(10000, 10, 0.6)
     trainX, trainY = generate_sample(10000, 10, 0.6)
     test_uboost_classifier_real(trainX, trainY, testX, testY)
     test_uboost_classifier_discrete(trainX, trainY, testX, testY)
-    test_classifiers(trainX, trainY, testX, testY)
-    pl.show()
+    test_classifiers(trainX, trainY, testX, testY, args.output_file)
+    if args.output_file is None:
+        pl.show()
+
+if __name__ == '__main__':
+    main()
