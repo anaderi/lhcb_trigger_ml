@@ -246,10 +246,11 @@ class uBoostBDT:
             self._boost_discrete(X_train_variables, y, sample_weight)
         else:  # SAMME.R
             self._boost_real(X_train_variables, y, sample_weight)
+
         self.bdt_cut = compute_bdt_cut(
             self.target_efficiency, y, self.predict_proba(X)[:, 1])
         assert self.bdt_cut == self.bdt_cuts_[-1],\
-                "BDT cut doesn't appear to coincide with the staged one"
+            "BDT cut doesn't appear to coincide with the staged one"
         return self
 
     def _make_estimator(self, append=True):
@@ -382,7 +383,6 @@ class uBoostBDT:
             estimator = self._make_estimator()
             self.estimator_weights_[iboost] = 1.
             masked_sample_weight = self._generate_bagging(sample_weight)
-            assert(not np.any(np.isnan(sample_weight)))
             estimator.fit(X, y, sample_weight=masked_sample_weight)
 
             if iboost == 0:
@@ -392,9 +392,10 @@ class uBoostBDT:
                 y_codes = np.array([-1. / (self.n_classes_ - 1), 1.])
                 y_coding = y_codes.take(self.classes_ == y[:, np.newaxis])
 
-
             current_proba = estimator.predict_proba(X)
-            assert(not np.any(np.isnan(current_proba)))
+            samme_proba = self._samme_r_proba(current_proba, self.n_classes_)
+
+            current_proba[current_proba <= 0] = 1e-5
 
             y_predict = self.classes_.take(
                 np.argmax(current_proba, axis=1), axis=0)
@@ -405,25 +406,20 @@ class uBoostBDT:
             boost_weight = (-1. * self.learning_rate
                                 * (((self.n_classes_ - 1.) / self.n_classes_) *
                                    inner1d(y_coding, np.log(current_proba))))
-            assert(not np.any(np.isnan(boost_weight)))
             if not iboost == self.n_estimators - 1:
-                sample_weight *= np.exp(boost_weight *
-                                        ((sample_weight > 0) |
-                                        (boost_weight < 0)))
-            assert(not np.any(np.isnan(sample_weight)))
+                sample_weight *= \
+                    np.exp(boost_weight * ((sample_weight > 0) |
+                                           (boost_weight < 0)))
             sample_weight /= np.sum(sample_weight)
 
             # The cumulative sequence
             # The estimator weights are all 1. for SAMME.R
-            samme_proba = self._samme_r_proba(current_proba, self.n_classes_)
             norm += 1.
             proba += samme_proba
             real_proba = np.exp((1. / (self.n_classes_ - 1)) * (proba / norm))
             normalizer = real_proba.sum(axis=1)[:, np.newaxis]
             normalizer[normalizer == 0.0] = 1.0
             real_proba /= normalizer
-
-            assert(not np.any(np.isnan(proba)))
 
             global_cut = compute_bdt_cut(
                 self.target_efficiency, y, real_proba[:, 1])
@@ -432,22 +428,13 @@ class uBoostBDT:
                 global_cut, self.knn_indices, y, real_proba,
                 smoothing_width=self.smoothing)
 
-            assert(not np.any(np.isnan(sample_weight)))
-            assert(not np.any(np.isnan(local_efficiencies)))
             self._apply_uboost_in_place(sample_weight, local_efficiencies, y)
-            assert(not np.any(np.isnan(sample_weight)))
 
             if self.keep_debug_info:
                 self.debug_dict['weights'].append(sample_weight.copy())
                 self.debug_dict['local_efficiencies'].append(
                     local_efficiencies.copy())
 
-        real_proba = np.exp((1. / (self.n_classes_ - 1)) * (proba / norm))
-        normalizer = real_proba.sum(axis=1)[:, np.newaxis]
-        normalizer[normalizer == 0.0] = 1.0
-        real_proba /= normalizer
-
-        assert(np.array_equal(real_proba, self.predict_proba(X)))
         if not self.keep_debug_info:
             self.knn_indices = None
 
@@ -491,6 +478,7 @@ class uBoostBDT:
         return proba
 
     def predict(self, X):
+        # TODO(kazeevn) CHECK
         """Predict classes for X.
         Parameters:
             X : array-like of shape = [n_samples, n_features],
@@ -549,7 +537,8 @@ class uBoostBDT:
                                          self.estimators_):
                 norm += weight
                 # The weights are all 1. for SAMME.R
-                current_proba = self._samme_r_proba(estimator, n_classes, X)
+                current_proba = self._samme_r_proba(
+                    estimator.predict_proba(X), n_classes)
                 if proba is None:
                     proba = current_proba
                 else:
@@ -735,7 +724,9 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         return self
 
     def predict(self, X):
-        return np.array(self.predict_proba(X) > self.global_cut, dtype=int)
+        # TODO(kazeevn) Shall we sync behaviour with predict_proba and
+        # return a list of predictions for all target_efficiencies
+        return self.predict_proba(X).argmax(axis=1)
 
     def predict_proba(self, X):
         X_train_vars = self.get_train_variables(X)
