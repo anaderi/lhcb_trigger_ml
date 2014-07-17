@@ -294,12 +294,14 @@ class Predictions(object):
                 for i, (name, eff_stage_data) in enumerate(stage.iteritems()):
                     if isinstance(eff_stage_data, float) and pandas.isnull(eff_stage_data):
                         continue
-                    pylab.subplot(1, len(stage), i + 1)
+                    ax = pylab.subplot(1, len(stage), i + 1)
                     for eff, local_effs in zip(target_efficiencies, eff_stage_data):
-                        pylab.ylim(0, 1)
-                        pylab.plot(x_limits, local_effs, label='eff=%.2f' % eff)
-                        pylab.title(name)
-                        pylab.xlabel(uniform_variables[0]), pylab.ylabel('efficiency')
+                        ax.set_ylim(0, 1)
+                        ax.plot(x_limits, local_effs, label='eff=%.2f' % eff)
+                        ax.set_title(name)
+                        ax.set_xlabel(uniform_variables[0])
+                        ax.set_ylabel('efficiency')
+                        ax.legend()
         else:
             x_limits, y_limits = self._compute_bin_centers(uniform_variables, n_bins=n_bins, mask=mask)
             for target_efficiency in target_efficiencies:
@@ -322,6 +324,7 @@ class Predictions(object):
                         ax.set_xlabel(uniform_variables[0]), ax.set_ylabel(uniform_variables[1])
                         ax.set_title(name)
                         pylab.colorbar(p, ax=ax)
+                    pyalab.legend()
                     pylab.show()
         return self
 
