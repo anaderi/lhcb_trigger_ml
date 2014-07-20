@@ -183,9 +183,6 @@ class uBoostBDT:
             raise ValueError("n_estimators must be greater than zero.")
         if self.learning_rate <= 0:
             raise ValueError("learning_rate must be greater than zero")
-        if (sample_weight is not None) and sample_weight.sum() <= 0:
-            raise ValueError("Attempting to fit with a"
-                             " non-positive weighted number of samples.")
 
         # Check that algorithm is supported
         if self.algorithm not in ('SAMME', 'SAMME.R'):
@@ -262,21 +259,6 @@ class uBoostBDT:
             pass
         return estimator
 
-    def _generate_bagging(self, sample_weight):
-        masked_sample_weight = sample_weight.copy()
-        n_samples = len(sample_weight)
-        if isinstance(self.bagging, bool) and self.bagging:
-            indices = self.random_generator.randint(0, n_samples, n_samples)
-            sample_counts = np.bincount(indices, minlength=n_samples)
-            masked_sample_weight *= sample_counts
-        elif isinstance(self.bagging, float):
-            masked_sample_weight *= (
-                self.random_generator.rand(n_samples) > 1 - self.bagging)
-        else:
-            assert isinstance(self.bagging, bool) and not self.bagging, \
-                "something wrong was passed as bagging"
-        return masked_sample_weight
-
     def _apply_uboost_in_place(self, sample_weight, local_efficiencies, y):
         """Applies uBoost local efficecy-based boost.
         sample_weight should be modified by an AdaBoost step sample weights,
@@ -319,7 +301,9 @@ class uBoostBDT:
         cumulative_score = np.zeros(len(X))
         for iboost in xrange(self.n_estimators):
             estimator = self._make_estimator()
-            masked_sample_weight = self._generate_bagging(sample_weight)
+            #TODO(kazeevn) avoid memory waste if no bagging is needed
+            masked_sample_weight = generate_mask(
+                sample_weight, self.bagging, self.random_generator)
 
             estimator.fit(X, y, sample_weight=masked_sample_weight)
 
@@ -382,7 +366,8 @@ class uBoostBDT:
         for iboost in xrange(self.n_estimators):
             estimator = self._make_estimator()
             self.estimator_weights_[iboost] = 1.
-            masked_sample_weight = self._generate_bagging(sample_weight)
+            masked_sample_weight = generate_mask(
+                sample_weight, self.bagging, self.random_generator)
             estimator.fit(X, y, sample_weight=masked_sample_weight)
 
             if iboost == 0:
@@ -407,9 +392,7 @@ class uBoostBDT:
                                 * (((self.n_classes_ - 1.) / self.n_classes_) *
                                    inner1d(y_coding, np.log(current_proba))))
             if not iboost == self.n_estimators - 1:
-                sample_weight *= \
-                    np.exp(boost_weight * ((sample_weight > 0) |
-                                           (boost_weight < 0)))
+                sample_weight *= np.exp(boost_weight)
             sample_weight /= np.sum(sample_weight)
 
             # The cumulative sequence
@@ -757,3 +740,27 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
             result[:, 1] /= self.efficiency_steps
             result[:, 0] = 1.0 - result[:, 1]
             yield result
+
+def generate_mask(sample_weight, bagging=True, random_generator=np.random):
+    """bagging: float or bool (default=True), bagging usually
+        speeds up the convergence and prevents overfitting
+        (see http://en.wikipedia.org/wiki/Bootstrap_aggregating)
+        if True, usual bootstrap aggregating is used
+        (sampling with replacement at each iteration, size=len(X))
+        if float, used sampling with replacement, the size of generated
+           set is bagging * len(X)
+        if False, does nothing."""
+
+    masked_sample_weight = sample_weight.copy()
+    n_samples = len(sample_weight)
+    if bagging is True:
+        indices = random_generator.randint(0, n_samples, n_samples)
+        sample_counts = np.bincount(indices, minlength=n_samples)
+        masked_sample_weight *= sample_counts
+    elif isinstance(bagging, float):
+        masked_sample_weight *= (
+            random_generator.rand(n_samples) > 1 - bagging)
+    else:
+        assert isinstance(bagging, bool) and not bagging, \
+            "something wrong was passed as bagging"
+    return masked_sample_weight
