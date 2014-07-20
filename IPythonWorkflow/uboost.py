@@ -281,9 +281,11 @@ class uBoostBDT:
         #    'The computed efficiencies are different'
         e_prime = np.sum(sample_weight * np.abs(
             local_efficiencies - self.target_efficiency))
-        beta = np.log((1.0 - e_prime) / e_prime)
-        # TODO(Alex) why do we have nominator here?
-        # beta = math.log(1. / e_prime)
+        # beta = np.log((1.0 - e_prime) / e_prime)
+        # log(1. / e_prime), otherwise this can lead to the situation
+        # where beta is negative (which is a disaster).
+        # Mike (uboost author) said he didn't take that into account.
+        beta = np.log(1. / e_prime)
         if self.boost_only_signal:
             sample_weight *= np.exp((
                 self.target_efficiency - local_efficiencies) * y * (
