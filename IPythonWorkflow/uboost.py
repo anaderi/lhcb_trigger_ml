@@ -107,7 +107,7 @@ class uBoostBDT:
            (including uniform_variables)
 
         smoothing: float, default=(0.), used to smooth computing of local
-           efficiencies 0.0 corresponds to usual uBoost
+           efficiencies, 0.0 corresponds to usual uBoost
 
         random_state: int, RandomState instance or None, (default=None)
             If int, random_state is the seed used by the
@@ -604,7 +604,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
             if False, both weights of signal and background are changed
 
         smoothing: float, default=(0.), used to smooth computing of
-            local efficiencies. 0.0 corresponds to usual uBoost
+            local efficiencies, 0.0 corresponds to usual uBoost
 
         random_state : int, RandomState instance or None, (default=None)
             optional
