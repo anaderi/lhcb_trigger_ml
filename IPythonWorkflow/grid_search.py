@@ -27,8 +27,8 @@ __author__ = 'Alex Rogozhnikov'
 
 # TODO think of simulated annealing, regression, sub grids and other techniques.
 # TODO pareto-optimization
-# TODO optimization of mse or whatever dependent on X
 # TODO use staged predictions
+# TODO annealing is needed
 
 
 class AbstractParameterGenerator(object):
@@ -106,6 +106,33 @@ class AbstractParameterGenerator(object):
         for state_indices, value in sequence:
             data.append(self.indices_to_parameters(state_indices))
         return pandas.DataFrame(data).transpose()
+
+    def print_param_stats(self, best=0.3):
+        all_stats = []
+        best_stats = []
+        for n_values in self.dimensions:
+            all_stats.append(numpy.zeros(n_values))
+            best_stats.append(numpy.zeros(n_values))
+
+        threshold = commonutils.weighted_percentile(self.grid_scores_.values(), [1. -  best])[0]
+        for index, score in self.grid_scores_.iteritems():
+            for feat_i, feat_val in enumerate(index):
+                all_stats[feat_i][feat_val] += 1
+                if score > threshold:
+                    best_stats[feat_i][feat_val] += 1
+
+        for all_feat_stat, best_feat_stat, feat_name in zip(all_stats, best_stats, self.param_grid):
+            feat_values = self.param_grid[feat_name]
+            print(feat_name)
+            data = OrderedDict()
+            data['total'] = all_feat_stat
+            data['in top, %'] = numpy.array(best_feat_stat) / all_feat_stat * 100
+            df = pandas.DataFrame(data, index=feat_values)
+            print(df)
+
+
+
+
 
 
 def create_subgrid(param_grid, n_values):
@@ -227,6 +254,7 @@ def test_simple_optimizer(n_evaluations=60):
     assert len(optimizer.generator.queued_tasks_) == n_evaluations
     assert set(optimizer.generator.grid_scores_.keys()) == optimizer.generator.queued_tasks_
 
+
 test_simple_optimizer()
 
 
@@ -326,7 +354,8 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
         self.random_state = random_state
 
     def _log(self, *objects):
-        logging.debug(" ".join([str(x) for x in objects]))
+        logger = logging.getLogger(__name__)
+        logger.debug(" ".join([str(x) for x in objects]))
 
     def _check_params(self):
         if self.param_generator_type is None:
@@ -364,9 +393,9 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
             while self.evaluations_done < self.generator.n_evaluations:
                 state_indices_array, state_dict_array = self.generator.generate_batch_points(size=portion)
                 result = direct_view.map_sync(estimate_classifier, state_dict_array,
-                    [self.base_estimator] * portion, [X]*portion, [y]*portion,
-                    [self.folds] * portion, [self.fold_checks] * portion,
-                    [self.score_function] * portion, [sample_weight]*portion)
+                                              base_estimator=self.base_estimator,
+                                              X=X, y=y, folds=self.folds, fold_checks=self.fold_checks,
+                                              score_function=self.score_function, sample_weight=sample_weight)
                 assert len(result) == portion, "The length of result is very strange"
                 for state_indices, state_dict, score in zip(state_indices_array, state_dict_array, result):
                     self.generator.add_result(state_indices, score)
@@ -398,48 +427,52 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
     def print_results(self, reorder=True):
         self.generator.print_results(reorder=reorder)
 
-
-class TestClassifier(BaseEstimator, ClassifierMixin):
-    """This classifier is created specially for testing optimization"""
-    def __init__(self, a=1., b=1., c=1., d=1., sign=1):
-        self.a = a
-        self.b = b
-        self.c = c
-        self.d = d
-        self.sign = sign
-
-    def fit(self, X, y, sample_weight=None):
-        pass
-
-    def predict_proba(self, X):
-        return numpy.zeros([len(X), 2]) + self.a * self.b * self.c * self.d * self.sign
+    def print_param_stats(self, best=0.3):
+        self.generator.print_param_stats(best=best)
 
 
-def mean_score(y, pred, sample_weight=None):
-    """ This metrics was created for testing purposes"""
-    return numpy.mean(pred)
 
 
-def test_optimization(size=10, n_evaluations=150):
-    trainX, trainY = commonutils.generate_sample(2000, 10, distance=0.5)
-
-    grid_1d = numpy.linspace(0.1, 1, num=size)
-    grid = {'a': grid_1d, 'b': grid_1d, 'c': grid_1d, 'd': grid_1d}
-    grid = OrderedDict(grid)
-
-    grid_cv = GridOptimalSearchCV(TestClassifier(), grid, n_evaluations=n_evaluations, score_function=mean_score)
-    grid_cv.fit(trainX, trainY)
-    optimizer = grid_cv.generator
-    assert 0.8 <= optimizer.best_score_ <= 1., 'Too poor optimization : %.2f' % optimizer.best_score_
-    assert mean_score(trainY, grid_cv.predict_proba(trainX)[:, 1]) == optimizer.best_score_, 'something is wrong'
-
-    grid_cv = GridOptimalSearchCV(TestClassifier(sign=-1), grid, n_evaluations=n_evaluations, score_function=mean_score)
-    grid_cv.fit(trainX, trainY)
-    optimizer = grid_cv.generator
-    assert -0.04 <= optimizer.best_score_ <= 0.0, 'Too poor optimization : %.2f' % optimizer.best_score_
+# class TestClassifier(BaseEstimator, ClassifierMixin):
+#     """This classifier is created specially for testing optimization"""
+#     def __init__(self, a=1., b=1., c=1., d=1., sign=1):
+#         self.a = a
+#         self.b = b
+#         self.c = c
+#         self.d = d
+#         self.sign = sign
+#
+#     def fit(self, X, y, sample_weight=None):
+#         pass
+#
+#     def predict_proba(self, X):
+#         return numpy.zeros([len(X), 2]) + self.a * self.b * self.c * self.d * self.sign
 
 
-test_optimization()
+# def mean_score(y, pred, sample_weight=None):
+#     """ This metrics was created for testing purposes"""
+#     return numpy.mean(pred)
+
+# def test_optimization(size=10, n_evaluations=150):
+#     trainX, trainY = commonutils.generate_sample(2000, 10, distance=0.5)
+#
+#     grid_1d = numpy.linspace(0.1, 1, num=size)
+#     grid = {'a': grid_1d, 'b': grid_1d, 'c': grid_1d, 'd': grid_1d}
+#     grid = OrderedDict(grid)
+#
+#     grid_cv = GridOptimalSearchCV(TestClassifier(), grid, n_evaluations=n_evaluations, score_function=mean_score)
+#     grid_cv.fit(trainX, trainY)
+#     optimizer = grid_cv.generator
+#     assert 0.8 <= optimizer.best_score_ <= 1., 'Too poor optimization : %.2f' % optimizer.best_score_
+#     assert mean_score(trainY, grid_cv.predict_proba(trainX)[:, 1]) == optimizer.best_score_, 'something is wrong'
+#
+#     grid_cv = GridOptimalSearchCV(TestClassifier(sign=-1), grid, n_evaluations=n_evaluations, score_function=mean_score)
+#     grid_cv.fit(trainX, trainY)
+#     optimizer = grid_cv.generator
+#     assert -0.04 <= optimizer.best_score_ <= 0.0, 'Too poor optimization : %.2f' % optimizer.best_score_
+
+
+# test_optimization()
 
 
 def test_grid_search():
@@ -457,5 +490,6 @@ def test_grid_search():
     grid_cv.fit(trainX, trainY)
     grid_cv.predict_proba(trainX)
     grid_cv.predict(trainX)
+    # grid_cv.print_param_stats()
 
 test_grid_search()
