@@ -365,19 +365,18 @@ class uBoostBDT:
         score = None
         y_codes = None
         y_coding = None
+        # We have only two classes and know that beforehand
+        self.classes_ = np.array((0, 1))
+        self.n_classes_ = 2
+        score = np.zeros((len(X), self.n_classes_))
+        y_codes = np.array([-1. / (self.n_classes_ - 1), 1.])
+        y_coding = y_codes.take(self.classes_ == y[:, np.newaxis])
         for iboost in xrange(self.n_estimators):
             estimator = self._make_estimator()
             self.estimator_weights_[iboost] = 1.
             masked_sample_weight = generate_mask(
                 sample_weight, self.bagging, self.random_generator)
             estimator.fit(X, y, sample_weight=masked_sample_weight)
-
-            if iboost == 0:
-                self.classes_ = getattr(estimator, 'classes_', None)
-                self.n_classes_ = len(self.classes_)
-                score = np.zeros((len(X), self.n_classes_))
-                y_codes = np.array([-1. / (self.n_classes_ - 1), 1.])
-                y_coding = y_codes.take(self.classes_ == y[:, np.newaxis])
 
             current_proba = estimator.predict_proba(X)
             samme_proba = self._samme_r_proba(current_proba, self.n_classes_)
