@@ -145,9 +145,13 @@ def main():
     parser.add_argument('-o', '--output-file', type=str,
                         help=r"Filename pattern with one %%s to save "
                         "the plots to. Example: classifiers_%%s.pdf")
+    parser.add_argument('-s', '--random-seed', type=int,
+                        help="Random generator seed to use.")
     args = parser.parse_args()
-    # Tests results depend significantly on the seed
-    np.random.seed(42)
+    if args.random_seed:
+        np.random.seed(args.random_seed)
+    else:
+        np.random.seed(42)
     testX, testY = generate_sample(10000, 10, 0.6)
     trainX, trainY = generate_sample(10000, 10, 0.6)
     test_uboost_classifier_real(trainX, trainY, testX, testY)
