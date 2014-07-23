@@ -259,11 +259,8 @@ class uBoostBDT:
             pass
         return estimator
 
-    def _apply_uboost_in_place(self, sample_weight, local_efficiencies, y):
-        """Applies uBoost local efficecy-based boost.
-        sample_weight should be modified by an AdaBoost step sample weights,
-        will be in-place changed by the procedure.
-        """
+    def get_uboost_weights(self, sample_weight, score, y):
+        """Returns uBoost multipliers to sample_weight"""
         # TODO(alex) think of weights,
         #   we should take weights into account when computing efficiencies
         # TODO(alex) separate normalization for classes?
@@ -279,6 +276,14 @@ class uBoostBDT:
         #    smoothing_width=self.smoothing)
         # assert np.all(local_efficiencies == local_efficiencies2),\
         #    'The computed efficiencies are different'
+
+        real_proba = self.score_to_proba(score, n_estimators=len(self.estimators_))
+        global_cut = compute_bdt_cut(
+            self.target_efficiency, y, real_proba[:, 1])
+        local_efficiencies = compute_groups_efficiencies(
+            global_cut, self.knn_indices, y, real_proba,
+            smoothing_width=self.smoothing)
+
         e_prime = np.sum(sample_weight * np.abs(
             local_efficiencies - self.target_efficiency))
         # beta = np.log((1.0 - e_prime) / e_prime)
@@ -287,15 +292,15 @@ class uBoostBDT:
         # Mike (uboost author) said he didn't take that into account.
         beta = np.log(1. / e_prime)
         if self.boost_only_signal:
-            sample_weight *= np.exp((
+            boost_weights = np.exp((
                 self.target_efficiency - local_efficiencies) * y * (
                 beta * self.uniforming_rate))
         else:
-            sample_weight *= np.exp((
+            boost_weights = np.exp((
                 self.target_efficiency - local_efficiencies) * (
                 beta * self.uniforming_rate))
 
-        sample_weight /= np.sum(sample_weight)
+        return boost_weights, global_cut
 
     def _boost_discrete(self, X, y, sample_weight):
         """Implement a single boost using the SAMME discrete algorithm,
@@ -338,17 +343,12 @@ class uBoostBDT:
             cumulative_score += (2 * y_predict - 1) * estimator_weight
             # assert np.all(cumulative_score == self.predict_score(X)), \
             # "wrong prediction"
-            predict_proba = self.score_to_proba(
-                cumulative_score, n_estimators=len(self.estimators_))
 
-            global_cut = compute_bdt_cut(
-                self.target_efficiency, y, predict_proba[:, 1])
+            uboost_multipliers, global_cut = self.get_uboost_weights(
+                sample_weight, cumulative_score, y)
+            sample_weight *= uboost_multipliers
             self.bdt_cuts_.append(global_cut)
-            local_efficiencies = compute_groups_efficiencies(
-                global_cut, self.knn_indices, y, predict_proba,
-                smoothing_width=self.smoothing)
-
-            self._apply_uboost_in_place(sample_weight, local_efficiencies, y)
+            sample_weight /= np.sum(sample_weight)
 
             if self.keep_debug_info:
                 self.debug_dict['weights'].append(sample_weight.copy())
@@ -388,18 +388,12 @@ class uBoostBDT:
             if not iboost == self.n_estimators - 1:
                 sample_weight *= np.exp(boost_weight)
             sample_weight /= np.sum(sample_weight)
-
             score += 0.5 * samme_proba[:, 1]
-            real_proba = self.score_to_proba(score, n_estimators=len(self.estimators_))
 
-            global_cut = compute_bdt_cut(
-                self.target_efficiency, y, real_proba[:, 1])
+            uboost_multipliers, global_cut = self.get_uboost_weights(sample_weight, score, y)
+            sample_weight *= uboost_multipliers
             self.bdt_cuts_.append(global_cut)
-            local_efficiencies = compute_groups_efficiencies(
-                global_cut, self.knn_indices, y, real_proba,
-                smoothing_width=self.smoothing)
-
-            self._apply_uboost_in_place(sample_weight, local_efficiencies, y)
+            sample_weight /= np.sum(sample_weight)
 
             if self.keep_debug_info:
                 self.debug_dict['weights'].append(sample_weight.copy())
