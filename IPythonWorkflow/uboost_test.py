@@ -136,6 +136,7 @@ def test_classifiers(trainX, trainY, testX, testY, output_name_patern=None):
     if output_name_patern is not None:
         pl.savefig(output_name_patern % "efficiency_curves", bbox="tight")
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Run some assert-based tests, "

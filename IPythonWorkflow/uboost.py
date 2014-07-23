@@ -277,7 +277,8 @@ class uBoostBDT:
         # assert np.all(local_efficiencies == local_efficiencies2),\
         #    'The computed efficiencies are different'
 
-        real_proba = self.score_to_proba(score, n_estimators=len(self.estimators_))
+        real_proba = self.score_to_proba(
+            score, n_estimators=len(self.estimators_))
         global_cut = compute_bdt_cut(
             self.target_efficiency, y, real_proba[:, 1])
         local_efficiencies = compute_groups_efficiencies(
@@ -309,8 +310,8 @@ class uBoostBDT:
         for iboost in xrange(self.n_estimators):
             estimator = self._make_estimator()
             #TODO(kazeevn) avoid memory waste if no bagging is needed
-            estimator.fit(X, y, sample_weight=sample_weight*
-                          generate_mask(len(X), self.bagging, self.random_generator))
+            estimator.fit(X, y, sample_weight=sample_weight * generate_mask(
+                          len(X), self.bagging, self.random_generator))
 
             y_predict = estimator.predict(X)
 
@@ -369,8 +370,8 @@ class uBoostBDT:
         for iboost in xrange(self.n_estimators):
             estimator = self._make_estimator()
             self.estimator_weights_[iboost] = 1.
-            estimator.fit(X, y, sample_weight=sample_weight*
-                          generate_mask(len(X), self.bagging, self.random_generator))
+            estimator.fit(X, y, sample_weight=sample_weight * generate_mask(
+                len(X), self.bagging, self.random_generator))
             current_proba = estimator.predict_proba(X)
             samme_proba = self._samme_r_proba(current_proba, self.n_classes_)
 
@@ -390,7 +391,8 @@ class uBoostBDT:
             sample_weight /= np.sum(sample_weight)
             score += 0.5 * samme_proba[:, 1]
 
-            uboost_multipliers, global_cut = self.get_uboost_weights(sample_weight, score, y)
+            uboost_multipliers, global_cut = \
+                self.get_uboost_weights(sample_weight, score, y)
             sample_weight *= uboost_multipliers
             self.bdt_cuts_.append(global_cut)
             sample_weight /= np.sum(sample_weight)
@@ -418,7 +420,7 @@ class uBoostBDT:
             for classifier, weight in zip(
                     self.estimators_, self.estimator_weights_):
                 score += (2 * classifier.predict(X) - 1) * weight
-        else: # SAMME.R
+        else:  # SAMME.R
             score = 0.5 * np.sum(self._samme_r_proba(
                 estimator.predict_proba(X), self.n_classes_)[:, 1]
                 for estimator in self.estimators_)
@@ -435,7 +437,6 @@ class uBoostBDT:
                 score += 0.5 * self._samme_r_proba(
                     classifier.predict_proba(X), self.n_classes_)[:, 1]
             yield score
-
 
     def score_to_proba(self, score, old_result=None, n_estimators=None):
         """Compute class probability estimates from decision scores."""
@@ -699,6 +700,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
             result[:, 1] /= self.efficiency_steps
             result[:, 0] = 1.0 - result[:, 1]
             yield result
+
 
 def generate_mask(n_samples, bagging=True, random_generator=np.random):
     """bagging: float or bool (default=True), bagging usually
