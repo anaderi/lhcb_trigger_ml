@@ -218,7 +218,7 @@ class SimpleParameterOptimizer(AbstractParameterGenerator):
             if new_state_indices in self.queued_tasks_:
                 continue
             self.queued_tasks_.add(new_state_indices)
-            print(distance)
+            # print(distance)
             return new_state_indices, self.indices_to_parameters(new_state_indices)
 
     def add_result(self, state_indices, value):
@@ -262,7 +262,7 @@ def test_simple_optimizer(n_evaluations=60):
     assert len(optimizer.generator.grid_scores_) == n_evaluations
     assert len(optimizer.generator.queued_tasks_) == n_evaluations
     assert set(optimizer.generator.grid_scores_.keys()) == optimizer.generator.queued_tasks_
-    optimizer.print_results()
+    # optimizer.print_results()
 
 
 test_simple_optimizer()
