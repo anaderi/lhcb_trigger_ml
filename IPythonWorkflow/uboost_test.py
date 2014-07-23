@@ -143,8 +143,8 @@ def main():
         "calculate MSE and plot local efficiencies for"
         " AdaBoost, uBoost.SAMME and uBoost.SAMME.R")
     parser.add_argument('-o', '--output-file', type=str,
-                        help=r"Filename pattern with one %s to save "
-                        "the plots to. Example: classifiers_%s.pdf")
+                        help=r"Filename pattern with one %%s to save "
+                        "the plots to. Example: classifiers_%%s.pdf")
     args = parser.parse_args()
     # Tests results depend significantly on the seed
     np.random.seed(42)
