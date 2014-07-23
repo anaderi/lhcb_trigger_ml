@@ -25,10 +25,9 @@ except ImportError:
 
 __author__ = 'Alex Rogozhnikov'
 
-# TODO think of simulated annealing, regression, sub grids and other techniques.
+# TODO think of regression and other techniques (sub grids + annealing are implemented now)
 # TODO pareto-optimization
 # TODO use staged predictions
-# TODO annealing is needed
 
 
 class AbstractParameterGenerator(object):
@@ -172,6 +171,7 @@ class SimpleParameterOptimizer(AbstractParameterGenerator):
         self.start_evaluations = start_evaluations
         self.portion = portion
         self.subgrid_size = subgrid_size
+        self.dimensions_sum = sum(self.dimensions)
         self.subgrid_parameter_generator = None
         if not numpy.all(numpy.array(self.dimensions) <= 1.5 * self.subgrid_size):
             print("Optimizing on subgrid")
@@ -182,6 +182,9 @@ class SimpleParameterOptimizer(AbstractParameterGenerator):
 
     def generate_next_point(self):
         """Generating next point in parameters space"""
+        if len(self.queued_tasks_) >= numpy.prod(self.dimensions):
+            raise RuntimeError("The grid is exhausted, cannot generate more points")
+
         if self.subgrid_parameter_generator is not None:
             # trying to generate from subgrid
             if len(self.queued_tasks_) < self.subgrid_parameter_generator.n_evaluations:
@@ -201,15 +204,21 @@ class SimpleParameterOptimizer(AbstractParameterGenerator):
         while True:
             start = self.random_state.choice(len(probabilities), p=probabilities)
             start_indices = self.grid_scores_.keys()[start]
-            axis = self.random_state.randint(len(self.dimensions))
             new_state_indices = list(start_indices)
-            new_state_indices[axis] += 1 if self.random_state.uniform() > 0.5 else -1
-            if new_state_indices[axis] < 0 or new_state_indices[axis] >= self.dimensions[axis]:
+
+            p = 1. - len(self.queued_tasks_) / self.n_evaluations
+            distance = self.random_state.binomial(self.dimensions_sum // 6, p) + 1
+            for _ in range(distance):
+                axis = self.random_state.randint(len(self.dimensions))
+                new_state_indices[axis] += 1 if self.random_state.uniform() > 0.5 else -1
+            if any(new_state_indices[axis] < 0 or new_state_indices[axis] >= self.dimensions[axis]
+                   for axis in range(len(self.dimensions))):
                 continue
             new_state_indices = tuple(new_state_indices)
             if new_state_indices in self.queued_tasks_:
                 continue
             self.queued_tasks_.add(new_state_indices)
+            print(distance)
             return new_state_indices, self.indices_to_parameters(new_state_indices)
 
     def add_result(self, state_indices, value):
@@ -253,6 +262,7 @@ def test_simple_optimizer(n_evaluations=60):
     assert len(optimizer.generator.grid_scores_) == n_evaluations
     assert len(optimizer.generator.queued_tasks_) == n_evaluations
     assert set(optimizer.generator.grid_scores_.keys()) == optimizer.generator.queued_tasks_
+    optimizer.print_results()
 
 
 test_simple_optimizer()
@@ -288,7 +298,7 @@ def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
 class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
     def __init__(self, base_estimator, param_grid, n_evaluations=40, score_function=None, folds=3, fold_checks=1,
                  scorer_needs_x=False, ipc_profile=None, param_generator_type=None,
-                 random_state=None):
+                 random_state=None, refit=False):
         """Optimal search over specified parameter values for an estimator. Metropolis-like algorithm is used
         Important members are fit, predict.
 
@@ -326,6 +336,8 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
         ipc_profile: str, the name of IPython parallel cluster profile to use,
             or None to perform computations locally
 
+        refit: if True, an estimator is trained with best found parameters
+
         Attributes
         ----------
         `grid_scores_` : list of named tuples
@@ -352,6 +364,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
         self.fold_checks = fold_checks
         self.param_generator_type = param_generator_type
         self.random_state = random_state
+        self.refit = refit
 
     def _log(self, *objects):
         logger = logging.getLogger(__name__)
@@ -393,9 +406,9 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
             while self.evaluations_done < self.generator.n_evaluations:
                 state_indices_array, state_dict_array = self.generator.generate_batch_points(size=portion)
                 result = direct_view.map_sync(estimate_classifier, state_dict_array,
-                                              base_estimator=self.base_estimator,
-                                              X=X, y=y, folds=self.folds, fold_checks=self.fold_checks,
-                                              score_function=self.score_function, sample_weight=sample_weight)
+                    [self.base_estimator] * portion, [X]*portion, [y]*portion,
+                    [self.folds] * portion, [self.fold_checks] * portion,
+                    [self.score_function] * portion, [sample_weight]*portion)
                 assert len(result) == portion, "The length of result is very strange"
                 for state_indices, state_dict, score in zip(state_indices_array, state_dict_array, result):
                     self.generator.add_result(state_indices, score)
@@ -403,8 +416,8 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
 
                 self.evaluations_done += portion
                 print("%i evaluations done" % self.evaluations_done)
-
-        self._fit_best_estimator(X, y, sample_weight=sample_weight)
+        if self.refit:
+            self._fit_best_estimator(X, y, sample_weight=sample_weight)
 
     def _fit_best_estimator(self, X, y, sample_weight=None):
         # Training classifier once again
@@ -486,10 +499,11 @@ def test_grid_search():
     grid = OrderedDict(grid)
 
     trainX, trainY = commonutils.generate_sample(2000, 10, distance=0.5)
-    grid_cv = GridOptimalSearchCV(AdaBoostClassifier(), grid, n_evaluations=10)
+    grid_cv = GridOptimalSearchCV(AdaBoostClassifier(), grid, n_evaluations=10, refit=True)
     grid_cv.fit(trainX, trainY)
     grid_cv.predict_proba(trainX)
     grid_cv.predict(trainX)
     # grid_cv.print_param_stats()
 
 test_grid_search()
+
