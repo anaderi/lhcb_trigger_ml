@@ -338,7 +338,8 @@ class uBoostBDT:
             cumulative_score += (2 * y_predict - 1) * estimator_weight
             # assert np.all(cumulative_score == self.predict_score(X)), \
             # "wrong prediction"
-            predict_proba = self.score_to_proba(cumulative_score)
+            predict_proba = self.score_to_proba(
+                cumulative_score, n_estimators=len(self.estimators_))
 
             global_cut = compute_bdt_cut(
                 self.target_efficiency, y, predict_proba[:, 1])
@@ -359,14 +360,10 @@ class uBoostBDT:
 
     def _boost_real(self, X, y, sample_weight):
         """A single boost using the SAMME.R algorithm"""
-        norm = 0.
-        score = None
-        y_codes = None
-        y_coding = None
         # We have only two classes and know that beforehand
         self.classes_ = np.array((0, 1))
         self.n_classes_ = 2
-        score = np.zeros((len(X), self.n_classes_))
+        score = np.zeros(len(X))
         y_codes = np.array([-1. / (self.n_classes_ - 1), 1.])
         y_coding = y_codes.take(self.classes_ == y[:, np.newaxis])
         for iboost in xrange(self.n_estimators):
@@ -392,11 +389,8 @@ class uBoostBDT:
                 sample_weight *= np.exp(boost_weight)
             sample_weight /= np.sum(sample_weight)
 
-            # The cumulative sequence
-            # The estimator weights are all 1. for SAMME.R
-            norm += 1.
-            score += samme_proba
-            real_proba = self.score_to_proba(score, n_estimators=norm)
+            score += 0.5 * samme_proba[:, 1]
+            real_proba = self.score_to_proba(score, n_estimators=len(self.estimators_))
 
             global_cut = compute_bdt_cut(
                 self.target_efficiency, y, real_proba[:, 1])
@@ -424,52 +418,43 @@ class uBoostBDT:
             return X[self.train_variables]
 
     def predict_score(self, X):
+        X = self.get_train_vars(X)
         if self.algorithm == 'SAMME':
             score = np.zeros(len(X))
-            X = self.get_train_vars(X)
             for classifier, weight in zip(
                     self.estimators_, self.estimator_weights_):
                 score += (2 * classifier.predict(X) - 1) * weight
         else: # SAMME.R
-            score = sum(self._samme_r_proba(
-                estimator.predict_proba(X), self.n_classes_)
+            score = 0.5 * np.sum(self._samme_r_proba(
+                estimator.predict_proba(X), self.n_classes_)[:, 1]
                 for estimator in self.estimators_)
         return score
 
     def staged_predict_score(self, X):
-        if self.algorithm == "SAMME":
-            score = np.zeros(len(X))
-        else: # SAMME.R
-            score = np.zeros((len(X), 2))
+        score = np.zeros(len(X))
         X = self.get_train_vars(X)
         for classifier, weight in zip(
                 self.estimators_, self.estimator_weights_):
             if self.algorithm == "SAMME":
                 score += (2 * classifier.predict(X) - 1) * weight
             else:
-                score += self._samme_r_proba(
-                    classifier.predict_proba(X), self.n_classes_)
+                score += 0.5 * self._samme_r_proba(
+                    classifier.predict_proba(X), self.n_classes_)[:, 1]
             yield score
 
 
     def score_to_proba(self, score, old_result=None, n_estimators=None):
         """Compute class probability estimates from decision scores."""
-        if self.algorithm == 'SAMME':
-            if old_result is None:
-                proba = np.ones((score.shape[0], 2), dtype=np.float64)
-            else:
-                proba = old_result
-            proba[:, 1] = 1.0 / (1.0 + np.exp(-score.ravel()))
-            proba[:, 0] = 1.0 - proba[:, 1]
+        assert n_estimators is not None, \
+            "Number of estimators is needed for normalization."
+        if old_result is None:
+            proba = np.empty((score.shape[0], 2), dtype=np.float64)
         else:
-            assert n_estimators is not None, \
-              "Number of estimators is needed for SAMME.R"
-            # Estimator weights are all 1 for SAMME.R,
-            # so we don't acually have to pass them
-            proba = np.exp((1. / (self.n_classes_ - 1)) * score / n_estimators)
-            normalizer = proba.sum(axis=1)[:, np.newaxis]
-            normalizer[normalizer == 0.0] = 1.0
-            proba /= normalizer
+            proba = old_result
+
+        proba[:, 1] = 1.0 / (1.0 + np.exp(
+            -score.ravel() / self.estimator_weights_[:n_estimators].sum()))
+        proba[:, 0] = 1.0 - proba[:, 1]
         return proba
 
     def predict(self, X):
@@ -506,16 +491,12 @@ class uBoostBDT:
 
     def predict_proba(self, X):
         return self.score_to_proba(
-            self.predict_score(X), n_estimators=self.n_estimators)
+            self.predict_score(X), n_estimators=len(self.estimators_))
 
     def staged_predict_proba(self, X):
-        if self.algorithm == "SAMME":
-            result = np.zeros([len(X), 2])
-            for score in self.staged_predict_score(X):
-                yield self.score_to_proba(score, old_result=result)
-        else: # SAMME_R
-            for n_esimators, score in enumerate(self.staged_predict_score(X)):
-                yield self.score_to_proba(score, n_estimators=n_esimators)
+        for n_esimators, score in enumerate(self.staged_predict_score(X)):
+            # +1 because enumerate begins with 0
+            yield self.score_to_proba(score, n_estimators=(n_esimators+1))
 
     @property
     def feature_importances_(self):

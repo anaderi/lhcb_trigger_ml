@@ -86,8 +86,8 @@ def test_uboost_classifier_discrete(trainX, trainY, testX, testY):
         classifier.fit(trainX, trainY)
         proba1 = classifier.predict_proba(testX)
         proba2 = list(classifier.staged_predict_proba(testX))[-1]
-        assert np.all(abs(proba1 - proba2) < 0.001),\
-            "something wrong with predictions"
+        assert np.allclose(proba1, proba2, atol=0.001),\
+            "staged_predict doesn't coincide with the predict for proba."
 
     assert len(bdt_classifier.feature_importances_) == trainX.shape[1]
 
