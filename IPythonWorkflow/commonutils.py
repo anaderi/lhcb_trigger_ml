@@ -324,7 +324,6 @@ def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
     percentiles = 1. - target_efficiency
     return weighted_percentile(signal_proba, percentiles)
 
-
 def compute_groups_efficiencies(global_cut, knn_indices, answers, prediction_proba,
                                 sample_weight=None, smoothing_width=0.0):
     """Fast implementation in numpy"""
@@ -336,7 +335,6 @@ def compute_groups_efficiencies(global_cut, knn_indices, answers, prediction_pro
     # TODO test this new implementation
     return numpy.average(groups_predictions, weights=groups_weights, axis=1)
     # neigh_predictions.mean(axis=1)
-
 
 def sigmoid_function(x, width):
     """ Sigmoid function is smoothing oh Heaviside function, the lesser width, the closer we are to Heaviside function
@@ -512,6 +510,3 @@ def export_root_to_csv(filename, branches=None):
         result.append(new_file_name)
     print("Successfully converted")
     return result
-
-
-# def compute_bin_indices(X, mask, sample_weight=None, ):
