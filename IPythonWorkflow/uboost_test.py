@@ -12,9 +12,7 @@ from uboost import uBoostBDT, uBoostClassifier
 from reports import Predictions, ClassifiersDict
 
 
-def test_uboost_classifier_real(trainX, trainY, testX, testY):
-    # We will try to get uniform distribution along this variable
-    uniform_variables = ['column0']
+def test_uboost_classifier_real(uniform_variables, trainX, trainY, testX, testY):
 
     base_classifier = DecisionTreeClassifier(min_samples_leaf=10, max_depth=12)
 
@@ -24,19 +22,18 @@ def test_uboost_classifier_real(trainX, trainY, testX, testY):
             target_efficiency=target_efficiency,
             n_neighbors=20,
             n_estimators=20,
+            separate_normalization=True,
             base_estimator=base_classifier,
             algorithm="SAMME.R")
         bdt_classifier.fit(trainX, trainY)
         filtered = np.sum(
-            bdt_classifier.predict_proba(trainX[trainY > 0.5])[:, 1] >
-            bdt_classifier.bdt_cut)
+            bdt_classifier.predict_score(trainX[trainY > 0.5]) >
+            bdt_classifier.score_cut)
         assert abs(filtered - np.sum(trainY) * target_efficiency) < 5,\
             "global cut is set wrongly"
 
 
-def test_uboost_classifier_discrete(trainX, trainY, testX, testY):
-    # We will try to get uniform distribution along this variable
-    uniform_variables = ['column0']
+def test_uboost_classifier_discrete(uniform_variables, trainX, trainY, testX, testY):
 
     base_classifier = DecisionTreeClassifier(min_samples_leaf=10, max_depth=12)
 
@@ -49,21 +46,21 @@ def test_uboost_classifier_discrete(trainX, trainY, testX, testY):
             base_estimator=base_classifier)
         bdt_classifier.fit(trainX, trainY)
         filtered = np.sum(
-            bdt_classifier.predict_proba(trainX[trainY > 0.5])[:, 1] >
-            bdt_classifier.bdt_cut)
+            bdt_classifier.predict_score(trainX[trainY > 0.5]) >
+            bdt_classifier.score_cut)
         assert abs(filtered - np.sum(trainY) * target_efficiency) < 5,\
             "global cut wrong"
 
         staged_filtered_upper = [
-            np.sum(pred[:, 1] > cut - 1e-7) for pred, cut in
-            izip(bdt_classifier.staged_predict_proba(trainX[trainY > 0.5]),
-                 bdt_classifier.bdt_cuts_)]
+            np.sum(score > cut - 1e-7) for score, cut in
+            izip(bdt_classifier.staged_predict_score(trainX[trainY > 0.5]),
+                 bdt_classifier.score_cuts_)]
         staged_filtered_lower = [
-            np.sum(pred[:, 1] > cut + 1e-7) for pred, cut in
-            izip(bdt_classifier.staged_predict_proba(trainX[trainY > 0.5]),
-                 bdt_classifier.bdt_cuts_)]
+            np.sum(score > cut + 1e-7) for score, cut in
+            izip(bdt_classifier.staged_predict_score(trainX[trainY > 0.5]),
+                 bdt_classifier.score_cuts_)]
 
-        assert bdt_classifier.bdt_cut == bdt_classifier.bdt_cuts_[-1],\
+        assert bdt_classifier.score_cut == bdt_classifier.score_cuts_[-1],\
             'something wrong with computed cuts'
         for filter_lower, filter_upper in islice(
                 izip(staged_filtered_lower, staged_filtered_upper), 10, 100):
@@ -98,8 +95,8 @@ def test_uboost_classifier_discrete(trainX, trainY, testX, testY):
     print("SAMME error %.3f" % (error / float(len(testX))))
 
 
-def test_classifiers(trainX, trainY, testX, testY, output_name_patern=None):
-    uniform_variables = ['column0']
+def test_classifiers(uniform_variables,
+                     trainX, trainY, testX, testY, output_name_pattern=None):
     clf_Ada = AdaBoostClassifier(n_estimators=50)
     clf_uBoost_SAMME = uBoostClassifier(
         uniform_variables=uniform_variables,
@@ -115,26 +112,26 @@ def test_classifiers(trainX, trainY, testX, testY, output_name_patern=None):
         algorithm="SAMME.R")
     clf_dict = ClassifiersDict({
         "Ada": clf_Ada,
-        "uSAMME": clf_uBoost_SAMME,
-        "uSAMME.R": clf_uBoost_SAMME_R
+        "uBOOST": clf_uBoost_SAMME,
+        "uBOOST.R": clf_uBoost_SAMME_R
         })
     clf_dict.fit(trainX, trainY)
 
     predictions = Predictions(clf_dict, testX, testY)
     predictions.print_mse(uniform_variables, in_html=False)
     # TODO(kazeevn)
-    # Make reports save the plots. And rewrite it from using global
-    # pl.* calls.
+    # Make reports save the plots.
+
     predictions.mse_curves(uniform_variables)
-    if output_name_patern is not None:
-        pl.savefig(output_name_patern % "mse_curves", bbox="tight")
+    if output_name_pattern is not None:
+        pl.savefig(output_name_pattern % "mse_curves", bbox="tight")
     figure1 = pl.figure()
     predictions.learning_curves()
-    if output_name_patern is not None:
-        pl.savefig(output_name_patern % "learning_curves", bbox="tight")
+    if output_name_pattern is not None:
+        pl.savefig(output_name_pattern % "learning_curves", bbox="tight")
     predictions.efficiency(uniform_variables)
-    if output_name_patern is not None:
-        pl.savefig(output_name_patern % "efficiency_curves", bbox="tight")
+    if output_name_pattern is not None:
+        pl.savefig(output_name_pattern % "efficiency_curves", bbox="tight")
 
 
 def main():
@@ -154,9 +151,13 @@ def main():
         np.random.seed(42)
     testX, testY = generate_sample(10000, 10, 0.6)
     trainX, trainY = generate_sample(10000, 10, 0.6)
-    test_uboost_classifier_real(trainX, trainY, testX, testY)
-    test_uboost_classifier_discrete(trainX, trainY, testX, testY)
-    test_classifiers(trainX, trainY, testX, testY, args.output_file)
+
+    # We will try to get uniform distribution along this variable
+    uniform_variables = ['column0']
+
+    test_uboost_classifier_real(uniform_variables, trainX, trainY, testX, testY)
+    test_uboost_classifier_discrete(uniform_variables, trainX, trainY, testX, testY)
+    test_classifiers(uniform_variables, trainX, trainY, testX, testY, args.output_file)
     if args.output_file is None:
         pl.show()
 

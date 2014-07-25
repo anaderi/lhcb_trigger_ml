@@ -1,8 +1,8 @@
 """
 The module contains an implementation of uBoost algorithm in sklearn-way
 
-- The ``uBoostBDT`` class is a modified version of AdaBoost, that targets to
-obtain efficency uniformity at the specified level
+- ``uBoostBDT`` is a modified version of AdaBoost, that targets to
+obtain efficiency uniformity at the specified level
 - ``uBoostClassifier`` - a combination of uBoostBDTs for different efficiencies
 """
 
@@ -11,10 +11,9 @@ obtain efficency uniformity at the specified level
 # Nikita Kazeev <kazeevn@yandex-team.ru>
 
 from collections import defaultdict
-import math
-from itertools import izip, islice
+from itertools import izip
 import numpy as np
-from numpy.core.umath_tests import inner1d
+from scipy.special import expit
 from sklearn.base import BaseEstimator, clone
 from sklearn.ensemble.weight_boosting import ClassifierMixin
 from sklearn.tree import DecisionTreeClassifier
@@ -22,16 +21,18 @@ from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays
 
 from commonutils import compute_groups_efficiencies,\
-    sigmoid_function, computeSignalKnnIndices, compute_bdt_cut
+    sigmoid_function, computeSignalKnnIndices, compute_bdt_cut, map_on_cluster
 
 
 __author__ = "Alex Rogozhnikov, Nikita Kazeev"
 __copyright__ = "Copyright 2014, Yandex"
 
-__all__ = [
-    "uBoostBDT",
-    "uBoostClassifier"
-    ]
+__all__ = ["uBoostBDT", "uBoostClassifier"]
+
+
+# TODO (Alex) update interface of knn function
+# TODO (Alex) take weights into account when computing efficiencies
+
 
 
 class uBoostBDT:
@@ -44,7 +45,7 @@ class uBoostBDT:
                  n_estimators=50,
                  learning_rate=1.,
                  uniforming_rate=1.,
-                 boost_only_signal=True,
+                 separate_normalization=False,
                  train_variables=None,
                  smoothing=0.0,
                  keep_debug_info=False,
@@ -97,10 +98,9 @@ class uBoostBDT:
              there is a trade-off between uniforming_rate and the speed of
              uniforming, zero value corresponds to plain AdaBoost
 
-        boost_only_signal: bool (default=True),
-            if True, only weights of signal are changed depending on local
-            efficiency (as in uBoost) if False, both weights of
-             signal and background are changed
+        separate_normalization: bool (default=False),
+            if True, the sum of weights of both signal and background
+            will be normalized after each iteration to 0.5
 
         train_variables: list of strings, names of variables used in
            fit/predict. If None, all the variables are used
@@ -144,7 +144,7 @@ class uBoostBDT:
         self.target_efficiency = target_efficiency
         self.n_neighbors = n_neighbors
         self.bagging = bagging
-        self.boost_only_signal = boost_only_signal
+        self.separate_normalization = separate_normalization
         self.train_variables = train_variables
         self.smoothing = smoothing
         self.keep_debug_info = keep_debug_info
@@ -193,12 +193,11 @@ class uBoostBDT:
             if not hasattr(self.base_estimator, 'predict_proba'):
                 raise TypeError(
                     "uBoostBDT with algorithm='SAMME.R' requires "
-                    "that the weak learner supports the calculation of class "
-                    "probabilities with a predict_proba method.\n"
+                    "that the weak learner have a predict_proba method.\n"
                     "Please change the base estimator or set "
                     "algorithm='SAMME' instead.")
 
-        assert np.all((y == 0) | (y == 1)),\
+        assert np.in1d(y, [0, 1]).all(), \
             "only two-class classification is implemented"
 
         if neighbours_matrix is not None:
@@ -222,11 +221,10 @@ class uBoostBDT:
 
         # Clear any previous fit results
         self.estimators_ = []
-        self.estimator_weights_ = np.zeros(self.n_estimators, dtype=np.float)
-        self.estimator_errors_ = np.ones(self.n_estimators, dtype=np.float)
-        # BDT cuts correspond to
+        self.estimator_weights_ = []
+        # score cuts correspond to
         # global efficiency == target_efficiency on each iteration.
-        self.bdt_cuts_ = []
+        self.score_cuts_ = []
 
         X_train_variables = self.get_train_vars(X)
         y = np.ravel(y)
@@ -239,168 +237,111 @@ class uBoostBDT:
 
         self.random_generator = check_random_state(self.random_state)
 
-        if self.algorithm == "SAMME":
-            self._boost_discrete(X_train_variables, y, sample_weight)
-        else:  # SAMME.R
-            self._boost_real(X_train_variables, y, sample_weight)
+        self._boost(X_train_variables, y, sample_weight)
 
-        self.bdt_cut = compute_bdt_cut(
-            self.target_efficiency, y, self.predict_proba(X)[:, 1])
-        assert self.bdt_cut == self.bdt_cuts_[-1],\
-            "BDT cut doesn't appear to coincide with the staged one"
+        self.score_cut = compute_bdt_cut(
+            self.target_efficiency, y, self.predict_score(X))
+        assert abs(self.score_cut - self.score_cuts_[-1] < 1e-4),\
+            "score cut doesn't appear to coincide with the staged one"
+        assert len(self.estimators_) == len(self.estimator_weights_) == len(self.score_cuts_)
         return self
 
-    def _make_estimator(self, append=True):
+    def _make_estimator(self):
         estimator = clone(self.base_estimator)
-        self.estimators_.append(estimator)
+        # self.estimators_.append(estimator)
         try:
             estimator.set_params(random_state=self.random_state)
         except ValueError:
             pass
         return estimator
 
+    def _estimator_score(self, estimator, X):
+        if self.algorithm == "SAMME":
+            return 2 * estimator.predict(X) - 1.
+        else:
+            p = estimator.predict_proba(X)
+            p[p <= 0.] = 1e-5
+            return np.log(p[:, 1] / p[:, 0])
+
+    def _normalize_weight(self, y, weight):
+        weight += 1e-30
+        if self.separate_normalization:
+            weight[y == 0] /= np.sum(weight[y == 0]) * 2
+            weight[y == 1] /= np.sum(weight[y == 1]) * 2
+        else:
+            weight /= np.sum(weight)
+        return weight
+
     def get_uboost_weights(self, sample_weight, score, y):
-        """Returns uBoost multipliers to sample_weight"""
-        # TODO(alex) think of weights,
-        #   we should take weights into account when computing efficiencies
-        # TODO(alex) separate normalization for classes?
-        # global_cut2 = commonutils.compute_cut_for_efficiency(
-        #     self.target_efficiency, y, cumulative_score)
-        # cumulative_score2 = np.zeros([len(cumulative_score), 2])
-        # cumulative_score2[:, 1] = cumulative_score
-        # assert self.score_to_proba(
-        #     np.array([global_cut2]))[0, 1] == global_cut, \
-        #         ' cuts are different '
-        # local_efficiencies2 = compute_groups_efficiencies(
-        #    global_cut2, self.knn_indices, y, cumulative_score2,
-        #    smoothing_width=self.smoothing)
-        # assert np.all(local_efficiencies == local_efficiencies2),\
-        #    'The computed efficiencies are different'
+        """Returns uBoost multipliers to sample_weight
+        and computed global cut"""
+        global_score_cut = compute_bdt_cut(self.target_efficiency, y, score)
 
-        real_proba = self.score_to_proba(
-            score, n_estimators=len(self.estimators_))
-        global_cut = compute_bdt_cut(
-            self.target_efficiency, y, real_proba[:, 1])
         local_efficiencies = compute_groups_efficiencies(
-            global_cut, self.knn_indices, y, real_proba,
-            smoothing_width=self.smoothing)
+            global_score_cut, self.knn_indices, y, score,
+            smoothing_width=self.smoothing * self.n_estimators)
 
-        e_prime = np.sum(sample_weight * np.abs(
-            local_efficiencies - self.target_efficiency))
+        e_prime = np.average(np.abs(local_efficiencies - self.target_efficiency),
+                             weights=sample_weight)
+
         # beta = np.log((1.0 - e_prime) / e_prime)
         # log(1. / e_prime), otherwise this can lead to the situation
         # where beta is negative (which is a disaster).
         # Mike (uboost author) said he didn't take that into account.
         beta = np.log(1. / e_prime)
-        if self.boost_only_signal:
-            boost_weights = np.exp((
-                self.target_efficiency - local_efficiencies) * y * (
-                beta * self.uniforming_rate))
-        else:
-            boost_weights = np.exp((
-                self.target_efficiency - local_efficiencies) * (
-                beta * self.uniforming_rate))
+        boost_weights = np.exp((self.target_efficiency - local_efficiencies) * y *
+            (beta * self.uniforming_rate))
 
-        return boost_weights, global_cut
+        if self.keep_debug_info:
+            self.debug_dict['local_efficiencies'].append(
+                local_efficiencies.copy())
 
-    def _boost_discrete(self, X, y, sample_weight):
-        """Implement a single boost using the SAMME discrete algorithm,
+        return boost_weights, global_score_cut
+
+    def _boost(self, X, y, sample_weight):
+        """Implement a single boost using the SAMME or SAMME.R algorithm,
         which is modified in uBoost way"""
         cumulative_score = np.zeros(len(X))
+        y_signed = 2 * y - 1
         for iboost in xrange(self.n_estimators):
             estimator = self._make_estimator()
-            #TODO(kazeevn) avoid memory waste if no bagging is needed
-            estimator.fit(X, y, sample_weight=sample_weight * generate_mask(
-                          len(X), self.bagging, self.random_generator))
+            mask = generate_mask(len(X), self.bagging, self.random_generator)
+            estimator.fit(X, y, sample_weight=sample_weight * mask)
 
-            y_predict = estimator.predict(X)
+            # computing estimator weight
+            if self.algorithm == 'SAMME':
+                y_pred = estimator.predict(X)
 
-            # Instances incorrectly classified
-            incorrect = y_predict != y
+                # Error fraction
+                estimator_error = np.average(y_pred != y, weights=sample_weight)
+                estimator_error = np.clip(estimator_error, 1e-6, 1 - 1e-6)
 
-            # Error fraction
-            estimator_error = np.average(incorrect, weights=sample_weight)
-            self.estimator_errors_[iboost] = estimator_error
+                estimator_weight = self.learning_rate * 0.5 * (
+                    np.log((1. - estimator_error) / estimator_error))
 
-            # Stop if classification is perfect
-            if estimator_error <= 0:
-                self.estimator_weights_[iboost] = 1
-                return
+                score = estimator_weight * (2 * y_pred - 1)
+            else:
+                estimator_weight = self.learning_rate * 0.5
+                score = estimator_weight * self._estimator_score(estimator, X)
 
-            # Stop if the error is at least as bad as random guessing
-            # (Removed by Alex)
+            # correcting the weights and score according to predictions
+            sample_weight *= np.exp(- y_signed * score)
+            cumulative_score += score
 
-            # Boost weight using AdaBoost SAMME algorithm
-            estimator_weight = self.learning_rate * (
-                np.log((1. - estimator_error) / estimator_error))
-            self.estimator_weights_[iboost] = estimator_weight
-
-            # correcting the weights according to predictions
-            sample_weight *= np.exp(estimator_weight * incorrect)
-            sample_weight += 1e-30
-            sample_weight /= np.sum(sample_weight)
-
-            # computing score
-            cumulative_score += (2 * y_predict - 1) * estimator_weight
-            # assert np.all(cumulative_score == self.predict_score(X)), \
-            # "wrong prediction"
-
-            uboost_multipliers, global_cut = self.get_uboost_weights(
-                sample_weight, cumulative_score, y)
+            uboost_multipliers, global_score_cut = \
+                self.get_uboost_weights(sample_weight, cumulative_score, y)
             sample_weight *= uboost_multipliers
-            self.bdt_cuts_.append(global_cut)
-            sample_weight /= np.sum(sample_weight)
+            sample_weight = self._normalize_weight(y, sample_weight)
+
+            self.score_cuts_.append(global_score_cut)
+            self.estimators_.append(estimator)
+            self.estimator_weights_.append(estimator_weight)
+
+            # assert np.allclose(cumulative_score, self.predict_score(X), atol=1e-4), \
+            #     "wrong prediction"
 
             if self.keep_debug_info:
                 self.debug_dict['weights'].append(sample_weight.copy())
-                self.debug_dict['local_efficiencies'].append(
-                    local_efficiencies.copy())
-
-        if not self.keep_debug_info:
-            self.knn_indices = None
-
-    def _boost_real(self, X, y, sample_weight):
-        """A single boost using the SAMME.R algorithm"""
-        # We have only two classes and know that beforehand
-        self.classes_ = np.array((0, 1))
-        self.n_classes_ = 2
-        score = np.zeros(len(X))
-        y_codes = np.array([-1. / (self.n_classes_ - 1), 1.])
-        y_coding = y_codes.take(self.classes_ == y[:, np.newaxis])
-        for iboost in xrange(self.n_estimators):
-            estimator = self._make_estimator()
-            self.estimator_weights_[iboost] = 1.
-            estimator.fit(X, y, sample_weight=sample_weight * generate_mask(
-                len(X), self.bagging, self.random_generator))
-            current_proba = estimator.predict_proba(X)
-            samme_proba = self._samme_r_proba(current_proba, self.n_classes_)
-
-            current_proba[current_proba <= 0] = 1e-5
-
-            y_predict = self.classes_.take(
-                np.argmax(current_proba, axis=1), axis=0)
-            incorrect = y_predict != y
-            estimator_error = np.mean(
-                np.average(incorrect, weights=sample_weight, axis=0))
-
-            boost_weight = (-1. * self.learning_rate
-                                * (((self.n_classes_ - 1.) / self.n_classes_) *
-                                   inner1d(y_coding, np.log(current_proba))))
-            if not iboost == self.n_estimators - 1:
-                sample_weight *= np.exp(boost_weight)
-            sample_weight /= np.sum(sample_weight)
-            score += 0.5 * samme_proba[:, 1]
-
-            uboost_multipliers, global_cut = \
-                self.get_uboost_weights(sample_weight, score, y)
-            sample_weight *= uboost_multipliers
-            self.bdt_cuts_.append(global_cut)
-            sample_weight /= np.sum(sample_weight)
-
-            if self.keep_debug_info:
-                self.debug_dict['weights'].append(sample_weight.copy())
-                self.debug_dict['local_efficiencies'].append(
-                    local_efficiencies.copy())
 
         if not self.keep_debug_info:
             self.knn_indices = None
@@ -415,45 +356,26 @@ class uBoostBDT:
 
     def predict_score(self, X):
         X = self.get_train_vars(X)
-        if self.algorithm == 'SAMME':
-            score = np.zeros(len(X))
-            for classifier, weight in zip(
-                    self.estimators_, self.estimator_weights_):
-                score += (2 * classifier.predict(X) - 1) * weight
-        else:  # SAMME.R
-            score = 0.5 * np.sum(self._samme_r_proba(
-                estimator.predict_proba(X), self.n_classes_)[:, 1]
-                for estimator in self.estimators_)
+        score = np.zeros(len(X))
+        for classifier, weight in zip(self.estimators_, self.estimator_weights_):
+            score += self._estimator_score(classifier, X) * weight
         return score
 
     def staged_predict_score(self, X):
-        score = np.zeros(len(X))
         X = self.get_train_vars(X)
-        for classifier, weight in zip(
-                self.estimators_, self.estimator_weights_):
-            if self.algorithm == "SAMME":
-                score += (2 * classifier.predict(X) - 1) * weight
-            else:
-                score += 0.5 * self._samme_r_proba(
-                    classifier.predict_proba(X), self.n_classes_)[:, 1]
+        score = np.zeros(len(X))
+        for classifier, weight in zip(self.estimators_, self.estimator_weights_):
+            score += self._estimator_score(classifier, X) * weight
             yield score
 
-    def score_to_proba(self, score, old_result=None, n_estimators=None):
+    def score_to_proba(self, score):
         """Compute class probability estimates from decision scores."""
-        assert n_estimators is not None, \
-            "Number of estimators is needed for normalization."
-        if old_result is None:
-            proba = np.empty((score.shape[0], 2), dtype=np.float64)
-        else:
-            proba = old_result
-
-        proba[:, 1] = 1.0 / (1.0 + np.exp(
-            -score.ravel() / self.estimator_weights_[:n_estimators].sum()))
+        proba = np.empty((score.shape[0], 2), dtype=np.float64)
+        proba[:, 1] = expit(score / self.n_estimators)
         proba[:, 0] = 1.0 - proba[:, 1]
         return proba
 
     def predict(self, X):
-        # TODO(kazeevn) CHECK
         """Predict classes for X.
         Parameters:
             X : array-like of shape = [n_samples, n_features],
@@ -462,36 +384,24 @@ class uBoostBDT:
         Returns:
             y : array of shape = [n_samples], the predicted classes.
         """
-        return np.array(self.predict_proba(X) > self.global_cut, dtype=int)
+        return np.array(self.predict_score(X) > self.score_cut, dtype=int)
 
-    @staticmethod
-    def _samme_r_proba(proba,  n_classes):
-        """Calculate algorithm 4, step 2, equation c) of Zhu et al [1].
+    def _uboost_predict_score(self, X):
+        """Method added specially for uBoostClassifier"""
+        return sigmoid_function(self.predict_score(X) - self.score_cut,
+                                self.smoothing)
 
-        References
-        ----------
-        https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/ensemble/weight_boosting.py
-        .. [1] J. Zhu, H. Zou, S. Rosset, T. Hastie,
-        "Multi-class AdaBoost", 2009.
-        """
-
-        # Displace zero probabilities so the log is defined.
-        # Also fix negative elements which may occur with
-        # negative sample weights.
-        proba[proba <= 0] = 1e-5
-        log_proba = np.log(proba)
-
-        return (n_classes - 1) * (log_proba - (1. / n_classes)
-                                  * log_proba.sum(axis=1)[:, np.newaxis])
+    def _uboost_staged_predict_score(self, X):
+        """Method added specially for uBoostClassifier"""
+        for cut, score in zip(self.score_cuts_, self.staged_predict_score(X)):
+            yield sigmoid_function(score - cut, self.smoothing)
 
     def predict_proba(self, X):
-        return self.score_to_proba(
-            self.predict_score(X), n_estimators=len(self.estimators_))
+        return self.score_to_proba(self.predict_score(X))
 
     def staged_predict_proba(self, X):
-        for n_esimators, score in enumerate(self.staged_predict_score(X)):
-            # +1 because enumerate begins with 0
-            yield self.score_to_proba(score, n_estimators=(n_esimators+1))
+        for score in self.staged_predict_score(X):
+            yield self.score_to_proba(score)
 
     @property
     def feature_importances_(self):
@@ -500,23 +410,17 @@ class uBoostBDT:
         Returns:
             array, shape = [n_features]
         """
-        assert self.algorithm == 'SAMME', \
-            "Not implemneted for SAMME.R"
-
         if self.estimators_ is None or len(self.estimators_) == 0:
             raise ValueError("Estimator not fitted,"
                              " call `fit` before `feature_importances_`.")
 
-        return np.array(sum(tree.feature_importances_ * weight for tree, weight
-                            in zip(self.estimators_, self.estimator_weights_))
-                        / self.n_estimators)
+        return sum(tree.feature_importances_ * weight for tree, weight
+                   in zip(self.estimators_, self.estimator_weights_))
 
 
-def _train_classifier(
-        classifier, X_train_vars, y, sample_weight, neighbours_matrix):
-    return classifier.fit(
-        X_train_vars, y, sample_weight=sample_weight,
-        neighbours_matrix=neighbours_matrix)
+def _train_classifier(classifier, X_train_vars, y, sample_weight, neighbours_matrix):
+    return classifier.fit(X_train_vars, y, sample_weight=sample_weight,
+                          neighbours_matrix=neighbours_matrix)
 
 
 class uBoostClassifier(BaseEstimator, ClassifierMixin):
@@ -527,11 +431,11 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
                  base_estimator=DecisionTreeClassifier(max_depth=1),
                  bagging=True,
                  train_variables=None,
-                 boost_only_signal=True,
+                 algorithm="SAMME",
+                 separate_normalization=False,
                  smoothing=None,
-                 random_state=None,
                  ipc_profile=None,
-                 algorithm="SAMME"):
+                 random_state=None):
         """uBoost classifier, am algorithm of boosting targeted to obtain
         flat efficiency in signal along some variables. See [1] for details.
 
@@ -569,10 +473,9 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
             names of variables used in fit/predict.
             if None, all the variables are used (including uniform_variables)
 
-        boost_only_signal: bool (default=True),
-            if True, only weights of signal are changed depending
-                on local efficiency (as in uBoost)
-            if False, both weights of signal and background are changed
+        separate_normalization: bool (default=False),
+            if True, the normalization of weight for signal and bg
+            events is done independently
 
         smoothing: float, default=(0.), used to smooth computing of
             local efficiencies, 0.0 corresponds to usual uBoost
@@ -603,7 +506,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         self.base_estimator = base_estimator
         self.bagging = bagging
         self.train_variables = train_variables
-        self.boost_only_signal = boost_only_signal
+        self.separate_normalization = separate_normalization
         self.smoothing = smoothing
         self.ipc_profile = ipc_profile
         self.algorithm = algorithm
@@ -641,29 +544,18 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
                 n_estimators=self.n_estimators,
                 base_estimator=self.base_estimator,
                 random_state=self.random_state, bagging=self.bagging,
-                boost_only_signal=self.boost_only_signal,
-                smoothing=self.smoothing,
-                algorithm=self.algorithm)
+                smoothing=self.smoothing, algorithm=self.algorithm,
+                separate_normalization=self.separate_normalization)
             self.classifiers.append(classifier)
 
-        if self.ipc_profile is not None:
-            from IPython.parallel import Client
-            lb_view = Client(profile=self.ipc_profile).load_balanced_view()
-            self.classifiers = lb_view.map_sync(
-                _train_classifier,
-                self.classifiers,
-                [X_train_vars] * self.efficiency_steps,
-                [y] * self.efficiency_steps,
-                [sample_weight] * self.efficiency_steps,
-                [neighbours_matrix] * self.efficiency_steps)
-        else:
-            self.classifiers = map(
-                _train_classifier,
-                self.classifiers,
-                [X_train_vars] * self.efficiency_steps,
-                [y] * self.efficiency_steps,
-                [sample_weight] * self.efficiency_steps,
-                [neighbours_matrix] * self.efficiency_steps)
+        map_on_cluster(self.ipc_profile,
+                       _train_classifier,
+                       self.classifiers,
+                       self.efficiency_steps * [X_train_vars],
+                       self.efficiency_steps * [y],
+                       self.efficiency_steps * [sample_weight],
+                       self.efficiency_steps * [neighbours_matrix])
+
         return self
 
     def predict(self, X):
@@ -671,35 +563,22 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         # return a list of predictions for all target_efficiencies
         return self.predict_proba(X).argmax(axis=1)
 
-    def predict_proba(self, X):
-        X_train_vars = self.get_train_variables(X)
-        result = np.zeros([len(X), 2])
-        for efficiency, classifier in zip(
-                self.target_efficiencies, self.classifiers):
-            result[:, 1] += sigmoid_function(
-                classifier.predict_proba(
-                    X_train_vars)[:, 1] - classifier.bdt_cut,
-                self.smoothing)
+    def score_to_proba(self, score):
+        proba = np.empty((len(score), 2), dtype=float)
+        proba[:, 1] = expit(score / self.efficiency_steps)
+        proba[:, 0] = 1.0 - proba[:, 1]
+        return proba
 
-        result[:, 1] /= self.efficiency_steps
-        result[:, 0] = 1.0 - result[:, 1]
-        return result
+    def predict_proba(self, X):
+        X = self.get_train_variables(X)
+        score = sum(clf._uboost_predict_score(X) for clf in self.classifiers)
+        return self.score_to_proba(score)
 
     def staged_predict_proba(self, X):
         X = self.get_train_variables(X)
-        staged_probas = izip(* [
-            bdt.staged_predict_proba(X) for bdt in self.classifiers])
-        staged_cuts = izip(* [
-            bdt.bdt_cuts_ for bdt in self.classifiers])
-        result = np.zeros([len(X), 2])
-        for predictions, cuts in izip(staged_probas, staged_cuts):
-            result[:, :] = 0.
-            for proba, cut in izip(predictions, cuts):
-                result[:, 1] += sigmoid_function(proba[:, 1] - cut,
-                                                 self.smoothing)
-            result[:, 1] /= self.efficiency_steps
-            result[:, 0] = 1.0 - result[:, 1]
-            yield result
+        for scores in izip(*[clf._uboost_staged_predict_score(X)
+                             for clf in self.classifiers]):
+            yield self.score_to_proba(sum(scores))
 
 
 def generate_mask(n_samples, bagging=True, random_generator=np.random):
@@ -707,17 +586,17 @@ def generate_mask(n_samples, bagging=True, random_generator=np.random):
         speeds up the convergence and prevents overfitting
         (see http://en.wikipedia.org/wiki/Bootstrap_aggregating)
         if True, usual bootstrap aggregating is used
-        (sampling with replacement at each iteration, size=len(X))
+           (sampling with replacement at each iteration, size=len(X))
         if float, used sampling with replacement, the size of generated
            set is bagging * len(X)
-        if False, does nothing."""
-
+        if False, returns 1."""
     if bagging is True:
         indices = random_generator.randint(0, n_samples, n_samples)
         mask = np.bincount(indices, minlength=n_samples)
     elif isinstance(bagging, float):
         mask = random_generator.rand(n_samples) > 1 - bagging
+    elif bagging is False:
+        mask = 1.
     else:
-        assert isinstance(bagging, bool) and not bagging, \
-            "something wrong was passed as bagging"
+        raise ValueError("something wrong was passed as bagging")
     return mask
