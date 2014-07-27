@@ -21,10 +21,10 @@ class HidingClassifier(BaseEstimator, ClassifierMixin):
         self.train_variables = train_variables
         self.base_estimator = base_estimator
 
-    def fit(self, X, y):
+    def fit(self, X, y, **kwargs):
         assert self.base_estimator is not None, "base estimator was not set"
         self._trained_estimator = clone(self.base_estimator)
-        self._trained_estimator.fit(X[self.train_variables], y)
+        self._trained_estimator.fit(X[self.train_variables], y, **kwargs)
         return self
 
     def predict(self, X):
@@ -42,9 +42,9 @@ class FeatureSplitter(BaseEstimator, ClassifierMixin):
         """ The dataset is supposed to have some special variable, and depending on this variable,
         the event has some set of features. For each pair of values we use common features to train
         additional variables
-        :param feature_name: str, the name of key feature
-        :param base_estimators: dict, the classifiers used to generate features
-        :param final_estimator: BaseEstimator, the classifier used to make final decision
+        :param str feature_name: the name of key feature
+        :param dict base_estimators: the classifiers used to generate features
+        :param BaseEstimator final_estimator: the classifier used to make final decision
         """
         self.base_estimators = base_estimators
         self.feature_name = feature_name
@@ -142,8 +142,8 @@ class DumbSplitter(BaseEstimator, ClassifierMixin):
     def __init__(self, feature_name=None, base_estimator=None):
         """
         Splits the dataset by specific column, trains separately on each part
-        :param feature_name: the name of the column
-        :param base_estimator: the classifier used to classify each part of data
+        :param str feature_name: the name of the column
+        :param BaseEstimator base_estimator: the classifier used to classify each part of data
         """
         self.feature_name = feature_name
         self.base_estimator = base_estimator
@@ -204,6 +204,7 @@ class ChainClassifiers(BaseEstimator, ClassifierMixin):
         return result
 
 
+
 def test_feature_splitter(size=2000):
     import commonutils
     from sklearn.ensemble import RandomForestClassifier
@@ -212,7 +213,7 @@ def test_feature_splitter(size=2000):
 
     X, y = commonutils.generate_sample(size, 10, distance=0.5)
     X['column0'] = numpy.clip(numpy.array(X['column0']).astype(numpy.int), -2, 2)
-    trainX, testX, trainY, testY = commonutils.my_train_test_split(X, y)
+    trainX, testX, trainY, testY = commonutils.train_test_split(X, y)
     base_estimators = {'rf': RandomForestClassifier()}
     splitter = FeatureSplitter('column0', base_estimators=base_estimators, final_estimator=RandomForestClassifier())
     splitter.fit(trainX, trainY)
