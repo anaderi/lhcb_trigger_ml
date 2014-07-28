@@ -393,7 +393,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                 value = estimate_classifier(params_dict=state_dict, base_estimator=self.base_estimator,
                                             X=X, y=y, folds=self.folds, fold_checks=self.fold_checks,
                                             score_function=self.score_function, sample_weight=sample_weight,
-                                            scorer_needs_X=self.scorer_needs_x)
+                                            scorer_needs_x=self.scorer_needs_x)
                 self.generator.add_result(state_indices, value)
                 self.evaluations_done += 1
                 state_string = ", ".join([k + '=' + str(v) for k, v in state_dict.iteritems()])
