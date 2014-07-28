@@ -130,10 +130,6 @@ class AbstractParameterGenerator(object):
             print(df)
 
 
-
-
-
-
 def create_subgrid(param_grid, n_values):
     """
     :type param_grid: OrderedDict,
@@ -173,7 +169,7 @@ class SimpleParameterOptimizer(AbstractParameterGenerator):
         self.subgrid_size = subgrid_size
         self.dimensions_sum = sum(self.dimensions)
         self.subgrid_parameter_generator = None
-        if not numpy.all(numpy.array(self.dimensions) <= 1.5 * self.subgrid_size):
+        if not numpy.all(numpy.array(self.dimensions) <= 2 * self.subgrid_size):
             print("Optimizing on subgrid")
             param_subgrid, self.subgrid_indices = create_subgrid(self.param_grid, self.subgrid_size)
             self.subgrid_parameter_generator = \
@@ -269,7 +265,7 @@ test_simple_optimizer()
 
 
 def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
-                        score_function, sample_weight=None, label=1, scorer_needs_X=False):
+                        score_function, sample_weight=None, label=1, scorer_needs_x=False):
     """This function is needed """
     k_folder = StratifiedKFold(y=y, n_folds=folds)
     score = 0.
@@ -285,7 +281,7 @@ def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
                 sample_weight[train_indices], sample_weight[test_indices]
             train_options['sample_weight'] = train_weights
             test_options['sample_weight'] = test_weights
-        if scorer_needs_X:
+        if scorer_needs_x:
             test_options['X'] = testX
 
         estimator.fit(trainX, trainY, **train_options)
@@ -298,7 +294,7 @@ def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
 class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
     def __init__(self, base_estimator, param_grid, n_evaluations=40, score_function=None, folds=3, fold_checks=1,
                  scorer_needs_x=False, ipc_profile=None, param_generator_type=None,
-                 random_state=None, refit=False):
+                 random_state=None, refit=False, log_name=""):
         """Optimal search over specified parameter values for an estimator. Metropolis-like algorithm is used
         Important members are fit, predict.
 
@@ -365,10 +361,12 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
         self.param_generator_type = param_generator_type
         self.random_state = random_state
         self.refit = refit
+        self.log_name = log_name
+        self.scorer_needs_x = scorer_needs_x
 
     def _log(self, *objects):
         logger = logging.getLogger(__name__)
-        logger.debug(" ".join([str(x) for x in objects]))
+        logger.debug(self.log_name + " ".join([str(x) for x in objects]))
 
     def _check_params(self):
         if self.param_generator_type is None:
@@ -387,13 +385,15 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
         self._check_params()
         self.evaluations_done = 0
         X = pandas.DataFrame(X)
+        self._log("\n\nGridSearch started\n\n")
 
         if self.ipc_profile is None:
             while self.evaluations_done < self.generator.n_evaluations:
                 state_indices, state_dict = self.generator.generate_next_point()
                 value = estimate_classifier(params_dict=state_dict, base_estimator=self.base_estimator,
                                             X=X, y=y, folds=self.folds, fold_checks=self.fold_checks,
-                                            score_function=self.score_function, sample_weight=sample_weight)
+                                            score_function=self.score_function, sample_weight=sample_weight,
+                                            scorer_needs_X=self.scorer_needs_x)
                 self.generator.add_result(state_indices, value)
                 self.evaluations_done += 1
                 state_string = ", ".join([k + '=' + str(v) for k, v in state_dict.iteritems()])
@@ -408,7 +408,8 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                 result = direct_view.map_sync(estimate_classifier, state_dict_array,
                     [self.base_estimator] * portion, [X]*portion, [y]*portion,
                     [self.folds] * portion, [self.fold_checks] * portion,
-                    [self.score_function] * portion, [sample_weight]*portion)
+                    [self.score_function] * portion, [sample_weight]*portion,
+                    [self.scorer_needs_x] * portion)
                 assert len(result) == portion, "The length of result is very strange"
                 for state_indices, state_dict, score in zip(state_indices_array, state_dict_array, result):
                     self.generator.add_result(state_indices, score)
@@ -442,50 +443,6 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
 
     def print_param_stats(self, best=0.3):
         self.generator.print_param_stats(best=best)
-
-
-
-
-# class TestClassifier(BaseEstimator, ClassifierMixin):
-#     """This classifier is created specially for testing optimization"""
-#     def __init__(self, a=1., b=1., c=1., d=1., sign=1):
-#         self.a = a
-#         self.b = b
-#         self.c = c
-#         self.d = d
-#         self.sign = sign
-#
-#     def fit(self, X, y, sample_weight=None):
-#         pass
-#
-#     def predict_proba(self, X):
-#         return numpy.zeros([len(X), 2]) + self.a * self.b * self.c * self.d * self.sign
-
-
-# def mean_score(y, pred, sample_weight=None):
-#     """ This metrics was created for testing purposes"""
-#     return numpy.mean(pred)
-
-# def test_optimization(size=10, n_evaluations=150):
-#     trainX, trainY = commonutils.generate_sample(2000, 10, distance=0.5)
-#
-#     grid_1d = numpy.linspace(0.1, 1, num=size)
-#     grid = {'a': grid_1d, 'b': grid_1d, 'c': grid_1d, 'd': grid_1d}
-#     grid = OrderedDict(grid)
-#
-#     grid_cv = GridOptimalSearchCV(TestClassifier(), grid, n_evaluations=n_evaluations, score_function=mean_score)
-#     grid_cv.fit(trainX, trainY)
-#     optimizer = grid_cv.generator
-#     assert 0.8 <= optimizer.best_score_ <= 1., 'Too poor optimization : %.2f' % optimizer.best_score_
-#     assert mean_score(trainY, grid_cv.predict_proba(trainX)[:, 1]) == optimizer.best_score_, 'something is wrong'
-#
-#     grid_cv = GridOptimalSearchCV(TestClassifier(sign=-1), grid, n_evaluations=n_evaluations, score_function=mean_score)
-#     grid_cv.fit(trainX, trainY)
-#     optimizer = grid_cv.generator
-#     assert -0.04 <= optimizer.best_score_ <= 0.0, 'Too poor optimization : %.2f' % optimizer.best_score_
-
-
-# test_optimization()
 
 
 def test_grid_search():
