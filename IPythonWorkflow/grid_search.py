@@ -294,7 +294,7 @@ def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
 class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
     def __init__(self, base_estimator, param_grid, n_evaluations=40, score_function=None, folds=3, fold_checks=1,
                  scorer_needs_x=False, ipc_profile=None, param_generator_type=None,
-                 random_state=None, refit=False, log_name=""):
+                 random_state=None, refit=False, label=1, log_name=""):
         """Optimal search over specified parameter values for an estimator. Metropolis-like algorithm is used
         Important members are fit, predict.
 
@@ -362,11 +362,12 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
         self.random_state = random_state
         self.refit = refit
         self.log_name = log_name
+        self.label = label
         self.scorer_needs_x = scorer_needs_x
 
     def _log(self, *objects):
         logger = logging.getLogger(__name__)
-        logger.debug(self.log_name + " ".join([str(x) for x in objects]))
+        logger.debug(self.log_name + " " + " ".join([str(x) for x in objects]))
 
     def _check_params(self):
         if self.param_generator_type is None:
@@ -393,6 +394,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                 value = estimate_classifier(params_dict=state_dict, base_estimator=self.base_estimator,
                                             X=X, y=y, folds=self.folds, fold_checks=self.fold_checks,
                                             score_function=self.score_function, sample_weight=sample_weight,
+                                            label=self.label,
                                             scorer_needs_x=self.scorer_needs_x)
                 self.generator.add_result(state_indices, value)
                 self.evaluations_done += 1
@@ -408,7 +410,9 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                 result = direct_view.map_sync(estimate_classifier, state_dict_array,
                     [self.base_estimator] * portion, [X]*portion, [y]*portion,
                     [self.folds] * portion, [self.fold_checks] * portion,
-                    [self.score_function] * portion, [sample_weight]*portion,
+                    [self.score_function] * portion,
+                    [sample_weight]*portion,
+                    [self.label]*portion
                     [self.scorer_needs_x] * portion)
                 assert len(result) == portion, "The length of result is very strange"
                 for state_indices, state_dict, score in zip(state_indices_array, state_dict_array, result):
