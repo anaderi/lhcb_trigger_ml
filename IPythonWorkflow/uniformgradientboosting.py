@@ -8,6 +8,7 @@ from time import time
 import itertools
 import math
 import scipy.sparse as sparse
+import sklearn
 from sklearn.base import BaseEstimator
 from sklearn.ensemble import GradientBoostingClassifier as GBClassifier
 from sklearn.ensemble._gradient_boosting import _random_sample_mask
@@ -97,10 +98,10 @@ class SimpleKnnLossFunction(KnnLossFunction):
     def __init__(self, uniform_variables, knn=10, uniform_label=1, distinguish_classes=True, row_norm=1.):
         """A matrix is square, each row corresponds to a single event in train dataset, in each row we put ones
         to the closest neighbours of that event if this event from class along which we want to have uniform prediction.
-        :type uniform_variables: list(str), the features, along which uniformity is desired
-        :type knn: int, the number of nonzero elements in the row, corresponding to event in 'uniform class'
-        :type uniform_label: int | list(int), the label (labels) of 'uniform classes'
-        :type distinguish_classes: bool, if True, 1's will be placed only for
+        :param list[str] uniform_variables: the features, along which uniformity is desired
+        :param int knn: the number of nonzero elements in the row, corresponding to event in 'uniform class'
+        :param int|list[int] uniform_label: the label (labels) of 'uniform classes'
+        :param bool distinguish_classes: if True, 1's will be placed only for
         """
         self.knn = knn
         self.distinguish_classes = distinguish_classes
@@ -318,7 +319,7 @@ class SimpleKnnLossFunctionEyeSignal(KnnLossFunction):
             is_signal = numpy.ones(len(trainY), dtype=numpy.bool)
             knn_indices = commonutils.computeSignalKnnIndices(self.uniform_variables, trainX, is_signal, self.knn)
 
-        bg_index = numpy.where(is_signal == True)[0]
+        bg_index = numpy.where(is_signal)[0]
 
         j = 0
         k = 0
@@ -660,7 +661,8 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
         return LogOddsEstimator()
 
 
-class new_rf(RandomForestRegressor):
+class NewRF(RandomForestRegressor):
+    """Just a random forest regressor, that returns a two-dimensional array"""
     def predict(self, X):
         return RandomForestRegressor.predict(self, X)[:, numpy.newaxis]
 
@@ -669,7 +671,7 @@ class NewFlatnessLossFunction(FlatnessLossFunction, BaseEstimator):
     def __init__(self, uniform_variables, n_neighbours=100, uniform_label=1,  ada_coefficient=1.,
                  allow_wrong_signs=True, keep_debug_info=False, uniforming_factor=1., update_tree=True):
         """
-        :param int|list(int) uniform_label: labels of classes for which the uniformity of predictions is desired
+        :param int|list[int] uniform_label: labels of classes for which the uniformity of predictions is desired
         """
         self.uniform_variables = uniform_variables
         self.n_neighbours = n_neighbours
@@ -699,10 +701,10 @@ class NewFlatnessLossFunction(FlatnessLossFunction, BaseEstimator):
         return self
 
     def __call__(self, y, pred):
-        pass
+        return 1
 
     def init_estimator(self, X=None, y=None):
-        return new_rf()
+        return NewRF()
 
     def negative_gradient(self, y, y_pred, sample_weight=None, **kw_args):
         sample_weight = check_sample_weight(y, sample_weight=sample_weight)
@@ -718,7 +720,7 @@ class NewFlatnessLossFunction(FlatnessLossFunction, BaseEstimator):
             knn_values = numpy.take(y_pred, self.knn_indices[label])
             knn_weights = numpy.take(sample_weight, self.knn_indices[label])
             # TODO use heaviside here?
-            local_efficiencies = numpy.average(knn_values < values[:, numpy.newaxis], axis=1, weights=knn_weights)
+            local_efficiencies = numpy.average(knn_values > values[:, numpy.newaxis], axis=1, weights=knn_weights)
             global_targets = commonutils.weighted_percentile(values, local_efficiencies,
                                                              sample_weight=sample_weight[label_mask])
 
@@ -747,7 +749,6 @@ class NewFlatnessLossFunction(FlatnessLossFunction, BaseEstimator):
         terminal_region = numpy.where(terminal_regions == leaf)[0]
         residual = residual.take(terminal_region, axis=0)
         tree.value[leaf, 0, 0] = numpy.median(residual)
-
 
 
 class MyGradientBoostingClassifier(GBClassifier):
@@ -852,8 +853,12 @@ class MyGradientBoostingClassifier(GBClassifier):
             if do_oob:
                 sample_mask = _random_sample_mask(n_samples, n_inbag, random_state)
 
-            # fit next stage of trees
-            y_pred = self._fit_stage(i, X, y, y_pred, sample_mask, random_state)
+            # fit next stage of tree
+            args = {}
+            # TODO write own gradient boosting
+            if sklearn.__version__ >= '0.15':
+                args = {'criterion': 'mse', 'splitter': 'best', }
+            y_pred = self._fit_stage(i, X, y, y_pred=y_pred, sample_mask=sample_mask, random_state=random_state, **args)
 
             self.train_score_[i] = self.loss_(y, y_pred)
 
@@ -936,6 +941,7 @@ def test_gradient(loss, size=1000):
 
     n_gradient = loss.negative_gradient(y, pred)
     assert numpy.all(abs(n_gradient + gradient) < 1e-3), "Problem with functional gradient"
+
 
 
 def test_gradient_boosting(samples=1000):
