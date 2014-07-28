@@ -412,7 +412,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                     [self.folds] * portion, [self.fold_checks] * portion,
                     [self.score_function] * portion,
                     [sample_weight]*portion,
-                    [self.label]*portion
+                    [self.label]*portion,
                     [self.scorer_needs_x] * portion)
                 assert len(result) == portion, "The length of result is very strange"
                 for state_indices, state_dict, score in zip(state_indices_array, state_dict_array, result):
