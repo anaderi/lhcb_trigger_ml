@@ -47,20 +47,20 @@ def check_sample_weight(y_true, sample_weight):
 
 def map_on_cluster(ipc_profile, *args, **kw_args):
     """The same as map, but the first argument is ipc_profile
-    :type ipc_profile: str | None, the IPython cluster profile to use.
+    :param str|None ipc_profile: the IPython cluster profile to use.
     :return: the result of mapping
     """
     if ipc_profile is None:
         return map(*args, **kw_args)
     else:
         from IPython.parallel import Client
-        return Client(ipc_profile).load_balanced_view().map_sync(*args, **kw_args)
+        return Client(profile=ipc_profile).load_balanced_view().map_sync(*args, **kw_args)
 
 
 def train_test_split(*arrays, **kw_args):
     """Does the same thing as train_test_split, but preserves columns in DataFrames.
     Uses the same parameters: test_size, train_size, random_state
-    :type arrays: list[numpy.array | pandas.DataFrame]
+    :type list[numpy.array|pandas.DataFrame] arrays:
     """
     assert len(arrays) > 0, "at least one array should be given"
     length = len(arrays[0])
@@ -77,13 +77,13 @@ def train_test_split(*arrays, **kw_args):
             result.append(array[test_indices])
     return result
 
-# Declaring alias
-my_train_test_split = train_test_split
-
 
 def weighted_percentile(array, percentiles, sample_weight=None, array_sorted=False, old_style=False):
     array = numpy.array(array)
+    percentiles = numpy.array(percentiles)
     sample_weight = check_sample_weight(array, sample_weight)
+    assert numpy.all(percentiles >= 0) and numpy.all(percentiles <= 1), 'Percentiles should be in [0, 1]'
+
     if not array_sorted:
         order = numpy.argsort(array)
         array, sample_weight = array[order], sample_weight[order]
@@ -94,16 +94,7 @@ def weighted_percentile(array, percentiles, sample_weight=None, array_sorted=Fal
         weighted_quantiles /= weighted_quantiles[-1]
     else:
         weighted_quantiles /= numpy.sum(sample_weight)
-    percentiles = numpy.array(percentiles)
-    assert numpy.all(percentiles >= 0) and numpy.all(percentiles <= 1), 'Percentiles should be in [0, 1]'
-    upper = numpy.clip(numpy.searchsorted(weighted_quantiles, percentiles), 1, len(array) - 1)
-    lower = upper - 1
-    lower_input = numpy.take(weighted_quantiles, lower)
-    upper_input = numpy.take(weighted_quantiles, upper)
-    lower_output = numpy.take(array, lower)
-    upper_output = numpy.take(array, upper)
-    t = (percentiles - lower_input) / (upper_input - lower_input + 1e-20)
-    return upper_output * t + lower_output * (1 - t)
+    return numpy.interp(percentiles, weighted_quantiles, array)
 
 
 def test_percentile(size=100, q_size=20):
@@ -139,7 +130,7 @@ def test_splitting():
     common_X = pandas.concat([signal_df, bg_df], ignore_index=True)
     common_y = numpy.concatenate([numpy.ones(len(signal_df)), numpy.zeros(len(bg_df))])
 
-    trainX, testX, trainY, testY = my_train_test_split(common_X, common_y)
+    trainX, testX, trainY, testY = train_test_split(common_X, common_y)
 
     for (index, row), label in zip(trainX.iterrows(), trainY):
         assert numpy.all(label == row), 'wrong data partition'
@@ -226,8 +217,8 @@ def build_normalizer(signal, sample_weight=None):
         # this one should be uniform in [0,1]
         hist(normalizer(signal))
     Parameters:
-    :type signal: numpy.array, shape = [n_samples] with floats
-    :type sample_weight: numpy.array, shape = [n_samples], non-negative weights associated to events.
+    :param numpy.array signal: shape = [n_samples] with floats
+    :param numpy.array sample_weight: shape = [n_samples], non-negative weights associated to events.
     """
     sample_weight = check_sample_weight(signal, sample_weight)
     assert numpy.all(sample_weight >= 0.), 'sample weight must be non-negative'
@@ -236,16 +227,7 @@ def build_normalizer(signal, sample_weight=None):
     predictions = numpy.cumsum(sample_weight) / numpy.sum(sample_weight)
 
     def normalizing_function(data):
-        data = numpy.clip(data, signal[0], signal[-1])
-        upper = numpy.searchsorted(signal, data)
-        upper = numpy.clip(upper, 1, len(signal))
-        lower = upper - 1
-        lower_output = numpy.take(predictions, lower)
-        upper_output = numpy.take(predictions, upper)
-        lower_input = numpy.take(signal, lower)
-        upper_input = numpy.take(signal, upper)
-        t = (data - lower_input) / (upper_input - lower_input + 1e-10)
-        return t * upper_output + (1.-t) * lower_output
+        return numpy.interp(data, signal, predictions)
     return normalizing_function
 
 
@@ -253,18 +235,16 @@ def test_build_normalizer(checks=10):
     predictions = numpy.array(RandomState().normal(size=2000))
     result = build_normalizer(predictions)(predictions)
     assert numpy.all(result[numpy.argsort(predictions)] == sorted(result))
-    assert numpy.all(result >= 0)
-    assert numpy.all(result <= 1)
+    assert numpy.all(result >= 0) and numpy.all(result <= 1)
     percentiles = [100 * (i + 1.) / (checks + 1.) for i in range(checks)]
     assert numpy.all(abs(numpy.percentile(result, percentiles) - numpy.array(percentiles) / 100.) < 0.01)
 
     # testing with weights
-    predictions = numpy.exp(predictions)
+    predictions = numpy.exp(predictions / 2)
     weighted_normalizer = build_normalizer(predictions, sample_weight=predictions)
     result = weighted_normalizer(predictions)
     assert numpy.all(result[numpy.argsort(predictions)] == sorted(result))
-    assert numpy.all(result >= 0)
-    assert numpy.all(result <= 1)
+    assert numpy.all(result >= 0) and numpy.all(result <= 1)
     predictions = numpy.sort(predictions)
     result = weighted_normalizer(predictions)
     result2 = numpy.cumsum(predictions) / numpy.sum(predictions)
@@ -274,8 +254,8 @@ def test_build_normalizer(checks=10):
 
 test_build_normalizer()
 
-# Functions primarily for uBoost
 
+# Functions primarily for uBoost
 
 def compute_cut_for_efficiency(efficiency, y_true, y_pred, sample_weight=None):
     """ Computes such cut(s), that provide given signal efficiency.
@@ -324,20 +304,20 @@ def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
     percentiles = 1. - target_efficiency
     return weighted_percentile(signal_proba, percentiles)
 
-def compute_groups_efficiencies(global_cut, knn_indices, answers, prediction_proba,
+
+def compute_groups_efficiencies(global_cut, knn_indices, answers, y_pred,
                                 sample_weight=None, smoothing_width=0.0):
     """Fast implementation in numpy"""
-    assert len(answers) == len(prediction_proba), 'different size'
+    assert len(answers) == len(y_pred), 'different size'
     sample_weight = check_sample_weight(answers, sample_weight)
-    predictions = sigmoid_function(prediction_proba[:, 1] - global_cut, smoothing_width)
+    predictions = sigmoid_function(y_pred - global_cut, smoothing_width)
     groups_predictions = numpy.take(predictions, knn_indices)
     groups_weights = numpy.take(sample_weight, knn_indices)
-    # TODO test this new implementation
     return numpy.average(groups_predictions, weights=groups_weights, axis=1)
-    # neigh_predictions.mean(axis=1)
+
 
 def sigmoid_function(x, width):
-    """ Sigmoid function is smoothing oh Heaviside function, the lesser width, the closer we are to Heaviside function
+    """ Sigmoid function is smoothing oh Heaviside function, the less width, the closer we are to Heaviside function
     :type x: array-like with floats, arbitrary shape
     :type width: float, if width == 0, this is simply Heaviside function
     """
@@ -362,9 +342,6 @@ def generate_sample(n_samples, n_features, distance=2.0):
     X = pandas.DataFrame(X, columns=columns)
     return X, y
 
-# supporting deprecated name
-generateSample = generate_sample
-
 
 def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, n_neighbors=50):
     """For each event returns the knn closest signal(!) events. No matter of what class the event is.
@@ -384,7 +361,8 @@ def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, n_neighbors
 
 
 def computeKnnIndicesOfSameClass(uniform_variables, X, y, n_neighbours=50):
-    """Works as previous function, but returns the neighbours of the same class as element"""
+    """Works as previous function, but returns the neighbours of the same class as element
+    :param list[str] uniform_variables: the names of columns"""
     assert len(X) == len(y), "different size"
     result = numpy.zeros([len(X), n_neighbours], dtype=numpy.int)
     for label in set(y):
