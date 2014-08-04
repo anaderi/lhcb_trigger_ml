@@ -113,10 +113,18 @@ def test_classifiers(trainX, trainY, testX, testY, output_name_patern=None):
         efficiency_steps=5,
         n_estimators=50,
         algorithm="SAMME.R")
+    #TODO(kazeevn) skip the effort duplication
+    clf_uBoost_YAUB = uBoostClassifier(
+        uniform_variables=uniform_variables,
+        n_neighbors=50,
+        efficiency_steps=5,
+        n_estimators=50,
+        algorithm="YAUB")
     clf_dict = ClassifiersDict({
         "Ada": clf_Ada,
-        "uSAMME": clf_uBoost_SAMME,
-        "uSAMME.R": clf_uBoost_SAMME_R
+#        "uSAMME": clf_uBoost_SAMME,
+#        "uSAMME.R": clf_uBoost_SAMME_R,
+        "YAUB": clf_uBoost_YAUB
         })
     clf_dict.fit(trainX, trainY)
 
@@ -135,7 +143,6 @@ def test_classifiers(trainX, trainY, testX, testY, output_name_patern=None):
     predictions.efficiency(uniform_variables)
     if output_name_patern is not None:
         pl.savefig(output_name_patern % "efficiency_curves", bbox="tight")
-
 
 def main():
     parser = argparse.ArgumentParser(

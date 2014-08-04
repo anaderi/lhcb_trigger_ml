@@ -185,11 +185,11 @@ class uBoostBDT:
             raise ValueError("learning_rate must be greater than zero")
 
         # Check that algorithm is supported
-        if self.algorithm not in ('SAMME', 'SAMME.R'):
+        if self.algorithm not in ('SAMME', 'SAMME.R', 'YAUB'):
             raise ValueError("algorithm %s is not supported"
                              % self.algorithm)
 
-        if self.algorithm == 'SAMME.R':
+        if self.algorithm == 'SAMME.R' or self.algorithm == 'YAUB':
             if not hasattr(self.base_estimator, 'predict_proba'):
                 raise TypeError(
                     "uBoostBDT with algorithm='SAMME.R' requires "
@@ -240,9 +240,11 @@ class uBoostBDT:
         self.random_generator = check_random_state(self.random_state)
 
         if self.algorithm == "SAMME":
-            self._boost_discrete(X_train_variables, y, sample_weight)
-        else:  # SAMME.R
-            self._boost_real(X_train_variables, y, sample_weight)
+            self._boost_discrete(X_train_variables, y, sample_weight, self.get_uboost_weights)
+        elif self.algorithm == "SAMME.R":
+            self._boost_real(X_train_variables, y, sample_weight, self.get_uboost_weights)
+        else:  # "YAUB"
+            self._boost_real(X_train_variables, y, sample_weight, self.get_yaub_weights)
 
         self.bdt_cut = compute_bdt_cut(
             self.target_efficiency, y, self.predict_proba(X)[:, 1])
@@ -258,6 +260,20 @@ class uBoostBDT:
         except ValueError:
             pass
         return estimator
+
+    def get_yaub_weights(self, sample_weight, score, y):
+        real_proba = \
+          self.score_to_proba(score, n_estimators=len(self.estimators_))[:, 1]
+        median_proba = np.median(real_proba)
+        magic_k = 10
+        if self.boost_only_signal:
+            boost_weights = np.exp(magic_k * (median_proba - real_proba) * y)
+        else:
+            boost_weights = np.exp(magic_k * (median_proba - real_proba))
+        global_cut = compute_bdt_cut(
+            self.target_efficiency, y, real_proba)
+
+        return boost_weights, global_cut
 
     def get_uboost_weights(self, sample_weight, score, y):
         """Returns uBoost multipliers to sample_weight"""
@@ -303,7 +319,7 @@ class uBoostBDT:
 
         return boost_weights, global_cut
 
-    def _boost_discrete(self, X, y, sample_weight):
+    def _boost_discrete(self, X, y, sample_weight, uboost_function):
         """Implement a single boost using the SAMME discrete algorithm,
         which is modified in uBoost way"""
         cumulative_score = np.zeros(len(X))
@@ -345,7 +361,7 @@ class uBoostBDT:
             # assert np.all(cumulative_score == self.predict_score(X)), \
             # "wrong prediction"
 
-            uboost_multipliers, global_cut = self.get_uboost_weights(
+            uboost_multipliers, global_cut = uboost_function(
                 sample_weight, cumulative_score, y)
             sample_weight *= uboost_multipliers
             self.bdt_cuts_.append(global_cut)
@@ -359,7 +375,7 @@ class uBoostBDT:
         if not self.keep_debug_info:
             self.knn_indices = None
 
-    def _boost_real(self, X, y, sample_weight):
+    def _boost_real(self, X, y, sample_weight, uboost_function):
         """A single boost using the SAMME.R algorithm"""
         # We have only two classes and know that beforehand
         self.classes_ = np.array((0, 1))
@@ -392,7 +408,7 @@ class uBoostBDT:
             score += 0.5 * samme_proba[:, 1]
 
             uboost_multipliers, global_cut = \
-                self.get_uboost_weights(sample_weight, score, y)
+                uboost_function(sample_weight, score, y)
             sample_weight *= uboost_multipliers
             self.bdt_cuts_.append(global_cut)
             sample_weight /= np.sum(sample_weight)
@@ -420,7 +436,7 @@ class uBoostBDT:
             for classifier, weight in zip(
                     self.estimators_, self.estimator_weights_):
                 score += (2 * classifier.predict(X) - 1) * weight
-        else:  # SAMME.R
+        else:  # SAMME.R/YAUB
             score = 0.5 * np.sum(self._samme_r_proba(
                 estimator.predict_proba(X), self.n_classes_)[:, 1]
                 for estimator in self.estimators_)
