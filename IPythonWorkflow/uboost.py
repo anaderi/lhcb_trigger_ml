@@ -788,7 +788,8 @@ def generate_mask(n_samples, bagging=True, random_generator=np.random):
         mask = np.bincount(indices, minlength=n_samples)
     elif isinstance(bagging, float):
         mask = random_generator.rand(n_samples) > 1 - bagging
+    elif bagging is False:
+        mask = np.ones(n_samples)
     else:
-        assert isinstance(bagging, bool) and not bagging, \
-            "something wrong was passed as bagging"
+        assert False, "something wrong was passed as bagging"
     return mask
