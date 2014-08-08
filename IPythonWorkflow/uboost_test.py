@@ -114,17 +114,18 @@ def test_classifiers(trainX, trainY, testX, testY, output_name_patern=None):
         n_estimators=50,
         algorithm="SAMME.R")
     #TODO(kazeevn) skip the effort duplication
-    clf_uBoost_YAUB = uBoostClassifier(
+    clf_mBoost = uBoostClassifier(
         uniform_variables=uniform_variables,
         n_neighbors=50,
         efficiency_steps=5,
         n_estimators=50,
-        algorithm="YAUB")
+        algorithm="SAMME.R",
+        uniforming_algorithm="mBoost")
     clf_dict = ClassifiersDict({
         "Ada": clf_Ada,
-#        "uSAMME": clf_uBoost_SAMME,
-#        "uSAMME.R": clf_uBoost_SAMME_R,
-        "YAUB": clf_uBoost_YAUB
+#       "uSAMME": clf_uBoost_SAMME,
+        "uSAMME.R": clf_uBoost_SAMME_R,
+        "mBoost": clf_mBoost
         })
     clf_dict.fit(trainX, trainY)
 
@@ -161,8 +162,8 @@ def main():
         np.random.seed(42)
     testX, testY = generate_sample(10000, 10, 0.6)
     trainX, trainY = generate_sample(10000, 10, 0.6)
-    test_uboost_classifier_real(trainX, trainY, testX, testY)
-    test_uboost_classifier_discrete(trainX, trainY, testX, testY)
+#    test_uboost_classifier_real(trainX, trainY, testX, testY)
+#    test_uboost_classifier_discrete(trainX, trainY, testX, testY)
     test_classifiers(trainX, trainY, testX, testY, args.output_file)
     if args.output_file is None:
         pl.show()

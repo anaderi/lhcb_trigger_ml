@@ -49,7 +49,8 @@ class uBoostBDT:
                  smoothing=0.0,
                  keep_debug_info=False,
                  random_state=None,
-                 algorithm="SAMME"):
+                 algorithm="SAMME",
+                 uniforming_algorithm="uBoost"):
         """
         uBoostBDT is AdaBoostClassifier, which is modified to have flat
         efficiency of signal (class=1) along some variables.
@@ -63,8 +64,9 @@ class uBoostBDT:
         uniform_variables: list of strings, names of variables, along which
          flatness is desired
 
-        target_efficiency: float, the flatness is obtained at global BDT cut,
-            corresponding to global efficiency
+        target_efficiency: float/list of floats, the flatness is obtained at global BDT cut,
+            corresponding to global efficiency. WARNING: list of floats makes sense only for
+            uniforming_algorithm == 'mBoost'
 
         n_neighbours: int, (default=50) the number of neighbours,
             which are used to compute local efficiency
@@ -117,6 +119,15 @@ class uBoostBDT:
             If None, the random number generator is the RandomState
             instance used by `np.random`.
 
+        algorithm: 'SAMME'/'SAMME.R' boosting algorithm to use
+
+        uniforming_algorithm: 'uBoost'/'mBoost'. The algorithm to achieve
+            efficency uniformity. uBoost is implemented as described in [1].
+            mBoost is a modification, that substitutes target efficiency
+            with median probability for signal, aiming to achive uniformity
+            for all efficiencies with a single boosted classifier.
+
+
         Attributes
         ----------
         `estimators_` : list of classifiers
@@ -150,6 +161,7 @@ class uBoostBDT:
         self.keep_debug_info = keep_debug_info
         self.random_state = random_state
         self.algorithm = algorithm
+        self.uniforming_algorithm = uniforming_algorithm
 
     def fit(self, X, y, sample_weight=None, neighbours_matrix=None):
         """Build a boosted classifier from the training set (X, y).
@@ -185,11 +197,15 @@ class uBoostBDT:
             raise ValueError("learning_rate must be greater than zero")
 
         # Check that algorithm is supported
-        if self.algorithm not in ('SAMME', 'SAMME.R', 'YAUB'):
+        if self.algorithm not in ('SAMME', 'SAMME.R'):
             raise ValueError("algorithm %s is not supported"
                              % self.algorithm)
 
-        if self.algorithm == 'SAMME.R' or self.algorithm == 'YAUB':
+        if self.uniforming_algorithm not in ('uBoost', 'mBoost'):
+            raise ValueError("Unforming algorithm %s is not supported"
+                             % self.uniforming_algorithm)
+
+        if self.algorithm == 'SAMME.R':
             if not hasattr(self.base_estimator, 'predict_proba'):
                 raise TypeError(
                     "uBoostBDT with algorithm='SAMME.R' requires "
@@ -240,16 +256,18 @@ class uBoostBDT:
         self.random_generator = check_random_state(self.random_state)
 
         if self.algorithm == "SAMME":
-            self._boost_discrete(X_train_variables, y, sample_weight, self.get_uboost_weights)
+            self._boost_discrete(X_train_variables, y, sample_weight)
         elif self.algorithm == "SAMME.R":
-            self._boost_real(X_train_variables, y, sample_weight, self.get_uboost_weights)
-        else:  # "YAUB"
-            self._boost_real(X_train_variables, y, sample_weight, self.get_yaub_weights)
+            self._boost_real(X_train_variables, y, sample_weight)
 
         self.bdt_cut = compute_bdt_cut(
             self.target_efficiency, y, self.predict_proba(X)[:, 1])
-        assert self.bdt_cut == self.bdt_cuts_[-1],\
-            "BDT cut doesn't appear to coincide with the staged one"
+        if self.uniforming_algorithm == 'uBoost':
+            assert self.bdt_cut == self.bdt_cuts_[-1],\
+                "BDT cut doesn't appear to coincide with the staged one"
+        else:
+            assert np.array_equal(self.bdt_cut, self.bdt_cuts_[-1]),\
+                "BDT cut doesn't appear to coincide with the staged one"
         return self
 
     def _make_estimator(self, append=True):
@@ -261,21 +279,7 @@ class uBoostBDT:
             pass
         return estimator
 
-    def get_yaub_weights(self, sample_weight, score, y):
-        real_proba = \
-          self.score_to_proba(score, n_estimators=len(self.estimators_))[:, 1]
-        median_proba = np.median(real_proba)
-        magic_k = 10
-        if self.boost_only_signal:
-            boost_weights = np.exp(magic_k * (median_proba - real_proba) * y)
-        else:
-            boost_weights = np.exp(magic_k * (median_proba - real_proba))
-        global_cut = compute_bdt_cut(
-            self.target_efficiency, y, real_proba)
-
-        return boost_weights, global_cut
-
-    def get_uboost_weights(self, sample_weight, score, y):
+    def get_uboost_weights(self, sample_weight, cumulative_score, y):
         """Returns uBoost multipliers to sample_weight"""
         # TODO(alex) think of weights,
         #   we should take weights into account when computing efficiencies
@@ -292,17 +296,22 @@ class uBoostBDT:
         #    smoothing_width=self.smoothing)
         # assert np.all(local_efficiencies == local_efficiencies2),\
         #    'The computed efficiencies are different'
-
         real_proba = self.score_to_proba(
-            score, n_estimators=len(self.estimators_))
+                cumulative_score, n_estimators=len(self.estimators_))
+
+        if self.uniforming_algorithm == 'uBoost':
+            target_efficiency = self.target_efficiency
+        else:  # mBoost
+            target_efficiency = np.median(real_proba[:, 1][y == 1])
+
         global_cut = compute_bdt_cut(
-            self.target_efficiency, y, real_proba[:, 1])
+            target_efficiency, y, real_proba[:, 1])
         local_efficiencies = compute_groups_efficiencies(
             global_cut, self.knn_indices, y, real_proba,
             smoothing_width=self.smoothing)
 
         e_prime = np.sum(sample_weight * np.abs(
-            local_efficiencies - self.target_efficiency))
+            local_efficiencies - target_efficiency))
         # beta = np.log((1.0 - e_prime) / e_prime)
         # log(1. / e_prime), otherwise this can lead to the situation
         # where beta is negative (which is a disaster).
@@ -310,16 +319,18 @@ class uBoostBDT:
         beta = np.log(1. / e_prime)
         if self.boost_only_signal:
             boost_weights = np.exp((
-                self.target_efficiency - local_efficiencies) * y * (
+                target_efficiency - local_efficiencies) * y * (
                 beta * self.uniforming_rate))
         else:
             boost_weights = np.exp((
-                self.target_efficiency - local_efficiencies) * (
+                target_efficiency - local_efficiencies) * (
                 beta * self.uniforming_rate))
 
-        return boost_weights, global_cut
+        real_cut = compute_bdt_cut(
+            self.target_efficiency, y, real_proba[:, 1])
+        return boost_weights, real_cut
 
-    def _boost_discrete(self, X, y, sample_weight, uboost_function):
+    def _boost_discrete(self, X, y, sample_weight):
         """Implement a single boost using the SAMME discrete algorithm,
         which is modified in uBoost way"""
         cumulative_score = np.zeros(len(X))
@@ -360,9 +371,9 @@ class uBoostBDT:
             cumulative_score += (2 * y_predict - 1) * estimator_weight
             # assert np.all(cumulative_score == self.predict_score(X)), \
             # "wrong prediction"
+            uboost_multipliers, global_cut = self.get_uboost_weights(
+                    sample_weight, cumulative_score, y)
 
-            uboost_multipliers, global_cut = uboost_function(
-                sample_weight, cumulative_score, y)
             sample_weight *= uboost_multipliers
             self.bdt_cuts_.append(global_cut)
             sample_weight /= np.sum(sample_weight)
@@ -375,7 +386,7 @@ class uBoostBDT:
         if not self.keep_debug_info:
             self.knn_indices = None
 
-    def _boost_real(self, X, y, sample_weight, uboost_function):
+    def _boost_real(self, X, y, sample_weight):
         """A single boost using the SAMME.R algorithm"""
         # We have only two classes and know that beforehand
         self.classes_ = np.array((0, 1))
@@ -408,7 +419,7 @@ class uBoostBDT:
             score += 0.5 * samme_proba[:, 1]
 
             uboost_multipliers, global_cut = \
-                uboost_function(sample_weight, score, y)
+                self.get_uboost_weights(sample_weight, score, y)
             sample_weight *= uboost_multipliers
             self.bdt_cuts_.append(global_cut)
             sample_weight /= np.sum(sample_weight)
@@ -436,7 +447,7 @@ class uBoostBDT:
             for classifier, weight in zip(
                     self.estimators_, self.estimator_weights_):
                 score += (2 * classifier.predict(X) - 1) * weight
-        else:  # SAMME.R/YAUB
+        else:  # SAMME.R
             score = 0.5 * np.sum(self._samme_r_proba(
                 estimator.predict_proba(X), self.n_classes_)[:, 1]
                 for estimator in self.estimators_)
@@ -494,7 +505,7 @@ class uBoostBDT:
         # Displace zero probabilities so the log is defined.
         # Also fix negative elements which may occur with
         # negative sample weights.
-        proba[proba <= 0] = 1e-5
+        proba[proba <= 1e-5] = 1e-5
         log_proba = np.log(proba)
 
         return (n_classes - 1) * (log_proba - (1. / n_classes)
@@ -547,7 +558,8 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
                  smoothing=None,
                  random_state=None,
                  ipc_profile=None,
-                 algorithm="SAMME"):
+                 algorithm="SAMME",
+                 uniforming_algorithm="uBoost"):
         """uBoost classifier, am algorithm of boosting targeted to obtain
         flat efficiency in signal along some variables. See [1] for details.
 
@@ -605,6 +617,12 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         parallel_profile: profile (name of cluster) in IPython
             to parallelize computations
 
+        algorithm: 'SAMME'/'SAMME.R' - see uBoostBDT
+
+        uniforming_algorithm: 'uBoost'/'mBoost' - see uBoostBDT. If
+            mBoost is used, only one classifer is trained and its dbt_cuts_ contain
+            lists of cuts for given target efficiencies.
+
         Reference
         ----------
         .. [1] Justin Stevens, Mike Williams 'uBoost: A boosting method
@@ -623,6 +641,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         self.smoothing = smoothing
         self.ipc_profile = ipc_profile
         self.algorithm = algorithm
+        self.uniforming_algorithm=uniforming_algorithm
 
     def get_train_variables(self, X):
         if self.train_variables is not None:
@@ -648,53 +667,78 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
         # TODO(Alex) select some other targets ?
         self.target_efficiencies = [(i + 1.0) / (self.efficiency_steps + 1.0)
                                     for i in range(self.efficiency_steps)]
-        self.classifiers = []
 
-        for efficiency in self.target_efficiencies:
+        if self.uniforming_algorithm == 'uBoost':
+            self.classifiers = []
+
+            for efficiency in self.target_efficiencies:
+                classifier = uBoostBDT(
+                    uniform_variables=self.uniform_variables, train_variables=None,
+                    target_efficiency=efficiency, n_neighbors=self.knn,
+                    n_estimators=self.n_estimators,
+                    base_estimator=self.base_estimator,
+                    random_state=self.random_state, bagging=self.bagging,
+                    boost_only_signal=self.boost_only_signal,
+                    smoothing=self.smoothing,
+                    algorithm=self.algorithm,
+                    uniforming_algorithm=self.uniforming_algorithm)
+                self.classifiers.append(classifier)
+
+            if self.ipc_profile is not None:
+                from IPython.parallel import Client
+                lb_view = Client(profile=self.ipc_profile).load_balanced_view()
+                self.classifiers = lb_view.map_sync(
+                    _train_classifier,
+                    self.classifiers,
+                    [X_train_vars] * self.efficiency_steps,
+                    [y] * self.efficiency_steps,
+                    [sample_weight] * self.efficiency_steps,
+                    [neighbours_matrix] * self.efficiency_steps)
+            else:
+                self.classifiers = map(
+                    _train_classifier,
+                    self.classifiers,
+                    [X_train_vars] * self.efficiency_steps,
+                    [y] * self.efficiency_steps,
+                    [sample_weight] * self.efficiency_steps,
+                    [neighbours_matrix] * self.efficiency_steps)
+        else:  # mBoost
             classifier = uBoostBDT(
-                uniform_variables=self.uniform_variables, train_variables=None,
-                target_efficiency=efficiency, n_neighbors=self.knn,
-                n_estimators=self.n_estimators,
-                base_estimator=self.base_estimator,
-                random_state=self.random_state, bagging=self.bagging,
-                boost_only_signal=self.boost_only_signal,
-                smoothing=self.smoothing,
-                algorithm=self.algorithm)
-            self.classifiers.append(classifier)
-
-        if self.ipc_profile is not None:
-            from IPython.parallel import Client
-            lb_view = Client(profile=self.ipc_profile).load_balanced_view()
-            self.classifiers = lb_view.map_sync(
-                _train_classifier,
-                self.classifiers,
-                [X_train_vars] * self.efficiency_steps,
-                [y] * self.efficiency_steps,
-                [sample_weight] * self.efficiency_steps,
-                [neighbours_matrix] * self.efficiency_steps)
-        else:
-            self.classifiers = map(
-                _train_classifier,
-                self.classifiers,
-                [X_train_vars] * self.efficiency_steps,
-                [y] * self.efficiency_steps,
-                [sample_weight] * self.efficiency_steps,
-                [neighbours_matrix] * self.efficiency_steps)
+                    uniform_variables=self.uniform_variables, train_variables=None,
+                    target_efficiency=self.target_efficiencies,
+                    n_neighbors=self.knn,
+                    n_estimators=self.n_estimators,
+                    base_estimator=self.base_estimator,
+                    random_state=self.random_state, bagging=self.bagging,
+                    boost_only_signal=self.boost_only_signal,
+                    smoothing=self.smoothing,
+                    algorithm=self.algorithm,
+                    uniforming_algorithm=self.uniforming_algorithm)
+            self.classifier = _train_classifier(
+                classifier, X_train_vars, y, sample_weight, neighbours_matrix)
         return self
 
     def predict(self, X):
         # TODO(kazeevn) Shall we sync behaviour with predict_proba and
-        # return a list of predictions for all target_efficiencies
+        # return a list of predictions for all target_efficiencies?
         return self.predict_proba(X).argmax(axis=1)
 
     def predict_proba(self, X):
         X_train_vars = self.get_train_variables(X)
         result = np.zeros([len(X), 2])
-        for efficiency, classifier in zip(
-                self.target_efficiencies, self.classifiers):
-            result[:, 1] += sigmoid_function(
-                classifier.predict_proba(
-                    X_train_vars)[:, 1] - classifier.bdt_cut,
+        if self.uniforming_algorithm == 'uBoost':
+            for efficiency, classifier in izip(
+                    self.target_efficiencies, self.classifiers):
+                result[:, 1] += sigmoid_function(
+                    classifier.predict_proba(
+                        X_train_vars)[:, 1] - classifier.bdt_cut,
+                    self.smoothing)
+        else:  # mBoost
+            for efficiency, bdt_cut in izip(
+                    self.target_efficiencies, self.classifier.bdt_cut):
+                result[:, 1] += sigmoid_function(
+                self.classifier.predict_proba(
+                    X_train_vars)[:, 1] - bdt_cut,
                 self.smoothing)
 
         result[:, 1] /= self.efficiency_steps
@@ -703,16 +747,27 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
 
     def staged_predict_proba(self, X):
         X = self.get_train_variables(X)
-        staged_probas = izip(* [
-            bdt.staged_predict_proba(X) for bdt in self.classifiers])
-        staged_cuts = izip(* [
-            bdt.bdt_cuts_ for bdt in self.classifiers])
+        if self.uniforming_algorithm == 'uBoost':
+            staged_probas = izip(* [
+                bdt.staged_predict_proba(X) for bdt in self.classifiers])
+            staged_cuts = izip(* [
+                bdt.bdt_cuts_ for bdt in self.classifiers])
+        else: #mBoost
+            staged_probas = self.classifier.staged_predict_proba(X)
+            staged_cuts = self.classifier.bdt_cuts_
+
         result = np.zeros([len(X), 2])
+
         for predictions, cuts in izip(staged_probas, staged_cuts):
             result[:, :] = 0.
-            for proba, cut in izip(predictions, cuts):
-                result[:, 1] += sigmoid_function(proba[:, 1] - cut,
-                                                 self.smoothing)
+            if self.uniforming_algorithm == 'uBoost':
+                for proba, cut in izip(predictions, cuts):
+                    result[:, 1] += sigmoid_function(proba[:, 1] - cut,
+                                                    self.smoothing)
+            else:  # mBoost
+                for cut in cuts:
+                    result[:, 1] += sigmoid_function(predictions[:, 1] - cut,
+                                                    self.smoothing)
             result[:, 1] /= self.efficiency_steps
             result[:, 0] = 1.0 - result[:, 1]
             yield result

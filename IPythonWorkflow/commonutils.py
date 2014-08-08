@@ -11,6 +11,7 @@ import math
 import io
 import numpy
 import pandas
+import collections
 from numpy.random.mtrand import RandomState
 from scipy.special import expit
 import sklearn.cross_validation
@@ -321,8 +322,13 @@ def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
         raise ValueError("sample weight is not supported")
     assert len(y_true) == len(y_pred), "different size"
     signal_proba = y_pred[y_true > 0.5]
-    percentiles = 1. - target_efficiency
-    return weighted_percentile(signal_proba, percentiles)
+    if isinstance(target_efficiency, collections.Iterable):
+        cuts = [weighted_percentile(signal_proba, 1 - single_efficiency) for
+                single_efficiency in target_efficiency]
+        return cuts
+    else:
+        percentiles = 1. - target_efficiency
+        return weighted_percentile(signal_proba, percentiles)
 
 def compute_groups_efficiencies(global_cut, knn_indices, answers, prediction_proba,
                                 sample_weight=None, smoothing_width=0.0):
