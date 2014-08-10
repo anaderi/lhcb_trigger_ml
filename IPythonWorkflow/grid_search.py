@@ -18,6 +18,8 @@ from sklearn.grid_search import _check_param_grid
 from sklearn.metrics.metrics import roc_auc_score
 from sklearn.utils.random import check_random_state
 import commonutils
+from collections import defaultdict
+
 try:
     from collections import OrderedDict
 except ImportError:
@@ -106,26 +108,34 @@ class AbstractParameterGenerator(object):
             data.append(self.indices_to_parameters(state_indices))
         return pandas.DataFrame(data).transpose()
 
-    def print_param_stats(self, best=0.3):
+    def print_param_stats(self, best=None):
+        if best is None:
+            best = [0.3]
+
         all_stats = []
-        best_stats = []
+        best_stats = defaultdict(list)
+
         for n_values in self.dimensions:
             all_stats.append(numpy.zeros(n_values))
-            best_stats.append(numpy.zeros(n_values))
+            for b in best:
+                best_stats[b].append(numpy.zeros(n_values))
 
-        threshold = commonutils.weighted_percentile(self.grid_scores_.values(), [1. -  best])[0]
+        thresholds = [commonutils.weighted_percentile(self.grid_scores_.values(), [1. - b])[0] for b in best]
         for index, score in self.grid_scores_.iteritems():
             for feat_i, feat_val in enumerate(index):
                 all_stats[feat_i][feat_val] += 1
-                if score > threshold:
-                    best_stats[feat_i][feat_val] += 1
+                for t, b in zip(thresholds, best):
+                    if score > t:
+                        best_stats[b][feat_i][feat_val] += 1
 
-        for all_feat_stat, best_feat_stat, feat_name in zip(all_stats, best_stats, self.param_grid):
+        for i, (all_feat_stat, feat_name) in enumerate(zip(all_stats, self.param_grid)):
             feat_values = self.param_grid[feat_name]
             print(feat_name)
             data = OrderedDict()
             data['total'] = all_feat_stat
-            data['in top, %'] = numpy.array(best_feat_stat) / all_feat_stat * 100
+            for b in best:
+                best_feat_stat = best_stats[b][i]
+                data['in top, %.2f %%' % b] = numpy.array(best_feat_stat) / all_feat_stat * 100
             df = pandas.DataFrame(data, index=feat_values)
             print(df)
 
@@ -170,7 +180,8 @@ class SimpleParameterOptimizer(AbstractParameterGenerator):
         self.dimensions_sum = sum(self.dimensions)
         self.subgrid_parameter_generator = None
         if not numpy.all(numpy.array(self.dimensions) <= 2 * self.subgrid_size):
-            print("Optimizing on subgrid")
+            logger = logging.getLogger(__name__)
+            logger.info("Optimizing on subgrid")
             param_subgrid, self.subgrid_indices = create_subgrid(self.param_grid, self.subgrid_size)
             self.subgrid_parameter_generator = \
                 SimpleParameterOptimizer(param_subgrid, n_evaluations=self.n_evaluations//2,
@@ -367,7 +378,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
 
     def _log(self, *objects):
         logger = logging.getLogger(__name__)
-        logger.debug(self.log_name + " " + " ".join([str(x) for x in objects]))
+        logger.info(self.log_name + " " + " ".join([str(x) for x in objects]))
 
     def _check_params(self):
         if self.param_generator_type is None:
@@ -460,11 +471,15 @@ def test_grid_search():
     grid = OrderedDict(grid)
 
     trainX, trainY = commonutils.generate_sample(2000, 10, distance=0.5)
-    grid_cv = GridOptimalSearchCV(AdaBoostClassifier(), grid, n_evaluations=10, refit=True)
+    grid_cv = GridOptimalSearchCV(AdaBoostClassifier(), grid, n_evaluations=10, refit=True, log_name='test')
     grid_cv.fit(trainX, trainY)
     grid_cv.predict_proba(trainX)
     grid_cv.predict(trainX)
-    # grid_cv.print_param_stats()
+    # grid_cv.print_param_stats([0.1, 0.3, 0.5, 0.7])
+
+if __name__ != "__main__":
+    from matplotlib.cbook import Null
+    print = Null
 
 test_grid_search()
 
