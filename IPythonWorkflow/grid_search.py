@@ -477,9 +477,5 @@ def test_grid_search():
     grid_cv.predict(trainX)
     # grid_cv.print_param_stats([0.1, 0.3, 0.5, 0.7])
 
-if __name__ != "__main__":
-    from matplotlib.cbook import Null
-    print = Null
-
 test_grid_search()
 
