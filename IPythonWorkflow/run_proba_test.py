@@ -2,21 +2,35 @@
 """
 Run proba_test on a selection of classifiers
 """
+import argparse
+import numpy as np
+import pylab as pl
 from sklearn.ensemble.weight_boosting import AdaBoostClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.dummy import DummyClassifier
 from sklearn.naive_bayes import GaussianNB
+
 from uboost import uBoostClassifier
 from reports import ClassifiersDict
-import numpy as np
-import pylab as pl
-
 from commonutils import generate_sample
 from proba_test import proba_test
 
 
 def main():
-    np.random.seed(42)
+    parser = argparse.ArgumentParser(
+        description="Plot probability vs. real frequency graphs for a "
+        "selection of classifiers.")
+    parser.add_argument('-o', '--output-file', type=str,
+                        help=r"Filename pattern with one %%s to save "
+                        "the plots to. Example: classifiers_%%s.pdf")
+    parser.add_argument('-s', '--random-seed', type=int,
+                        help="Random generator seed to use.")
+    args = parser.parse_args()
+    if args.random_seed:
+        np.random.seed(args.random_seed)
+    else:
+        np.random.seed(42)
+
     clf_dict = ClassifiersDict({
         'Ada_SAMME': AdaBoostClassifier(algorithm="SAMME"),
         'Ada_SAMME_R': AdaBoostClassifier(algorithm="SAMME.R"),
@@ -40,10 +54,13 @@ def main():
     x_test, y_test = generate_sample(3000, 10, 0.42)
     clf_dict.fit(x_train, y_train)
     for name, classifier in clf_dict.iteritems():
-        print("%s: %f" % (
-            name, proba_test(classifier, x_test, y_test, name=name)[0]))
+        error, ax, fig = proba_test(classifier, x_test, y_test, name=name)
+        print("%s: %f" % (name, error))
+        if args.output_file:
+            fig.savefig(args.output_file % name, bbox="tight")
 
-    pl.show()
+    if not args.output_file:
+        pl.show()
 
 if __name__ == '__main__':
     main()
