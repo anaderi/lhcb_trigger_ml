@@ -1,10 +1,10 @@
 #!/usr/bin/env python2
-"""Tests whether the given classifer lives up to its probability estimates.
-Counts the real estimation correctness and compares with the predictied
+"""Tests whether the given classifier lives up to its probability estimates.
+Counts the real estimation correctness and compares with the predicted
 probability. For example, we expect that among entries with
 probability=0.6 around 6/10 should be class 1 and 4/10 class 0. Of
 course, this is not a sufficient condition for correctness of the
-probability assesment, but a necessary one.
+probability assessment, but a necessary one.
 """
 
 import pylab as pl
@@ -20,7 +20,7 @@ def proba_test(classifier, x_test, y_test, n_bins=10,
                axis=None, figure=None, name=None):
     """Plots histogram for the number of records correctly classified for
     different classifier predicted probabilities. Returns:
-    error - averaged weighted deviation of the true class correctenss from the
+    error - averaged weighted deviation of the true class correctness from the
       estimated proba; axis - matplotplib Axes with a histogram plot;
       figure - matplotlib Figure
     :param BaseClassifier:classifier classifier to test.
