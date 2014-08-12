@@ -278,28 +278,31 @@ test_simple_optimizer()
 def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
                         score_function, sample_weight=None, label=1, scorer_needs_x=False):
     """This function is needed """
-    k_folder = StratifiedKFold(y=y, n_folds=folds)
-    score = 0.
-    for train_indices, test_indices in islice(k_folder, fold_checks):
-        trainX, trainY = X.irow(train_indices), y[train_indices]
-        testX, testY = X.irow(test_indices), y[test_indices]
-        estimator = sklearn.clone(base_estimator).set_params(**params_dict)
+    try:
+        k_folder = StratifiedKFold(y=y, n_folds=folds)
+        score = 0.
+        for train_indices, test_indices in islice(k_folder, fold_checks):
+            trainX, trainY = X.irow(train_indices), y[train_indices]
+            testX, testY = X.irow(test_indices), y[test_indices]
+            estimator = sklearn.clone(base_estimator).set_params(**params_dict)
 
-        train_options = {}
-        test_options = {}
-        if sample_weight is not None:
-            train_weights, test_weights = \
-                sample_weight[train_indices], sample_weight[test_indices]
-            train_options['sample_weight'] = train_weights
-            test_options['sample_weight'] = test_weights
-        if scorer_needs_x:
-            test_options['X'] = testX
+            train_options = {}
+            test_options = {}
+            if sample_weight is not None:
+                train_weights, test_weights = \
+                    sample_weight[train_indices], sample_weight[test_indices]
+                train_options['sample_weight'] = train_weights
+                test_options['sample_weight'] = test_weights
+            if scorer_needs_x:
+                test_options['X'] = testX
 
-        estimator.fit(trainX, trainY, **train_options)
-        proba = estimator.predict_proba(testX)
-        score += score_function(testY, proba[:, label], **test_options)
+            estimator.fit(trainX, trainY, **train_options)
+            proba = estimator.predict_proba(testX)
+            score += score_function(testY, proba[:, label], **test_options)
 
-    return score / fold_checks
+        return score / fold_checks
+    except:
+        return -0.999
 
 
 class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
