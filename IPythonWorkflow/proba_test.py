@@ -11,6 +11,11 @@ import pylab as pl
 import numpy as np
 
 
+__author__ = "Nikita Kazeev"
+__copyright__ = "Copyright 2014, Yandex"
+__all__ = ['proba_test']
+
+
 def proba_test(classifier, x_test, y_test, n_bins=10,
                axis=None, figure=None, name=None):
     """Plots histogram for the number of records correctly classified for

@@ -15,6 +15,9 @@ from reports import ClassifiersDict
 from commonutils import generate_sample
 from proba_test import proba_test
 
+__author__ = "Nikita Kazeev"
+__copyright__ = "Copyright 2014, Yandex"
+
 
 def main():
     parser = argparse.ArgumentParser(
