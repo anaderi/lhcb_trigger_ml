@@ -58,6 +58,8 @@ def proba_test(classifier, x_test, y_test, n_bins=10,
         axis.set_xlabel("Predicted proba")
         axis.set_ylabel("Real share")
         ax_is_ours = True
+    else:
+        ax_is_ours = False
 
     if name is None:
         name = ''
