@@ -27,7 +27,7 @@ the analysis is performed in __IPython__ notebooks - commonly used in machine le
   ClassifiersDict from `reports` can train classifiers on IPython cluster, <br />
   __uBoost__ is quite slow, and it has built-in parallelism option: different BDTs inside uBoost can be trained parallelly in cluster.
 
-###Getting this to work
+###Getting started
 To run most the notebooks, only IPython and some python libraries are needed.
 
 To run example notebooks on some machine, one should have
@@ -44,10 +44,4 @@ IPython can be installed via pip as well
 <pre>sudo pip install ipython</pre>
 To run IPython, there is shell script in IpythonWorkflow/ subfolder
 
-In order to work with ROOT files, you need CERN ROOT, make sure you have it by typing 'root' in the console
-
-
-###Roadway:
-We are going to publish notebook on some server to provide easy access from any machine.
-
-Some tests with different decays will be published soon.
+In order to work with .root files, you need CERN ROOT, make sure you have it by typing 'root' in the console
