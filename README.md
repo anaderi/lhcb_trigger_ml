@@ -43,7 +43,7 @@ and maybe something else, basically the packages are installed via command-line:
 IPython can be installed via pip as well
 <pre>sudo pip install ipython</pre>
 
-To download te repository, clone it
+To download the repository, clone it with git
 <pre>git clone https://github.com/anaderi/lhcb_trigger_ml.git</pre>
 
 To run IPython, there is shell script: IpythonWorkflow/runIpython.sh
