@@ -42,6 +42,10 @@ and maybe something else, basically the packages are installed via command-line:
 <pre>sudo pip install numpy scipy pandas scikit-learn rootpy root-numpy</pre>
 IPython can be installed via pip as well
 <pre>sudo pip install ipython</pre>
-To run IPython, there is shell script in IpythonWorkflow/ subfolder
+
+To download te repository, clone it
+<pre>git clone https://github.com/anaderi/lhcb_trigger_ml.git</pre>
+
+To run IPython, there is shell script: IpythonWorkflow/runIpython.sh
 
 In order to work with .root files, you need CERN ROOT, make sure you have it by typing 'root' in the console
