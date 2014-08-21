@@ -1,8 +1,41 @@
-\documentclass[12pt]{article}
+\pdfoutput=1 % only if pdf/png/jpg images are used
+\documentclass{JINST}
+
+
+\title{New Approaches to Uniform Boosting}
+
+\author{
+Aleksandar Bukva, 
+Vladimir Gligorov$^d$,
+Alex Rogozhnikov$^{a,b}$\thanks{Corresponding author.}~ ,
+Andrey Ustuzhanin$^b$ and
+Mike Williams$^c$\\
+\llap{$^a$}Lomonosov Moscow State University, Moscow, Russia\\
+\llap{$^b$}Yandex LLC, Moscow, Russia\\
+\llap{$^c$}Massachusetts Institute of Technology, Cambridge, MA, United States \\
+\llap{$^d$}Organisation Européenne pour la Recherche Nucléaire (CERN), Geneva \\Switzerland 
+E-mail: \email{alex.rogozhnikov@yandex.ru}}
+
+
+\abstract{
+% Abstract must be short enough to appear in this page together with title, authors, their addresses and keywords.
+The use of multivariate classifiers has become commonplace in particle physics. 
+Typically, a series of classifiers is trained rather than just one to enhance the performance; this is known as boosting. 
+
+In some applications of high energy physics (i.e., amplitude analyses) 
+classifiers should not only optimize some integrated figure of merit, but produce a uniform selection efficiency in a space of selected physical variables.
+Recently uBoost technique of boosting was proposed which addresses this issue.
+
+In this paper we introduce several approaches to measure the uniformity of efficiency and propose new boosting techniques.
+}
+
+
+
+
 
 % AMS packages:
 \usepackage{amsmath, amsthm, amsfonts}
-\usepackage[margin=0.5in]{geometry}
+
 
 % Theorems
 %-----------------------------------------------------------------
@@ -23,15 +56,11 @@
 
 
 %-----------------------------------------------------------------
-\title{New Approaches to Uniform Boosting }
-\author{
-}
+
 
 \begin{document}
 \maketitle
 
-
-% \abstract{Abstract goes here}
 
 \section{Introduction}
 
@@ -192,7 +221,7 @@ TODO how to combine Theil for different global efficiencies?
 \]
 
 \subsection{Distribution Similarity Approach}
-\label{subsection:similarity}
+\label{sec:similarity}
 
 Let's start from reformulation of what is uniform predictions in signal. First we split all signal events into some bins in uniform variables. There is some empirical distribution $F_\bin$ of predictions in each bin. Ideal uniformity means that all the distributions $F_\bin$ are equal and hence equal to the global distribution $F(x)$. 
 
@@ -369,7 +398,7 @@ In particular, if we take $A$ to be identity matrix: $A = I$ (each event to be i
 
 \subsection{Gradient Boosting with Flatness Loss (FL)}
 
-Let's use the metrics introduces in the section \ref{subsection:similarity}:
+Let's use the metrics introduces in the section \ref{sec:similarity}:
 \[
 	\sum_{\bin} \binweight \int \abs{F_{\bin}(x) - F(x)}^p dF(x),
 \]
@@ -437,17 +466,43 @@ Presented in this paper classifiers are building $M$ trees, though there is more
 
 \section{Summary}
 
-\section{Acknowledgments}
-
 \section{Source code}
 
-The code for classifiers ans links to final notebooks with results in the article.
+The link on the repository ans links to final notebooks with results in the article.
+
+\acknowledgments
 
 
 
-\begin{thebibliography}{99}
+\begin{thebibliography}{9}
 
-\bibitem{Cd94} Author, \emph{Title}, Journal/Editor, (year)
+\bibitem{bib1}
+Authors,
+\emph{Title},
+\emph{J. Ref.} \textbf{vol} (year) page.
+
+\bibitem{bib2}
+A. Pietropaolo et al., \emph{DINS measurements on VESUVIO in the
+    resonance detector configuration: proton mean kinetic energy in
+    water}, \jinst{1}{2006}{P04001}.
+
+\bibitem{bib3}
+A.I. Harris,
+\emph{Spectroscopy with multichannel correlation radiometers},
+\href{http://dx.doi.org/10.1063/1.1898643}
+{\emph{Rev.\ Sci.\ Instrum.} {\bf 76} (2005) 054503}
+[\astroph{0504449}].
+
+\bibitem{bib4}
+G.F. Knoll, \emph{Radiation detection and measurements}, John Wiley
+    and Sons, Inc., New York 2000.
+
+\bibitem{bib5}
+V. Dangendorf, \emph{Time-resolved fast-neutron imaging with a
+pulse-counting image intensifier}, in proceedings of
+\emph{International workshop on fast neutron detectors and
+applications}, April, 3--6, 2006 University of Cape Town, South Africa
+\pos{PoS(FNDA2006)008}.
 
 \end{thebibliography}
 
