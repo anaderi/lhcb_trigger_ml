@@ -279,7 +279,7 @@ def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
                         score_function, sample_weight=None, label=1, scorer_needs_x=False):
     """This function is needed """
     try:
-        k_folder = StratifiedKFold(y=y, n_folds=folds)
+        k_folder = StratifiedKFold(y=y, n_folds=folds, shuffle=True)
         score = 0.
         for train_indices, test_indices in islice(k_folder, fold_checks):
             trainX, trainY = X.irow(train_indices), y[train_indices]
@@ -301,8 +301,8 @@ def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
             score += score_function(testY, proba[:, label], **test_options)
 
         return score / fold_checks
-    except:
-        return -0.999
+    except Exception as e:
+        return e
 
 
 class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
@@ -430,8 +430,16 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                     [self.scorer_needs_x] * portion)
                 assert len(result) == portion, "The length of result is very strange"
                 for state_indices, state_dict, score in zip(state_indices_array, state_dict_array, result):
+                    params = ", ".join([k + '=' + str(v) for k, v in state_dict.iteritems()])
+                    if isinstance(Exception, score):
+                        # returned exception
+                        message = 'Fail during training on the node \nException ' + str(score) +\
+                                  '\nParameters:' + params
+                        print(message)
+                        self._log(message)
+                        continue
                     self.generator.add_result(state_indices, score)
-                    self._log(score, ": ", ", ".join([k + '=' + str(v) for k, v in state_dict.iteritems()]))
+                    self._log(score, ": ", params)
 
                 self.evaluations_done += portion
                 print("%i evaluations done" % self.evaluations_done)
