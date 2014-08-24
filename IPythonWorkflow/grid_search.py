@@ -276,7 +276,7 @@ test_simple_optimizer()
 
 
 def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
-                        score_function, sample_weight=None, label=1, scorer_needs_x=False):
+                        score_function, sample_weight=None, label=1, scorer_needs_x=False, catch_exceptions=True):
     """This function is needed """
     try:
         k_folder = StratifiedKFold(y=y, n_folds=folds, shuffle=True)
@@ -302,7 +302,10 @@ def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
 
         return score / fold_checks
     except Exception as e:
-        return e
+        if catch_exceptions:
+            return e
+        else:
+            raise
 
 
 class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
@@ -409,7 +412,9 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                                             X=X, y=y, folds=self.folds, fold_checks=self.fold_checks,
                                             score_function=self.score_function, sample_weight=sample_weight,
                                             label=self.label,
-                                            scorer_needs_x=self.scorer_needs_x)
+                                            scorer_needs_x=self.scorer_needs_x,
+                                            catch_exceptions=False)
+
                 self.generator.add_result(state_indices, value)
                 self.evaluations_done += 1
                 state_string = ", ".join([k + '=' + str(v) for k, v in state_dict.iteritems()])
