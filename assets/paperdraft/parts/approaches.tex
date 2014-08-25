@@ -1,0 +1,131 @@
+\subsection{Mean Ada Boost}
+
+This is a modification of AdaBoost algorithm. In AdaBoost one multiplies weights in such a way:
+\[
+	w_i = w_i \times \exp[-y_i \, \text{score}_i],
+\]
+to enlarge the weights of poorly classified events ($y_i$ is $+1$ for signal and $-1$ for background).
+
+But now we use the mean of prediction of $k$ nearest neighbors (of the same class)
+\[
+	w_i = w_i \times \exp[-y_i \, \dfrac{1}{k} \sum_{j \in \knni} \text{score}_j]
+\]
+Thus boosting focuses not on the events that were poorly classified, but on the regions with poor classification.
+
+
+\subsection{Gradient Boosting with AdaLoss Modification (knn-Ada)}
+
+\def\score{\text{score}}
+\def\knn{\text{knn}}
+\def\FL{\text{FL}}
+
+Gradient boosting on trees is widely used algorithm[link], it's built upon decision tree regressors with usage of some loss function. 
+
+Let's start with examples. One of the popular losses used is AdaLoss:
+\[
+	\sum_{i \in \text{events}} w_i \times \exp [- \score_i \, y_i] 
+\]
+where $y_i$ is either +1 (for signal events) or -1 (for background events). Good classification supposes that signal events should have large positive scores, while background ones should have large negative.
+
+The predictions of separate regressors are simply summed up to form a score:
+\[
+	\score_i = \sum_{r \in \text{regressors}} \text{pred}_r(i),
+\]
+which can be 'translated' into probabilities by logistic function.
+
+So the goal of algorithm is now to minimize the loss function. At each stage it trains one more regressor, which should decrease the value of loss, the most vivid way is to train it on negative gradient of loss. In the case of AdaLoss this can be done pretty easy:
+\[
+	-\dfrac{\partial \, \text{AdaLoss}}{\partial \, \score_i} = w_i \, y_i \exp[- \score_i \, y_i],
+\]
+so it is positive for signal events, negative for background events and has larger modulus for the events which are poorly classified.
+
+After a new tree was built, it's output is altered: for each leaf we can compute such a value, that the result will give the smallest possible value for loss.
+
+...computation of optimal value goes here...
+
+This loss function can be easily modified to take in account not only the score for individual elements, but also 'finds' regions with lower-than-average quality.
+
+\[
+	\text{knnAdaLoss} = \sum_{i \in events} \exp[-y_i \times \sum_{j \in \text{knn}(i)} \score_j],
+\]
+where the index $j$ goes over the $k$ nearest neighbors of $i$th event, which belongs to the same class (signal or background).
+
+We can introduce a supplementary sparse matrix $A \in \RR^{N \times N}$ ($N$ is number of events), which is defined as 
+\[
+a_{ij} = \begin{cases} 
+1, & j \in \knn(i), \text{ events $i$ and $j$ belong to the same class} \\
+0, & \text{otherwise},
+\end{cases}
+\] so the loss can be written as
+\[
+	\text{knnAdaLoss} = \sum_i \exp [- y_i \sum_j a_{ij} \, \score_j ],
+\]
+it's negative gradient is easily computed:
+\[
+	-\dfrac{\partial \, \text{knnAdaLoss}} {\partial \, \score_k} = 
+	 y_k \, \sum_i a_{ik} \exp [- y_i \sum_j a_{ij} \, \score_j ],
+\]
+from this we can see that new algorithm will pay more attention to the events, which has poorly classified neighbors (and neighbors of neighbors). The named loss targets to obtain uniformity in both signal and background.
+
+And the post-correction can be handled by using second-order Newton-Raphson optimization step 
+
+... TODO computation of optimal value goes here ...
+
+One can note, that the matrix $A$ doesn't need to be necessarily square. One can introduce $M$ groups of events (which may intersect), each group consists of several events with close uniform variables (and close events). Then one introduces $A \in \RR^{M \times N}$:
+\[
+	a_{mj} = \begin{cases}
+		1, & \text{event $j$ is in group $m$} \\
+		0, & \text{otherwise}
+	\end{cases}
+\]
+
+In particular, if we take $A$ to be identity matrix: $A = I$ (each event to be in it's own group), knnAdaLoss turns into a simple AdaLoss.
+
+
+
+\subsection{Gradient Boosting with Flatness Loss (FL)}
+
+Let's use the metrics introduces in the section \ref{sec:similarity}:
+\[
+	\sum_{\bin} \binweight \int \abs{F_{\bin}(x) - F(x)}^p dF(x),
+\]
+which is good as a measure, but due to the non-smoothness of $F(x)$ it's 
+gradient is singular, so we use instead
+\[
+	\FL = \sum_{\bin} \binweight \int \abs{F_{\bin}(x) - F(x)}^p dx.
+\]
+
+So, the derivative looks like:
+\[
+	\dfrac{\partial} {\partial \, \score_i} \FL
+	= \sum_{\bin} \binweight \frac{\partial }{ \partial \, \score_i} 
+			\int \abs{F_\bin(x) - F(x)}^p dx
+\]
+Let $\bin(i)$ be a bin to which event $i$ belongs, then we can compute:
+\def\binIweight{\text{weight}_\text{\bin(i)}}
+
+% TODO sign 
+
+\begin{multline*}
+	- \dfrac{\partial} {\partial \, \score_i} \FL = 
+		- \binIweight
+		\frac{\partial }{ \partial \, \score_i} 
+			\int \abs{F_{\bin(i)}(x) - F(x)}^p dx \cong \\
+	\cong \binIweight \, p \,  \abs{F_{\bin(i)}(x) - F(x)}^{p-1} 
+		\sgn[F_{\bin(i)}(x) - F(x)]
+		\dfrac{w_i}{\binIweight}
+		\Bigg|_{x=\score_i} = \\
+	= 
+		w_i \, p \,  \abs{F_{\bin(i)}(x) - F(x)}^{p-1}
+		\sgn[F_{\bin(i)}(x) - F(x)]
+		\Bigg|_{x=\score_i}
+\end{multline*}
+
+TODO give explanations here
+
+The next thing we need to point is FL doesn't take into account the quality of predictions. So what we use in practice is linear combination of FlatnessLoss and AdaLoss:
+\[
+	\text{loss} = \FL + \alpha \, \text{AdaLoss}
+\]
+
+First one penalizes the non-uniformity, second one --- poor predictions.
