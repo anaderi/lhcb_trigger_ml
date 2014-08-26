@@ -214,6 +214,7 @@ class SimpleParameterOptimizer(AbstractParameterGenerator):
             new_state_indices = list(start_indices)
 
             p = 1. - len(self.queued_tasks_) / self.n_evaluations
+            p = numpy.clip(p, 0, 100)
             distance = self.random_state.binomial(self.dimensions_sum // 6, p) + 1
             for _ in range(distance):
                 axis = self.random_state.randint(len(self.dimensions))
