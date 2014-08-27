@@ -1,3 +1,6 @@
+from __future__ import division
+from __future__ import print_function
+
 import numpy
 from commonutils import check_sample_weight, weighted_percentile, \
     build_normalizer, generate_sample
@@ -203,7 +206,7 @@ def test_binning_uniforming():
 
     score = roc_auc_score(testY, proba[:, 1])
     if score < 0.8:
-        print 'Predictions are awful, roc = %.2f' % score
+        print('Predictions are awful, roc = %.2f' % score)
 
 
 test_binning_uniforming()
