@@ -22,11 +22,11 @@ from sklearn.utils.validation import check_arrays, column_or_1d
 from matplotlib import cm
 from scipy.stats import pearsonr
 
-from commonutils import compute_bdt_cut, Binner, \
+from commonutils import compute_bdt_cut, \
     check_sample_weight, build_normalizer, computeSignalKnnIndices, map_on_cluster
 from metrics import roc_curve, roc_auc_score, compute_bin_indices, \
     compute_msee_on_bins, compute_sde_on_bins, compute_sde_on_groups, compute_theil_on_bins, \
-    bin_based_cvm, compute_bin_efficiencies, efficiency_score, compute_bin_weights
+    bin_based_cvm, compute_bin_efficiencies, compute_bin_weights
 
 
 __author__ = 'Alex Rogozhnikov'
@@ -54,9 +54,8 @@ def train_classifier(name_classifier, X, y, sample_weight=None):
 
 
 class ClassifiersDict(OrderedDict):
-    """This class is a collection of classifiers, which will be trained simultaneously
-    and will be
-    """
+    """A collection of classifiers, which will be trained simultaneously
+    and after that will be compared"""
     def fit(self, X, y, sample_weight=None, ipc_profile=None):
         """Trains all classifiers on the same train data,
         if ipc_profile in not None, it is used as a name of IPython cluster to use for parallel computations"""
@@ -390,41 +389,6 @@ class Predictions(object):
                     pylab.show()
         return self
 
-    def correlation(self, var_name, stages=None, metrics=efficiency_score, n_bins=20, thresholds=None):
-        """ Plots the dependence of efficiency / sensitivity / whatever vs one of the variables
-        :type var_name: str, the name of variable
-        :type stages: list(int) | NoneType
-        :type metrics: function
-        :type n_bins: int, the number of bins
-        :type thresholds: list(float) | NoneType
-        :rtype: Predictions, returns self
-        """
-        thresholds = [0.2, 0.4, 0.5, 0.6, 0.8] if thresholds is None else thresholds
-        sample_weight = check_sample_weight(self.y, self.sample_weight)
-        for stage, predictions in pandas.DataFrame(self._get_stages(stages=stages)).iterrows():
-            self._strip_figure(len(predictions))
-            print('stage ' + str(stage))
-            for i, (name, proba) in enumerate(predictions.iteritems()):
-                pylab.subplot(1, len(predictions), i + 1)
-                correlation_values = numpy.ravel(self.X[var_name])
-                # Do we really need binner?
-                binner = Binner(correlation_values, n_bins=n_bins)
-                bins_data = binner.split_into_bins(correlation_values, self.y,
-                                                   numpy.ravel(proba[:, 1]), sample_weight)
-                for cut in thresholds:
-                    x_values = []
-                    y_values = []
-                    for bin_masses, bin_y_true, bin_proba, bin_weight in bins_data:
-                        y_values.append(metrics(bin_y_true, bin_proba > cut, sample_weight=bin_weight))
-                        x_values.append(numpy.mean(bin_masses))
-                    pylab.plot(x_values, y_values, '.-', label="cut = %0.3f" % cut)
-
-                pylab.title("Correlation with results of " + name)
-                pylab.xlabel(var_name)
-                pylab.ylabel(metrics.__name__)
-                pylab.legend(loc="best")
-        return self
-
     def correlation_curves(self, var_name, center=None, step=1, label=1):
         """ Correlation between normalized(!) predictions on some class and a variable
         :type var_name: str, correlation is computed for this variable
@@ -594,7 +558,6 @@ def test_reports():
         classifiers.fit(trainX, trainY).test_on(testX, testY, low_memory=low_memory)\
             .roc().show().print_mse(['column0'], in_html=False)\
             .mse_curves(['column0']).show() \
-            .correlation(['column0']).show() \
             .correlation_curves('column1', ).show() \
             .learning_curves().show() \
             .efficiency(trainX.columns[:1], n_bins=7).show() \
