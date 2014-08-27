@@ -35,6 +35,23 @@ def generate_test_dataset(n_samples, n_bins):
 #endregion
 
 
+""" README on quality metrics
+
+Some notation used here
+IsSignal - is really signal
+AsSignal - classified as signal
+IsBackgroundAsSignal - background, but classified as signal
+... and so on. Cute, right?
+
+tpr = s = IsSAsS / isS
+fpr = b = IsBAsS / isB
+
+signal efficiency = tpr = s
+background efficiency = IsBasB / IsB = 1 - fpr
+background rejection = background efficiency
+
+"""
+
 #region Quality metrics
 
 def check_metrics_arguments(y_true, y_pred, sample_weight, two_class=True, binary_pred=True):
@@ -226,11 +243,13 @@ test_bins()
 README on flatness
 
 this metrics are unfortunately more complicated than usual ones
-and require the information about
+and require more information: not only predictions and classes,
+but also mass (or other variables along which we want to split data)
 
 Here we compute the different metrics of uniformity of predictions:
 
 SDE (formerly MSEE) - the standard deviation of efficiency
+Theil - Theil index of Efficiency (Theil index is used in economics)
 KS  - based on Kolmogorov-Smirnov distance between distributions
 CVM - based on Cramer-von Mises similarity between distributions
 
@@ -512,6 +531,7 @@ def compute_theil_on_bins(y_pred, mask, bin_indices, target_efficiencies, sample
 
 
 #endregion
+
 
 #region Similarity-based measures of flatness, KS, CvM
 
