@@ -32,14 +32,6 @@ from metrics import roc_curve, roc_auc_score, compute_bin_indices, \
 __author__ = 'Alex Rogozhnikov'
 
 
-# Score functions
-# Some notation used here
-# IsSignal - is really signal
-# AsSignal - classified as signal
-# IsBackgroundAsSignal - background, but classified as signal
-# ... and so on. Cute, right?
-
-
 def train_classifier(name_classifier, X, y, sample_weight=None):
     """ Trains one classifier on a separate node in cluster,
     :param name_classifier: 2-tuple (name, classifier)
@@ -200,58 +192,59 @@ class Predictions(object):
 
     #endregion
 
-    #region MSE-related stuff (to be removed)
+    #region Quality-related methods
 
-    def _compute_bin_indices(self, var_names, n_bins=20, mask=None):
-        """Mask is used to show events that will be binned after"""
-        #TODO merge with next function
-        for var in var_names:
-            assert var in self.X.columns, "the variable %i is not in dataset" % var
-        mask = self._check_mask(mask)
-        bin_limits = []
-        for var_name in var_names:
-            var_data = self.X.loc[mask, var_name]
-            bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
-        return compute_bin_indices(self.X, var_names, bin_limits)
-
-    def _compute_bin_centers(self, var_names, n_bins=20, mask=None):
-        """Mask is used to show events that will be binned after"""
-        bin_centers = []
-        mask = self._check_mask(mask)
-        for var_name in var_names:
-            var_data = self.X.loc[mask, var_name]
-            bin_centers.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), 2 * n_bins + 1)[1::2])
-            assert len(bin_centers[-1]) == n_bins
-        return bin_centers
-
-    def _compute_staged_mse(self, var_names, target_efficiencies=None, step=3, n_bins=20, power=2., label=1):
-        target_efficiencies = self._check_efficiencies(target_efficiencies)
-        mask = self.y == label
-        bin_indices = self._compute_bin_indices(var_names, n_bins=n_bins, mask=mask)
-        compute_mse = lambda pred: \
-            compute_msee_on_bins(pred[:, label], mask, bin_indices, target_efficiencies=target_efficiencies,
-                                 power=power, sample_weight=self.sample_weight)
-        return self._map_on_staged_proba(compute_mse, step)
-
-    def _compute_mse(self, var_names, target_efficiencies=None, stages=None, n_bins=20, power=2., label=1):
-        target_efficiencies = self._check_efficiencies(target_efficiencies)
-        mask = self.y == label
-        bin_indices = self._compute_bin_indices(var_names, n_bins=n_bins, mask=mask)
-        compute_mse = lambda pred: \
-            compute_msee_on_bins(pred[:, label], mask, bin_indices, target_efficiencies=target_efficiencies,
-                                 power=power, sample_weight=self.sample_weight)
-        return self._map_on_stages(compute_mse, stages=stages)
-
-    def print_mse(self, uniform_variables, efficiencies=None, stages=None, in_html=True, label=1):
-        result = pandas.DataFrame(self._compute_mse(uniform_variables, efficiencies, stages=stages, label=label))
-        if in_html:
-            from IPython.display import display_html
-            display_html("<b>Staged MSE variation</b>", raw=True)
-            display_html(result)
-        else:
-            print("Staged MSE variation")
-            print(result)
+    def roc(self, stages=None):
+        proba_on_stages = pandas.DataFrame(self._get_stages(stages))
+        n_stages = len(proba_on_stages)
+        self._strip_figure(n_stages)
+        for i, (stage_name, proba_on_stage) in enumerate(proba_on_stages.iterrows()):
+            pylab.subplot(1, n_stages, i + 1), pylab.title("stage " + str(stage_name))
+            pylab.title('ROC at stage ' + str(stage_name))
+            pylab.plot([0, 1], [1, 0], 'k--')
+            pylab.xlim([0., 1.003]),    pylab.xlabel('Signal Efficiency')
+            pylab.ylim([0., 1.003]),    pylab.ylabel('Background Rejection')
+            for classifier_name, predictions in proba_on_stage.iteritems():
+                plot_roc(self.y, predictions[:, 1], sample_weight=self.sample_weight,
+                         classifier_name=classifier_name)
+            pylab.legend(loc="lower left")
         return self
+
+    def prediction_pdf(self, stages=None, histtype='step', bins=30, show_legend=False):
+        proba_on_stages = pandas.DataFrame(self._get_stages(stages))
+        for stage_name, proba_on_stage in proba_on_stages.iterrows():
+            self._strip_figure(len(proba_on_stage))
+            for i, (clf_name, predict_proba) in enumerate(proba_on_stage.iteritems(), 1):
+                pylab.subplot(1, len(proba_on_stage), i)
+                for label in numpy.unique(self.y):
+                    pylab.hist(predict_proba[self.y == label, label], histtype=histtype, bins=bins, label=label)
+                pylab.title('Predictions of %s at stage %s' % (clf_name, str(stage_name)))
+                if show_legend:
+                    pylab.legend()
+            pylab.show()
+
+    def learning_curves(self, metrics=roc_auc_score, step=1, label=1):
+        y_true = (self.y == label) * 1
+        # TODO think of metrics without sample_weight
+        function = lambda predictions: metrics(y_true, predictions[:, label], sample_weight=self.sample_weight)
+        result = self._map_on_staged_proba(function=function, step=step)
+
+        for classifier_name, staged_roc in result.iteritems():
+            pylab.plot(staged_roc.keys(), staged_roc, label=classifier_name)
+        pylab.legend(loc="lower right")
+        pylab.xlabel("stage"), pylab.ylabel("ROC AUC")
+        return self
+
+    def compute_metrics(self, stages=None, metrics=roc_auc_score, label=1):
+        """ Computes arbitrary metrics on selected stages
+        :param stages: array-like of stages or None
+        :param metrics: (numpy.array, numpy.array, numpy.array | None) -> float,
+            any metrics with interface (y_true, y_pred, sample_weight=None), where y_pred of shape [n_samples] of float
+        :return: pandas.DataFrame with computed values
+        """
+        def compute_metrics(proba):
+            return metrics((self.y == label) * 1, proba[:, label], sample_weight=self.sample_weight)
+        return pandas.DataFrame(self._map_on_stages(compute_metrics, stages=stages))
 
     #endregion
 
@@ -418,59 +411,58 @@ class Predictions(object):
 
     #endregion
 
-    #region Quality-related methods
+    #region MSE-related stuff (to be removed)
 
-    def roc(self, stages=None):
-        proba_on_stages = pandas.DataFrame(self._get_stages(stages))
-        n_stages = len(proba_on_stages)
-        self._strip_figure(n_stages)
-        for i, (stage_name, proba_on_stage) in enumerate(proba_on_stages.iterrows()):
-            pylab.subplot(1, n_stages, i + 1), pylab.title("stage " + str(stage_name))
-            pylab.title('ROC at stage ' + str(stage_name))
-            pylab.plot([0, 1], [1, 0], 'k--')
-            pylab.xlim([0., 1.003]),    pylab.xlabel('Signal Efficiency')
-            pylab.ylim([0., 1.003]),    pylab.ylabel('Background Rejection')
-            for classifier_name, predictions in proba_on_stage.iteritems():
-                plot_roc(self.y, predictions[:, 1], sample_weight=self.sample_weight,
-                         classifier_name=classifier_name)
-            pylab.legend(loc="lower left")
+    def _compute_bin_indices(self, var_names, n_bins=20, mask=None):
+        """Mask is used to show events that will be binned after"""
+        #TODO merge with next function
+        for var in var_names:
+            assert var in self.X.columns, "the variable %i is not in dataset" % var
+        mask = self._check_mask(mask)
+        bin_limits = []
+        for var_name in var_names:
+            var_data = self.X.loc[mask, var_name]
+            bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
+        return compute_bin_indices(self.X, var_names, bin_limits)
+
+    def _compute_bin_centers(self, var_names, n_bins=20, mask=None):
+        """Mask is used to show events that will be binned after"""
+        bin_centers = []
+        mask = self._check_mask(mask)
+        for var_name in var_names:
+            var_data = self.X.loc[mask, var_name]
+            bin_centers.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), 2 * n_bins + 1)[1::2])
+            assert len(bin_centers[-1]) == n_bins
+        return bin_centers
+
+    def _compute_staged_mse(self, var_names, target_efficiencies=None, step=3, n_bins=20, power=2., label=1):
+        target_efficiencies = self._check_efficiencies(target_efficiencies)
+        mask = self.y == label
+        bin_indices = self._compute_bin_indices(var_names, n_bins=n_bins, mask=mask)
+        compute_mse = lambda pred: \
+            compute_msee_on_bins(pred[:, label], mask, bin_indices, target_efficiencies=target_efficiencies,
+                                 power=power, sample_weight=self.sample_weight)
+        return self._map_on_staged_proba(compute_mse, step)
+
+    def _compute_mse(self, var_names, target_efficiencies=None, stages=None, n_bins=20, power=2., label=1):
+        target_efficiencies = self._check_efficiencies(target_efficiencies)
+        mask = self.y == label
+        bin_indices = self._compute_bin_indices(var_names, n_bins=n_bins, mask=mask)
+        compute_mse = lambda pred: \
+            compute_msee_on_bins(pred[:, label], mask, bin_indices, target_efficiencies=target_efficiencies,
+                                 power=power, sample_weight=self.sample_weight)
+        return self._map_on_stages(compute_mse, stages=stages)
+
+    def print_mse(self, uniform_variables, efficiencies=None, stages=None, in_html=True, label=1):
+        result = pandas.DataFrame(self._compute_mse(uniform_variables, efficiencies, stages=stages, label=label))
+        if in_html:
+            from IPython.display import display_html
+            display_html("<b>Staged MSE variation</b>", raw=True)
+            display_html(result)
+        else:
+            print("Staged MSE variation")
+            print(result)
         return self
-
-    def prediction_pdf(self, stages=None, histtype='step', bins=30, show_legend=False):
-        proba_on_stages = pandas.DataFrame(self._get_stages(stages))
-        for stage_name, proba_on_stage in proba_on_stages.iterrows():
-            self._strip_figure(len(proba_on_stage))
-            for i, (clf_name, predict_proba) in enumerate(proba_on_stage.iteritems(), 1):
-                pylab.subplot(1, len(proba_on_stage), i)
-                for label in numpy.unique(self.y):
-                    pylab.hist(predict_proba[self.y == label, label], histtype=histtype, bins=bins, label=label)
-                pylab.title('Predictions of %s at stage %s' % (clf_name, str(stage_name)))
-                if show_legend:
-                    pylab.legend()
-            pylab.show()
-
-    def learning_curves(self, metrics=roc_auc_score, step=1, label=1):
-        y_true = (self.y == label) * 1
-        # TODO think of metrics without sample_weight
-        function = lambda predictions: metrics(y_true, predictions[:, label], sample_weight=self.sample_weight)
-        result = self._map_on_staged_proba(function=function, step=step)
-
-        for classifier_name, staged_roc in result.iteritems():
-            pylab.plot(staged_roc.keys(), staged_roc, label=classifier_name)
-        pylab.legend(loc="lower right")
-        pylab.xlabel("stage"), pylab.ylabel("ROC AUC")
-        return self
-
-    def compute_metrics(self, stages=None, metrics=roc_auc_score, label=1):
-        """ Computes arbitrary metrics on selected stages
-        :param stages: array-like of stages or None
-        :param metrics: (numpy.array, numpy.array, numpy.array | None) -> float,
-            any metrics with interface (y_true, y_pred, sample_weight=None), where y_pred of shape [n_samples] of float
-        :return: pandas.DataFrame with computed values
-        """
-        def compute_metrics(proba):
-            return metrics((self.y == label) * 1, proba[:, label], sample_weight=self.sample_weight)
-        return pandas.DataFrame(self._map_on_stages(compute_metrics, stages=stages))
 
     #endregion
 
