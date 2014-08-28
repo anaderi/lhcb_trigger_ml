@@ -43,11 +43,11 @@ AsSignal - classified as signal
 IsBackgroundAsSignal - background, but classified as signal
 ... and so on. Cute, right?
 
-tpr = s = IsSAsS / isS
-fpr = b = IsBAsS / isB
+tpr = s = isSasS / isS
+fpr = b = isBasS / isB
 
 signal efficiency = tpr = s
-background efficiency = IsBasB / IsB = 1 - fpr
+background efficiency = isBasB / isB = 1 - fpr
 background rejection = background efficiency
 
 """
@@ -105,14 +105,6 @@ def roc_auc_score(y_true, y_score, sample_weight=None):
     return auc(fpr, tpr, reorder=True)
 
 
-def sensitivity(y_true, y_score, sample_weight=None):
-    """ Returns s / sqrt{s+b} """
-    y_true, y_score, sample_weight = \
-        check_metrics_arguments(y_true, y_score, sample_weight=sample_weight, two_class=True, binary_pred=True)
-    s, b = compute_sb(y_true, y_score, sample_weight=sample_weight)
-    return s / numpy.sqrt(s + b)
-
-
 def efficiency_score(y_true, y_pred, sample_weight=None):
     """Efficiency = right classified signal / everything that is really signal
     Efficiency == recall, returns -0.1 when ill-defined"""
@@ -126,7 +118,7 @@ def efficiency_score(y_true, y_pred, sample_weight=None):
 
 
 def background_efficiency_score(y_true, y_pred, sample_weight=None):
-    """BackgroundEfficiency == right classified bg / everything that is really bg == fpr"""
+    """BackgroundEfficiency == isBasB / isB == 1 - fpr"""
     return efficiency_score(1 - y_true, 1 - y_pred, sample_weight=sample_weight)
 
 
@@ -135,6 +127,14 @@ def as_signal_score(y_true, y_pred, sample_weight=None):
     sample_weight = check_sample_weight(y_true, sample_weight)
     assert len(y_true) == len(y_pred), "Different size of arrays"
     return numpy.sum(y_pred * sample_weight) / numpy.sum(sample_weight)
+
+
+def sensitivity(y_true, y_score, sample_weight=None):
+    """ Returns s / sqrt{s+b} """
+    y_true, y_score, sample_weight = \
+        check_metrics_arguments(y_true, y_score, sample_weight=sample_weight, two_class=True, binary_pred=True)
+    s, b = compute_sb(y_true, y_score, sample_weight=sample_weight)
+    return s / numpy.sqrt(s + b)
 
 
 def optimal_sensitivity(y_true, y_score, sample_weight=None):
@@ -505,7 +505,7 @@ def theil(x, weights):
     assert numpy.all(x >= 0)
     x_mean = numpy.average(x, weights=weights)
     normed = x / x_mean
-    normed[normed < 0.1] = 0.1
+    normed[normed < 1e-10] = 1e-10
     return numpy.average(normed * numpy.log(normed), weights=weights)
 
 
@@ -544,7 +544,8 @@ def compute_theil_on_groups(y_pred, mask, groups_indices, target_efficiencies, s
 
 
 def theil_flatness(y, proba, X, uniform_variables, sample_weight=None, label=1, knn=30):
-    sample_weight=check_sample_weight(y, sample_weight=sample_weight)
+    """This is ready-to-use function, and it is quite slow to use many times"""
+    sample_weight = check_sample_weight(y, sample_weight=sample_weight)
     mask = y == label
     groups_indices = computeSignalKnnIndices(uniform_variables, X, is_signal=mask, n_neighbors=knn)[mask, :]
     return compute_theil_on_groups(proba[:, label], mask=mask, groups_indices=groups_indices,
@@ -555,7 +556,7 @@ def test_theil(n_samples=1000, n_bins=10):
     y, pred, weights, bins, groups = generate_test_dataset(n_samples=n_samples, n_bins=n_bins)
     a = compute_theil_on_bins(pred[:, 1], y == 1, bins, [0.5, 0.78], sample_weight=weights)
     b = compute_theil_on_groups(pred[:, 1], y == 1, groups, [0.5, 0.78], sample_weight=weights)
-    assert a == b
+    assert numpy.allclose(a, b)
 
 test_theil()
 
