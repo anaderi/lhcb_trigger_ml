@@ -527,7 +527,7 @@ def compute_theil_on_bins(y_pred, mask, bin_indices, target_efficiencies, sample
         bin_efficiencies = compute_bin_efficiencies(y_pred, bin_indices=bin_indices,
                                                     cut=cut, sample_weight=sample_weight)
         result += theil(bin_efficiencies, weights=bin_weights)
-    return result
+    return result / len(cuts)
 
 
 def compute_theil_on_groups(y_pred, mask, groups_indices, target_efficiencies, sample_weight):
@@ -540,7 +540,7 @@ def compute_theil_on_groups(y_pred, mask, groups_indices, target_efficiencies, s
     for cut in cuts:
         groups_efficiencies = compute_group_efficiencies(y_pred, groups_indices, cut, sample_weight=sample_weight)
         result += theil(groups_efficiencies, groups_weights)
-    return result
+    return result / len(cuts)
 
 
 def theil_flatness(y, proba, X, uniform_variables, sample_weight=None, label=1, knn=30):
