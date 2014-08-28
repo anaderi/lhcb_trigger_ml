@@ -7,21 +7,26 @@ from __future__ import division
 from __future__ import print_function
 
 import warnings
+
 import numpy
 import pandas
-
 from sklearn.metrics import auc
 from sklearn.utils.validation import column_or_1d, check_arrays
-from commonutils import check_sample_weight, compute_cut_for_efficiency, computeSignalKnnIndices
 from numpy.random.mtrand import RandomState
 from scipy.stats import ks_2samp
+
+from commonutils import check_sample_weight, compute_cut_for_efficiency, computeSignalKnnIndices
+
 
 __author__ = 'Alex Rogozhnikov'
 
 __all__ = ['sde', 'cvm_flatness', 'cvm_2samp', 'theil']
 
 
-#region Utilities for tests
+#region Utilities
+
+def compute_F(weights):
+    return numpy.cumsum(weights) - 0.5 * weights
 
 def generate_test_dataset(n_samples, n_bins):
     random = RandomState()
@@ -565,24 +570,84 @@ test_theil()
 
 #region Similarity-based measures of flatness, KS, CvM
 
-def bin_based_KS(y_pred, sample_weight, bin_indices):
-    """Kolmogorov-Smirnov"""
-    # TODO use KS criterion with weights
-    assert len(y_pred) == len(sample_weight) == len(bin_indices)
-    global_distribution = numpy.sort(y_pred)
+def _prepare_data(data, weights):
+    """Prepares the distribution to be used later in KS and CvM"""
+    weights = weights / numpy.sum(weights)
+    prepared_data = numpy.unique(data)
+    indices = numpy.searchsorted(prepared_data, data)
+    prepared_weights = numpy.bincount(indices, weights=weights)
+    F = compute_F(prepared_weights)
+    return prepared_data, prepared_weights, F
+
+
+def _ks_2samp_fast(prepared_data1, data2, prepared_weights1, weights2, F1):
+    """Pay attention - prepared data should not only be sorted,
+    but equal items should be merged (by summing weights),
+    data2 should not have elements larger then max(prepared_data1) """
+    indices = numpy.searchsorted(prepared_data1, data2)
+    weights2 /= numpy.sum(weights2)
+    prepared_weights2 = numpy.bincount(indices, weights=weights2, minlength=len(prepared_data1))
+    F2 = compute_F(prepared_weights2)
+    return numpy.max(numpy.abs(F1 - F2))
+
+
+def test_ks2samp_fast(size=1000):
+    y1 = RandomState().uniform(size=size)
+    y2 = y1[RandomState().uniform(size=size) > 0.5]
+    a = ks_2samp(y1, y2)[0]
+    prep_data, prep_weights, prep_F = _prepare_data(y1, numpy.ones(len(y1)))
+    b = _ks_2samp_fast(prep_data, y2, prep_weights, numpy.ones(len(y2)), F1=prep_F)
+    c = _ks_2samp_fast(prep_data, y2, prep_weights, numpy.ones(len(y2)), F1=prep_F)
+    assert numpy.allclose(a, b, rtol=1e-2, atol=1e-3)
+    assert numpy.allclose(b, c)
+
+test_ks2samp_fast()
+
+
+def bin_based_ks(y_pred, mask, sample_weight, bin_indices):
+    """Kolmogorov-Smirnov flatness on bins"""
+    assert len(y_pred) == len(sample_weight) == len(bin_indices) == len(mask)
+    y_pred = y_pred[mask]
+    sample_weight = sample_weight[mask]
+    bin_indices = bin_indices[mask]
+
     bin_weights = compute_bin_weights(bin_indices=bin_indices, sample_weight=sample_weight)
+    prepared_data, prepared_weight, prep_F = _prepare_data(y_pred, weights=sample_weight)
 
     result = 0.
     for bin, bin_weight in enumerate(bin_weights):
         if bin_weight <= 0:
             continue
-        local_distribution = numpy.sort(y_pred[bin_indices == bin])
-        result += bin_weight * ks_2samp(global_distribution, local_distribution)
+        local_distribution = y_pred[bin_indices == bin]
+        local_weights = sample_weight[bin_indices == bin]
+        result += bin_weight * \
+                  _ks_2samp_fast(prepared_data, local_distribution, prepared_weight, local_weights, prep_F)
     return result
 
 
-def compute_F(weights):
-    return numpy.cumsum(weights) - 0.5 * weights
+def groups_based_ks(y_pred, mask, sample_weight, groups_indices):
+    """Kolmogorov-Smirnov flatness on groups """
+    assert len(y_pred) == len(sample_weight) == len(mask)
+    group_weights = compute_group_weights(groups_indices, sample_weight=sample_weight)
+    prepared_data, prepared_weight, prep_F = _prepare_data(y_pred[mask], weights=sample_weight[mask])
+
+    result = 0.
+    for group_weight, group_indices in zip(group_weights, groups_indices):
+        local_distribution = y_pred[group_indices]
+        local_weights = sample_weight[group_indices]
+        result += group_weight * \
+                  _ks_2samp_fast(prepared_data, local_distribution, prepared_weight, local_weights, prep_F)
+    return result
+
+
+def test_ks(n_samples=1000, n_bins=10):
+    y, pred, weights, bins, groups = generate_test_dataset(n_samples=n_samples, n_bins=n_bins)
+    mask = y == 1
+    a = bin_based_ks(pred[:, 1], mask=mask, sample_weight=weights, bin_indices=bins)
+    b = groups_based_ks(pred[:, 1], mask=mask, sample_weight=weights, groups_indices=groups)
+    assert numpy.allclose(a, b)
+
+test_ks()
 
 
 def cvm_2samp(data1, data2, weights1=None, weights2=None, power=2.):
@@ -602,15 +667,6 @@ def cvm_2samp(data1, data2, weights1=None, weights2=None, power=2.):
     assert numpy.all(F1 >= 0.) and numpy.all(F1 <= 1.001)
     assert numpy.all(F2 >= 0.) and numpy.all(F2 <= 1.001)
     return numpy.average(numpy.abs(F1 - F2) ** power, weights=weights1_new)
-
-
-def _prepare_data(data, weights):
-    weights = weights / numpy.sum(weights)
-    prepared_data = numpy.unique(data)
-    indices = numpy.searchsorted(prepared_data, data)
-    prepared_weights = numpy.bincount(indices, weights=weights)
-    F = compute_F(prepared_weights)
-    return prepared_data, prepared_weights, F
 
 
 def _cvm_2samp_fast(prepared_data1, data2, prepared_weights1, weights2, F1, power=2.):
@@ -643,7 +699,7 @@ def bin_based_cvm(y_pred, sample_weight, bin_indices):
     bin_weights = compute_bin_weights(bin_indices=bin_indices, sample_weight=sample_weight)
 
     result = 0.
-    prepared_data, prepared_weight, F_pred = _prepare_data(y_pred, weights=sample_weight)
+    global_data, global_weight, global_F = _prepare_data(y_pred, weights=sample_weight)
 
     for bin, bin_weight in enumerate(bin_weights):
         if bin_weight <= 0:
@@ -652,8 +708,8 @@ def bin_based_cvm(y_pred, sample_weight, bin_indices):
         local_distribution = y_pred[bin_mask]
         local_weights = sample_weight[bin_mask]
         # result += bin_weight * cvm_2samp(y_pred, local_distribution, sample_weight, local_weights)
-        result += bin_weight * _cvm_2samp_fast(prepared_data, local_distribution,
-                                               prepared_weight, local_weights, F_pred)
+        result += bin_weight * _cvm_2samp_fast(global_data, local_distribution,
+                                               global_weight, local_weights, global_F)
 
     return result
 
@@ -662,12 +718,15 @@ def group_based_cvm(y_pred, mask, sample_weight, groups_indices):
     y_pred = column_or_1d(y_pred)
     sample_weight = check_sample_weight(y_pred, sample_weight=sample_weight)
     group_weights = compute_group_weights(groups_indices, sample_weight=sample_weight)
-    result = 0.
 
+    result = 0.
+    global_data, global_weight, global_F = _prepare_data(y_pred[mask], weights=sample_weight[mask])
     for group, group_weight in zip(groups_indices, group_weights):
-        local_pred = y_pred[group]
+        local_distribution = y_pred[group]
         local_weights = sample_weight[group]
-        result += group_weight * cvm_2samp(y_pred[mask], local_pred, sample_weight[mask], local_weights)
+        # result += group_weight * cvm_2samp(y_pred[mask], local_distribution, sample_weight[mask], local_weights)
+        result += group_weight * _cvm_2samp_fast(global_data, local_distribution,
+                                                 global_weight, local_weights, global_F)
     return result
 
 
