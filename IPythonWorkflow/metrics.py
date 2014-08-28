@@ -190,7 +190,7 @@ def compute_bin_indices(X, var_names, bin_limits=None, mask=None, n_bins=20):
     if bin_limits is None:
         bin_limits = []
         for var_name in var_names:
-            var_data = X.loc[mask, var_name]
+            var_data = X.loc[:, var_name] if mask is None else X.loc[mask, var_name]
             bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
 
     assert len(var_names) == len(bin_limits), "Different size of arrays"
@@ -340,6 +340,7 @@ def weighted_deviation(a, weights, power=2.):
 def compute_sde_on_bins(y_pred, mask, bin_indices, target_efficiencies, power=2., sample_weight=None):
     # skip check for a while
     # ignoring events from other classes
+    sample_weight = check_sample_weight(y_pred, sample_weight=sample_weight)
     y_pred = y_pred[mask]
     bin_indices = bin_indices[mask]
     sample_weight = sample_weight[mask]
@@ -412,7 +413,6 @@ def compute_msee_on_groups(y_pred, mask, groups_indices, target_efficiencies, sa
     cuts = compute_cut_for_efficiency(target_efficiencies, mask, y_pred=y_pred, sample_weight=sample_weight)
 
     efficiencies = [list() for eff in target_efficiencies]
-    groups_sizes = numpy.array([len(x) for x in groups_indices])
     groups_weights = numpy.array([numpy.sum(numpy.take(sample_weight, g)) for g in groups_indices])
     signal_weight = sample_weight[mask]
 
@@ -511,9 +511,10 @@ def theil(x, weights):
 
 def compute_theil_on_bins(y_pred, mask, bin_indices, target_efficiencies, sample_weight):
     warnings.warn('Theil on bins is in experimental version', UserWarning)
-    # ignoring events from other classes
+    y_pred = column_or_1d(y_pred)
     sample_weight = check_sample_weight(y_pred, sample_weight=sample_weight)
 
+    # ignoring events from other classes
     y_pred = y_pred[mask]
     bin_indices = bin_indices[mask]
     sample_weight = sample_weight[mask]
@@ -529,6 +530,34 @@ def compute_theil_on_bins(y_pred, mask, bin_indices, target_efficiencies, sample
     return result
 
 
+def compute_theil_on_groups(y_pred, mask, groups_indices, target_efficiencies, sample_weight):
+    y_pred = column_or_1d(y_pred)
+    sample_weight = check_sample_weight(y_pred, sample_weight=sample_weight)
+    groups_weights = compute_group_weights(groups_indices, sample_weight=sample_weight)
+    cuts = compute_cut_for_efficiency(target_efficiencies, mask=mask,
+                                      y_pred=y_pred, sample_weight=sample_weight)
+    result = 0.
+    for cut in cuts:
+        groups_efficiencies = compute_group_efficiencies(y_pred, groups_indices, cut, sample_weight=sample_weight)
+        result += theil(groups_efficiencies, groups_weights)
+    return result
+
+
+def theil_flatness(y, proba, X, uniform_variables, sample_weight=None, label=1, knn=30):
+    sample_weight=check_sample_weight(y, sample_weight=sample_weight)
+    mask = y == label
+    groups_indices = computeSignalKnnIndices(uniform_variables, X, is_signal=mask, n_neighbors=knn)[mask, :]
+    return compute_theil_on_groups(proba[:, label], mask=mask, groups_indices=groups_indices,
+                                   target_efficiencies=[0.5, 0.6, 0.7, 0.8, 0.9], sample_weight=sample_weight)
+
+
+def test_theil(n_samples=1000, n_bins=10):
+    y, pred, weights, bins, groups = generate_test_dataset(n_samples=n_samples, n_bins=n_bins)
+    a = compute_theil_on_bins(pred[:, 1], y == 1, bins, [0.5, 0.78], sample_weight=weights)
+    b = compute_theil_on_groups(pred[:, 1], y == 1, groups, [0.5, 0.78], sample_weight=weights)
+    assert a == b
+
+test_theil()
 
 #endregion
 
@@ -551,6 +580,10 @@ def bin_based_KS(y_pred, sample_weight, bin_indices):
     return result
 
 
+def compute_F(weights):
+    return numpy.cumsum(weights) - 0.5 * weights
+
+
 def cvm_2samp(data1, data2, weights1=None, weights2=None, power=2.):
     """A handmade function for Cramer-von Mises similarity,
     \int |F_2 - F_1|^p dF_1
@@ -563,15 +596,11 @@ def cvm_2samp(data1, data2, weights1=None, weights2=None, power=2.):
     bins = numpy.append(data, data[-1] + 1)
     weights1_new = numpy.histogram(data1, bins=bins, weights=weights1)[0]
     weights2_new = numpy.histogram(data2, bins=bins, weights=weights2)[0]
-    F1 = numpy.cumsum(weights1_new) - 0.5 * weights1_new
-    F2 = numpy.cumsum(weights2_new) - 0.5 * weights2_new
+    F1 = compute_F(weights1_new)
+    F2 = compute_F(weights2_new)
     assert numpy.all(F1 >= 0.) and numpy.all(F1 <= 1.001)
     assert numpy.all(F2 >= 0.) and numpy.all(F2 <= 1.001)
     return numpy.average(numpy.abs(F1 - F2) ** power, weights=weights1_new)
-
-
-def compute_F(weights):
-    return numpy.cumsum(weights) - 0.5 * weights
 
 
 def _prepare_data(data, weights):
@@ -626,8 +655,6 @@ def bin_based_cvm(y_pred, sample_weight, bin_indices):
                                                prepared_weight, local_weights, F_pred)
 
     return result
-
-
 
 
 def group_based_cvm(y_pred, mask, sample_weight, groups_indices):
