@@ -1,15 +1,15 @@
 from __future__ import print_function
 from __future__ import division
 
-from collections import defaultdict, OrderedDict
-from itertools import izip
+from collections import defaultdict
+import copy
 import numbers
 from time import time
-import itertools
-import math
+
+import pandas
 import scipy.sparse as sparse
 import sklearn
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble import GradientBoostingClassifier as GBClassifier
 from sklearn.ensemble._gradient_boosting import _random_sample_mask
 from sklearn.ensemble.forest import RandomForestRegressor
@@ -19,11 +19,14 @@ import numpy
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.neighbors.unsupervised import NearestNeighbors
 from sklearn.tree._tree import DTYPE
+from sklearn.tree.tree import DecisionTreeRegressor
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays, column_or_1d
+
 from commonutils import generate_sample, check_sample_weight
 import commonutils
 import reports
+import metrics
 
 __author__ = 'Alex Rogozhnikov'
 
@@ -516,7 +519,7 @@ def exp_margin(margin):
 
 class FlatnessLossFunction(LossFunction, BaseEstimator):
     def __init__(self, uniform_variables, bins=10, uniform_label=1, power=2., ada_coefficient=1.,
-                 allow_wrong_signs=True, keep_debug_info=False):
+                 allow_wrong_signs=True, median=False, keep_debug_info=False):
         """
         This loss function contains separately penalty for non-flatness and ada_coefficient.
         The penalty for non-flatness is using bins.
@@ -538,6 +541,7 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
         self.ada_coefficient = ada_coefficient
         self.allow_wrong_signs = allow_wrong_signs
         self.keep_debug_info = keep_debug_info
+        self.median = median
         LossFunction.__init__(self, 1)
 
     def fit(self, X, y, sample_weight=None):
@@ -585,7 +589,7 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
             for axis_limits in bin_limits:
                 bin_limits2.append(axis_limits[1 + shift:-1:2])
             bin_indices = reports.compute_bin_indices(X, self.uniform_variables, bin_limits2)
-            result += reports.bin_to_group_indices(bin_indices, mask=mask)
+            result += metrics.bin_to_group_indices(bin_indices, mask=mask)
         return result
 
     def __call__(self, y, pred):
@@ -654,8 +658,12 @@ class FlatnessLossFunction(LossFunction, BaseEstimator):
 
     def _update_terminal_region(self, tree, terminal_regions, leaf, X, y, residual, pred):
         # terminal_region = numpy.where(terminal_regions == leaf)[0]
-        tree.value[leaf, 0, 0] = numpy.clip(tree.value[leaf, 0, 0], -10, 10)
-        # TODO think of real minimization
+        if self.median:
+            terminal_region = numpy.where(terminal_regions == leaf)[0]
+            residual = residual.take(terminal_region, axis=0)
+            tree.value[leaf, 0, 0] = numpy.median(residual)
+        else:
+            tree.value[leaf, 0, 0] = numpy.clip(tree.value[leaf, 0, 0], -10, 10)
 
     def init_estimator(self, X=None, y=None):
         return LogOddsEstimator()
@@ -923,6 +931,138 @@ class MyGradientBoostingClassifier(GBClassifier):
 
     def staged_predict_proba(self, X):
         return GBClassifier.staged_predict_proba(self, self.get_train_variables(X))
+
+
+class AbstractLossFunction(BaseEstimator, ClassifierMixin):
+    def fit(self, X, y, sample_weight):
+        """ This method is optional """
+        pass
+
+    def negative_gradient(self, y, y_pred):
+        """The y and y_pred should contain all the events passed to `fit` method,
+        moreover, the order should be the same"""
+        raise NotImplementedError()
+
+    def __call__(self, y, y_pred):
+        """The y and y_pred should contain all the events passed to `fit` method,
+        moreover, the order should be the same"""
+        raise NotImplementedError()
+
+    def update_tree(self, tree, X, y, y_pred, sample_weight, sample_mask, residual):
+        """This method may be not called at all, so it shouldn't
+        modify y_pred (unlike LossFunction from sklearn)"""
+        pass
+
+
+class uGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
+    def __init__(self, loss=None, n_estimators=10, learning_rate=0.1,
+                 subsample=1., min_samples_split=2, min_samples_leaf=20,
+                 max_features=None, max_leaf_nodes=None,
+                 max_depth=3, init_estimator=None, update_tree=False,
+                 criterion='mse', train_variables=None, random_state=None):
+
+        """This class supports only two-class classification and only special losses
+        derived from AbstractLossFunction.
+        :type loss: AbstractLossFunction
+        """
+        self.loss = loss
+        self.n_estimators = n_estimators
+        self.learning_rate = learning_rate
+        self.subsample = subsample
+        self.min_samples_split = min_samples_split
+        self.min_samples_leaf = min_samples_leaf
+        self.max_features = max_features
+        self.max_leaf_nodes = max_leaf_nodes
+        self.max_depth = max_depth
+        self.init_estimator = init_estimator
+        self.update_tree = update_tree
+        self.train_variables = train_variables
+        self.random_state = random_state
+        self.criterion = criterion
+
+    def fit(self, X, y, sample_weight=None):
+        sample_weight = check_sample_weight(y, sample_weight=sample_weight)
+        assert len(X) == len(y) == len(sample_weight)
+        X = pandas.DataFrame(X)
+        y = numpy.array(column_or_1d(y), dtype=int)
+        assert numpy.all(numpy.in1d(y, [0, 1])), \
+            'Only two-class classification supported'
+        y_signed = 2 * y - 1
+        # TODO check parameters
+        assert isinstance(self.loss, AbstractLossFunction), \
+            'LossFunction should be derived from AbstractLossFunction'
+        self.classifiers = []
+        self.scores = []
+
+        self.loss = copy.copy(self.loss)
+        self.loss.fit(X, y, sample_weight=sample_weight)
+        # preparing for fitting in trees
+        X = self.get_train_vars(X)
+        X, y = check_arrays(X, y, dtype=DTYPE, sparse_format="dense", check_ccontiguous=True)
+
+        y_pred = numpy.zeros(len(X), dtype=float)
+        if self.init_estimator is not None:
+            self.init_estimator.fit(X, y_signed, sample_weight=sample_weight)
+            y_pred += numpy.ravel(self.init_estimator.predict(X))
+
+        for _ in range(self.n_estimators):
+            residual = self.loss.predict(y, y_pred)
+            # tree creation
+            tree = DecisionTreeRegressor(
+                criterion=self.criterion,
+                splitter='best',
+                max_depth=self.max_depth,
+                min_samples_split=self.min_samples_split,
+                min_samples_leaf=self.min_samples_leaf,
+                max_features=self.max_features,
+                random_state=self.random_state)
+
+            # tree learning
+            residual = self.loss.negative_gradient(y, y_pred)
+            tree.fit(X, residual, sample_weight=sample_weight, check_input=False)
+            # update tree leaves
+            if self.update_tree:
+                self.loss.update_terminal_regions(tree.tree_, X=X, y=y, residual=residual, pred=y_pred,
+                                                  sample_weight=sample_weight)
+
+            y_pred += self.learning_rate * tree.predict(X)
+            self.classifiers.append(tree)
+            self.scores.append(self.loss(y, y_pred))
+            # adding scores, oob_scores, updating y_pred
+
+    def get_train_vars(self, X):
+        if self.train_variables is None:
+            return X
+        else:
+            return X.loc[:, self.train_variables]
+
+    def score_to_proba(self, score):
+        result = numpy.zeros([len(score), 2], dtype=float)
+        result[:, 1] = commonutils.sigmoid_function(score, width=1.)
+        result[:, 0] = 1. - result[:, 0]
+
+    def staged_predict_score(self, X):
+        X = self.get_train_vars(X)
+        y_pred = numpy.zeros(len(X))
+        if self.init_estimator is not None:
+            y_pred += numpy.ravel(self.init_estimator.predict(X))
+        yield y_pred
+        for estimator in self.estimators:
+            y_pred += estimator.predict(X)
+            yield y_pred
+        
+    def predict_score(self, X):
+        result = None
+        for score in self.staged_predict_score(self, X):
+            result = score
+        return result
+
+    def staged_predict_proba(self, X):
+        for score in self.staged_predict_score(X):
+            yield self.score_to_proba(score)
+            
+    def predict_proba(self, X):
+        return self.score_to_proba(self.predict_score(X))
 
 
 def test_gradient(loss, size=1000):
