@@ -435,7 +435,7 @@ def theil(x, weights):
     """Theil index of array with regularization"""
     assert numpy.all(x >= 0)
     x_mean = numpy.average(x, weights=weights)
-    normed = x / x_mean
+    normed = x / (x_mean + 1e-100)
     normed[normed < 1e-10] = 1e-10
     return numpy.average(normed * numpy.log(normed), weights=weights)
 
