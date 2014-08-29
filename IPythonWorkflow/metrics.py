@@ -22,11 +22,17 @@ __author__ = 'Alex Rogozhnikov'
 
 __all__ = ['sde', 'cvm_flatness', 'cvm_2samp', 'theil']
 
+#TODO simpler interfaces
+#TODO uniformity in usage of masks
 
 #region Utilities
 
-def compute_F(weights):
-    return numpy.cumsum(weights) - 0.5 * weights
+
+def compute_cdf(ordered_weights):
+    """Computes cumulative distribution function (CDF) by ordered weights,
+    be sure that sum(ordered_weights) == 1
+    """
+    return numpy.cumsum(ordered_weights) - 0.5 * ordered_weights
 
 def generate_test_dataset(n_samples, n_bins):
     random = RandomState()
@@ -58,6 +64,7 @@ background rejection = background efficiency
 """
 
 #region Quality metrics
+
 
 def check_metrics_arguments(y_true, y_pred, sample_weight, two_class=True, binary_pred=True):
     sample_weight = check_sample_weight(y_true, sample_weight=sample_weight)
@@ -188,7 +195,7 @@ def compute_bin_indices(X, var_names, bin_limits=None, mask=None, n_bins=20):
     the indices are unique numbers of bin from zero to \prod_j (len(bin_limits[j])+1)
     Example:
         var_names = ["M2AB", "M2AC"]
-        bin_limits = [numpy.linspace(0, 1, 20), numpy.linspace(0, 1, 20)]
+        bin_limits = [numpy.linspace(0, 1, 21), numpy.linspace(0, 1, 21)]
 
     If bin_limits is not provided, they are computed using mask and n_bins
     """
@@ -232,7 +239,7 @@ def test_bin_to_group_indices(size=100, bins=10):
 test_bin_to_group_indices()
 
 
-def test_bins(size=500, n_bins = 10):
+def test_bins(size=500, n_bins=10):
     columns = ['var1', 'var2']
     df = pandas.DataFrame(numpy.random.random((size, 2)), columns=columns)
     x_limits = numpy.linspace(0, 1, n_bins + 1)[1:-1]
@@ -323,7 +330,8 @@ def compute_group_efficiencies(y_score, groups_indices, cut, sample_weight=None)
 
     if isinstance(groups_indices, numpy.ndarray) and numpy.ndim(groups_indices) == 2:
         # this speedup is specially for knn
-        result = numpy.average(numpy.take(passed_cut, groups_indices), weights=numpy.take(sample_weight, groups_indices),
+        result = numpy.average(numpy.take(passed_cut, groups_indices),
+                               weights=numpy.take(sample_weight, groups_indices),
                                axis=1)
     else:
         result = numpy.zeros(len(groups_indices))
@@ -376,81 +384,6 @@ def compute_sde_on_groups(y_pred, mask, groups_indices, target_efficiencies, sam
     return 10 * (sde / len(cuts)) ** (1./power)
 
 
-# TODO delete
-def compute_msee_on_bins(y_pred, mask, bin_indices, target_efficiencies, power=2., sample_weight=None):
-    """ An efficient function to compute MSE, the splitting into bins should be given in bin_indices """
-    assert len(y_pred) == len(bin_indices) == len(mask), "different size of arrays"
-    # needed in case if in some bins there are no signal events
-    y_pred = column_or_1d(y_pred)
-    sample_weight = check_sample_weight(y_pred, sample_weight=sample_weight)
-    n_bins = numpy.max(bin_indices[mask]) + 1
-    target_efficiencies = numpy.array(target_efficiencies)
-
-    signal_proba = y_pred[mask]
-    signal_answers = numpy.ones(len(signal_proba), dtype=numpy.int)
-    signal_bins = bin_indices[mask]
-    signal_weights = sample_weight[mask]
-
-    bin_total = numpy.bincount(signal_bins, weights=signal_weights, minlength=n_bins)
-    cuts = compute_cut_for_efficiency(target_efficiencies, signal_answers, y_pred=signal_proba,
-                                      sample_weight=signal_weights)
-    bin_weights = bin_total / numpy.sum(bin_total)
-    result = 0.
-    for cut, efficiency in zip(cuts, target_efficiencies):
-        passed_cut = signal_proba > cut
-        mean_efficiency = numpy.average(passed_cut, weights=signal_weights)
-        bin_passed_cut = numpy.bincount(signal_bins[passed_cut], weights=signal_weights[passed_cut], minlength=n_bins)
-        bin_efficiency = bin_passed_cut / numpy.maximum(bin_total, 1)
-        result += numpy.sum(bin_weights * numpy.abs(bin_efficiency - mean_efficiency) ** power)
-
-    # Minkowski distance trick with powers
-    return 10 * (result / len(target_efficiencies)) ** (1. / power)
-
-
-# TODO delete
-def compute_msee_on_groups(y_pred, mask, groups_indices, target_efficiencies, sample_weight=None, power=2.):
-    """ An efficient function to compute MSE, the splitting into groups should be given
-     in the format of list, each item is a list of indices inside bin"""
-    assert len(y_pred) == len(mask), "different size"
-    sample_weight = check_sample_weight(y_pred, sample_weight)
-    y_pred = column_or_1d(y_pred)
-
-    cuts = compute_cut_for_efficiency(target_efficiencies, mask, y_pred=y_pred, sample_weight=sample_weight)
-
-    efficiencies = [list() for eff in target_efficiencies]
-    groups_weights = numpy.array([numpy.sum(numpy.take(sample_weight, g)) for g in groups_indices])
-    signal_weight = sample_weight[mask]
-
-    for group_indices in groups_indices:
-        if len(group_indices) == 0:
-            continue
-        assert numpy.all(mask[group_indices]), "The provided groups contain bg events"
-        group_predictions = numpy.take(y_pred, group_indices)
-        group_weights = numpy.take(sample_weight, group_indices)
-
-        for i, (eff, cut) in enumerate(zip(efficiencies, cuts)):
-            efficiencies[i].append(numpy.average(group_predictions > cut, weights=group_weights))
-
-    result = 0.
-    groups_weights /= numpy.sum(groups_weights)
-    for cut, efficiencies_at_cut in zip(cuts, efficiencies):
-        mean_efficiency = numpy.average(y_pred[mask] > cut, weights=signal_weight)
-        result += numpy.sum(groups_weights * numpy.abs(efficiencies_at_cut - mean_efficiency) ** power)
-
-    # Minkowski distance trick with powers
-    return 10 * (result / len(target_efficiencies)) ** (1. / power)
-
-
-# TODO delete
-def compute_msee(y_pred, mask, X, uniform_variables, sample_weight=None, n_bins=20, power=2.,
-                 target_efficiencies=None):
-    if target_efficiencies is None:
-        target_efficiencies = [0.6, 0.7, 0.8, 0.9]
-    bin_indices = compute_bin_indices(X, uniform_variables, mask=mask, n_bins=n_bins)
-    return compute_msee_on_bins(y_pred, mask, bin_indices, target_efficiencies=target_efficiencies, power=power,
-                                sample_weight=sample_weight)
-
-
 def sde(y, proba, X, uniform_variables, sample_weight=None, label=1, knn=30):
     """ The most simple way to compute SDE, this is however very slow
     if you need to recompute SDE many times
@@ -484,18 +417,11 @@ def sde(y, proba, X, uniform_variables, sample_weight=None, label=1, knn=30):
 def test_compare_sde_computations(n_samples=1000, n_bins=10):
     y, pred, weights, bins, groups = generate_test_dataset(n_samples=n_samples, n_bins=n_bins)
     target_efficiencies = RandomState().uniform(size=3)
-
-    x1 = compute_msee_on_bins(pred[:, 1], y, bin_indices=bins,
+    a = compute_sde_on_bins(pred[:, 1], mask=(y == 1), bin_indices=bins,
+                            target_efficiencies=target_efficiencies, sample_weight=weights)
+    b = compute_sde_on_groups(pred[:, 1], mask=(y == 1), groups_indices=groups,
                               target_efficiencies=target_efficiencies, sample_weight=weights)
-    x2 = compute_msee_on_groups(pred[:, 1], y, groups_indices=groups,
-                                target_efficiencies=target_efficiencies, sample_weight=weights)
-    x3 = compute_sde_on_bins(pred[:, 1], mask=(y == 1), bin_indices=bins,
-                             target_efficiencies=target_efficiencies, sample_weight=weights)
-    x4 = compute_sde_on_groups(pred[:, 1], mask=(y == 1), groups_indices=groups,
-                               target_efficiencies=target_efficiencies, sample_weight=weights)
-
-    assert abs(x1 - x2) < 1e-6 and abs(x1 - x3) < 1e-6 and abs(x1 - x4) < 1e-6, "MSE are different"
-    print("SDE is ok")
+    assert numpy.allclose(a, b)
 
 test_compare_sde_computations()
 
@@ -576,7 +502,7 @@ def _prepare_data(data, weights):
     prepared_data = numpy.unique(data)
     indices = numpy.searchsorted(prepared_data, data)
     prepared_weights = numpy.bincount(indices, weights=weights)
-    F = compute_F(prepared_weights)
+    F = compute_cdf(prepared_weights)
     return prepared_data, prepared_weights, F
 
 
@@ -587,7 +513,7 @@ def _ks_2samp_fast(prepared_data1, data2, prepared_weights1, weights2, F1):
     indices = numpy.searchsorted(prepared_data1, data2)
     weights2 /= numpy.sum(weights2)
     prepared_weights2 = numpy.bincount(indices, weights=weights2, minlength=len(prepared_data1))
-    F2 = compute_F(prepared_weights2)
+    F2 = compute_cdf(prepared_weights2)
     return numpy.max(numpy.abs(F1 - F2))
 
 
@@ -662,8 +588,8 @@ def cvm_2samp(data1, data2, weights1=None, weights2=None, power=2.):
     bins = numpy.append(data, data[-1] + 1)
     weights1_new = numpy.histogram(data1, bins=bins, weights=weights1)[0]
     weights2_new = numpy.histogram(data2, bins=bins, weights=weights2)[0]
-    F1 = compute_F(weights1_new)
-    F2 = compute_F(weights2_new)
+    F1 = compute_cdf(weights1_new)
+    F2 = compute_cdf(weights2_new)
     assert numpy.all(F1 >= 0.) and numpy.all(F1 <= 1.001)
     assert numpy.all(F2 >= 0.) and numpy.all(F2 <= 1.001)
     return numpy.average(numpy.abs(F1 - F2) ** power, weights=weights1_new)
@@ -675,7 +601,7 @@ def _cvm_2samp_fast(prepared_data1, data2, prepared_weights1, weights2, F1, powe
     indices = numpy.searchsorted(prepared_data1, data2)
     weights2 /= numpy.sum(weights2)
     prepared_weights2 = numpy.bincount(indices, weights=weights2, minlength=len(prepared_data1))
-    F2 = compute_F(prepared_weights2)
+    F2 = compute_cdf(prepared_weights2)
     return numpy.average(numpy.abs(F1 - F2) ** power, weights=prepared_weights1)
 
 
@@ -793,6 +719,4 @@ def check_limit(size=2000):
 
 check_limit()
 
-
 #endregion
-

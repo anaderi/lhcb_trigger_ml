@@ -25,8 +25,8 @@ from scipy.stats import pearsonr
 from commonutils import compute_bdt_cut, \
     check_sample_weight, build_normalizer, computeSignalKnnIndices, map_on_cluster
 from metrics import roc_curve, roc_auc_score, compute_bin_indices, \
-    compute_msee_on_bins, compute_sde_on_bins, compute_sde_on_groups, compute_theil_on_bins, \
-    bin_based_cvm, compute_bin_efficiencies, compute_bin_weights
+    compute_sde_on_bins, compute_sde_on_groups, compute_theil_on_bins, \
+    bin_based_cvm, compute_bin_efficiencies, compute_bin_weights, bin_based_ks
 
 
 __author__ = 'Alex Rogozhnikov'
@@ -217,7 +217,7 @@ class Predictions(object):
             for i, (clf_name, predict_proba) in enumerate(proba_on_stage.iteritems(), 1):
                 pylab.subplot(1, len(proba_on_stage), i)
                 for label in numpy.unique(self.y):
-                    pylab.hist(predict_proba[self.y == label, label], histtype=histtype, bins=bins, label=label)
+                    pylab.hist(predict_proba[self.y == label, label], histtype=histtype, bins=bins, label=str(label))
                 pylab.title('Predictions of %s at stage %s' % (clf_name, str(stage_name)))
                 if show_legend:
                     pylab.legend()
@@ -249,6 +249,29 @@ class Predictions(object):
     #endregion
 
     #region Uniformity-related methods
+
+    def _compute_bin_indices(self, var_names, n_bins=20, mask=None):
+        """Mask is used to show events that will be binned after"""
+        #TODO merge with next function
+        for var in var_names:
+            assert var in self.X.columns, "the variable %i is not in dataset" % var
+        mask = self._check_mask(mask)
+        bin_limits = []
+        for var_name in var_names:
+            var_data = self.X.loc[mask, var_name]
+            bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
+        return compute_bin_indices(self.X, var_names, bin_limits)
+
+    def _compute_bin_centers(self, var_names, n_bins=20, mask=None):
+        """Mask is used to show events that will be binned after"""
+        bin_centers = []
+        mask = self._check_mask(mask)
+        for var_name in var_names:
+            var_data = self.X.loc[mask, var_name]
+            bin_centers.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), 2 * n_bins + 1)[1::2])
+            assert len(bin_centers[-1]) == n_bins
+        return bin_centers
+
     def mse_curves(self, uniform_variables, target_efficiencies=None, n_bins=20, step=3, power=2., label=1):
         result = self._compute_staged_mse(uniform_variables, target_efficiencies, step=step,
                                           n_bins=n_bins, power=power, label=label)
@@ -306,6 +329,18 @@ class Predictions(object):
                                          sample_weight=self.checked_sample_weight)
         self._plot_curves(compute_theil, step=step)
         pylab.ylabel("Theil Index")
+        pylab.ylim(0, pylab.ylim()[1] * 1.15)
+        pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.00), ncol=3, fancybox=True, shadow=True)
+
+    def ks_curves(self, uniform_variables, n_bins=20, label=1, step=3):
+        mask = self.y == label
+        bin_indices = self._compute_bin_indices(uniform_variables, n_bins=n_bins, mask=mask)
+
+        def compute_ks(pred):
+            return bin_based_ks(pred[:, label], mask=mask, bin_indices=bin_indices,
+                                sample_weight=self.checked_sample_weight)
+        self._plot_curves(compute_ks, step=step)
+        pylab.ylabel("KS flatness")
         pylab.ylim(0, pylab.ylim()[1] * 1.15)
         pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.00), ncol=3, fancybox=True, shadow=True)
 
@@ -370,9 +405,9 @@ class Predictions(object):
                     for i, (name, local_efficiencies) in enumerate(stage_data.iteritems(), start=1):
                         if isinstance(local_efficiencies, float) and pandas.isnull(local_efficiencies):
                             continue
+                        local_efficiencies[bin_weights <= 0] = target_efficiency
                         local_efficiencies = local_efficiencies.reshape([n_bins, n_bins], ).transpose()
                         # drawing difference, the efficiency in empty bins will be replaced with mean value
-                        local_efficiencies[bin_weights < 0] = target_efficiency
                         ax = pylab.subplot(1, len(stage_data), i)
                         p = ax.pcolor(x_limits, y_limits, local_efficiencies, cmap=cm.get_cmap("RdBu"),
                                       vmin=target_efficiency - 0.2, vmax=target_efficiency + 0.2)
@@ -407,61 +442,6 @@ class Predictions(object):
             pylab.plot(staged_correlation.keys(), staged_correlation, label=classifier_name)
         pylab.legend(loc="lower left")
         pylab.xlabel("stage"), pylab.ylabel("Pearson correlation")
-        return self
-
-    #endregion
-
-    #region MSE-related stuff (to be removed)
-
-    def _compute_bin_indices(self, var_names, n_bins=20, mask=None):
-        """Mask is used to show events that will be binned after"""
-        #TODO merge with next function
-        for var in var_names:
-            assert var in self.X.columns, "the variable %i is not in dataset" % var
-        mask = self._check_mask(mask)
-        bin_limits = []
-        for var_name in var_names:
-            var_data = self.X.loc[mask, var_name]
-            bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
-        return compute_bin_indices(self.X, var_names, bin_limits)
-
-    def _compute_bin_centers(self, var_names, n_bins=20, mask=None):
-        """Mask is used to show events that will be binned after"""
-        bin_centers = []
-        mask = self._check_mask(mask)
-        for var_name in var_names:
-            var_data = self.X.loc[mask, var_name]
-            bin_centers.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), 2 * n_bins + 1)[1::2])
-            assert len(bin_centers[-1]) == n_bins
-        return bin_centers
-
-    def _compute_staged_mse(self, var_names, target_efficiencies=None, step=3, n_bins=20, power=2., label=1):
-        target_efficiencies = self._check_efficiencies(target_efficiencies)
-        mask = self.y == label
-        bin_indices = self._compute_bin_indices(var_names, n_bins=n_bins, mask=mask)
-        compute_mse = lambda pred: \
-            compute_msee_on_bins(pred[:, label], mask, bin_indices, target_efficiencies=target_efficiencies,
-                                 power=power, sample_weight=self.sample_weight)
-        return self._map_on_staged_proba(compute_mse, step)
-
-    def _compute_mse(self, var_names, target_efficiencies=None, stages=None, n_bins=20, power=2., label=1):
-        target_efficiencies = self._check_efficiencies(target_efficiencies)
-        mask = self.y == label
-        bin_indices = self._compute_bin_indices(var_names, n_bins=n_bins, mask=mask)
-        compute_mse = lambda pred: \
-            compute_msee_on_bins(pred[:, label], mask, bin_indices, target_efficiencies=target_efficiencies,
-                                 power=power, sample_weight=self.sample_weight)
-        return self._map_on_stages(compute_mse, stages=stages)
-
-    def print_mse(self, uniform_variables, efficiencies=None, stages=None, in_html=True, label=1):
-        result = pandas.DataFrame(self._compute_mse(uniform_variables, efficiencies, stages=stages, label=label))
-        if in_html:
-            from IPython.display import display_html
-            display_html("<b>Staged MSE variation</b>", raw=True)
-            display_html(result)
-        else:
-            print("Staged MSE variation")
-            print(result)
         return self
 
     #endregion
