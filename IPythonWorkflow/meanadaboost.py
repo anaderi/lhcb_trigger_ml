@@ -42,7 +42,11 @@ class MeanAdaBoostClassifier(BaseEstimator, ClassifierMixin):
         self.train_variables = train_variables
         self.voting = voting
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y, sample_weight=None, A=None):
+        # TODO add checks here
+        if self.voting == 'matrix':
+            assert A is not None, 'A matrix should be passed'
+            assert A.shape[0] == len(X) and A.shape[1] == len(X), 'wrong shape of passed matrix'
         label = self.uniform_label
         self.uniform_label = numpy.array([label]) if isinstance(label, numbers.Number) else numpy.array(label)
 
@@ -71,6 +75,11 @@ class MeanAdaBoostClassifier(BaseEstimator, ClassifierMixin):
                 voted_score = numpy.median(knn_scores, axis=1)
             elif self.voting == 'percentile':
                 voted_score = numpy.percentile(knn_scores, numpy.random.random(), axis=1)
+            elif self.voting == 'random-mean':
+                n_feats = numpy.random.randint(self.n_neighbours//2, self.n_neighbours)
+                voted_score = numpy.mean(knn_scores[:, :n_feats], axis=1)
+            elif self.voting == 'matrix':
+                voted_score = A.dot(cumulative_score)
             else: # self.voting is callable
                 voted_score = self.voting(knn_scores)
 
@@ -102,7 +111,7 @@ class MeanAdaBoostClassifier(BaseEstimator, ClassifierMixin):
     def score_to_proba(self, score):
         """Compute class probability estimates from decision scores."""
         proba = numpy.zeros((score.shape[0], 2), dtype=numpy.float64)
-        proba[:, 1] = expit(score / self.n_estimators)
+        proba[:, 1] = expit(numpy.clip(score / self.n_estimators, -500, 500))
         proba[:, 0] = 1.0 - proba[:, 1]
         return proba
 
