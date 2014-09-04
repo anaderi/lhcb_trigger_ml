@@ -83,8 +83,7 @@ def test_quality(n_samples=3000):
         'n_neighbors': 10,
         'n_estimators': 10,
         'uniform_variables': ['column0'],
-        'base_estimator':
-            DecisionTreeClassifier(min_samples_leaf=20, max_depth=5)
+        'base_estimator': DecisionTreeClassifier(min_samples_leaf=20, max_depth=5)
     }
 
     for algorithm in ['SAMME', 'SAMME.R']:
@@ -109,7 +108,8 @@ def test_classifiers(n_samples=10000, output_name_pattern=None):
 
     clf_Ada = AdaBoostClassifier(n_estimators=50)
     clf_NB = HidingClassifier(train_variables=trainX.columns[1:],
-                               base_estimator=GaussianNB())
+                              base_estimator=GaussianNB())
+
     clf_uBoost_SAMME = uBoostClassifier(
         uniform_variables=uniform_variables,
         n_neighbors=50,
@@ -122,22 +122,29 @@ def test_classifiers(n_samples=10000, output_name_pattern=None):
         efficiency_steps=5,
         n_estimators=50,
         algorithm="SAMME.R")
+    # # TODO delete
+    # from neighadaboost import NeighAdaBoostClassifier
+    # clf_nada = NeighAdaBoostClassifier(uniform_variables=uniform_variables,
+    #                                    n_neighbours=50,
+    #                                    n_estimators=50)
+
     clf_dict = ClassifiersDict({
         "Ada": clf_Ada,
         "Ideal": clf_NB,
         "uBOOST": clf_uBoost_SAMME,
         "uBOOST.R": clf_uBoost_SAMME_R
         })
+
     clf_dict.fit(trainX, trainY)
 
     predictions = Predictions(clf_dict, testX, testY)
-    predictions.print_mse(uniform_variables, in_html=False)
+    # predictions.print_mse(uniform_variables, in_html=False)
     print(predictions.compute_metrics())
 
     # TODO(kazeevn)
     # Make reports save the plots.
 
-    predictions.mse_curves(uniform_variables)
+    predictions.sde_curves(uniform_variables)
     if output_name_pattern is not None:
         pl.savefig(output_name_pattern % "mse_curves", bbox="tight")
     figure1 = pl.figure()
@@ -153,7 +160,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Run some assert-based tests, "
         "calculate MSE and plot local efficiencies for"
-        " AdaBoost, uBoost.SAMME and uBoost.SAMME.R")
+        " AdaBoost, GaussianNB, uBoost.SAMME and uBoost.SAMME.R")
     parser.add_argument('-o', '--output-file', type=str,
                         help=r"Filename pattern with one %%s to save "
                         "the plots to. Example: classifiers_%%s.pdf")
