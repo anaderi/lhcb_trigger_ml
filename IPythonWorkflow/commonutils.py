@@ -189,7 +189,6 @@ test_percentile(100, 20)
 test_percentile(20, 100)
 
 
-
 def build_normalizer(signal, sample_weight=None):
     """Prepares normalization function for some set of values
     transforms it to uniform distribution from [0, 1]. Example of usage:
@@ -389,4 +388,12 @@ def subdict(start_dict, keys=None):
         result[key] = start_dict[key]
     return result
 
+
+def indices_of_values(array):
+    indices = numpy.argsort(array)
+    sorted_array = array[indices]
+    diff = numpy.nonzero(numpy.ediff1d(sorted_array))[0]
+    limits = [0] + list(diff + 1) + [len(array)]
+    for i in range(len(limits) - 1):
+        yield sorted_array[limits[i]], indices[limits[i]: limits[i+1]]
 
