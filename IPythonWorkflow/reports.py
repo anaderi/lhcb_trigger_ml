@@ -272,18 +272,6 @@ class Predictions(object):
             assert len(bin_centers[-1]) == n_bins
         return bin_centers
 
-    def mse_curves(self, uniform_variables, target_efficiencies=None, n_bins=20, step=3, power=2., label=1):
-        result = self._compute_staged_mse(uniform_variables, target_efficiencies, step=step,
-                                          n_bins=n_bins, power=power, label=label)
-        for name, mse_stages in result.iteritems():
-            pylab.plot(mse_stages.keys(), mse_stages, label=name)
-
-        pylab.xlabel("stage"), pylab.ylabel("MSE")
-        y_max = max([max(mse_stages) for _, mse_stages in result.iteritems()])
-        pylab.ylim([0, y_max * 1.15])
-        pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.00), ncol=3, fancybox=True, shadow=True)
-        return self
-
     def sde_curves(self, uniform_variables, target_efficiencies=None, n_bins=20, step=3, power=2., label=1):
         mask = self.y == label
         bin_indices = self._compute_bin_indices(uniform_variables, n_bins=n_bins, mask=mask)
