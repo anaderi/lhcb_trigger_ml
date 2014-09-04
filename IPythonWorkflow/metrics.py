@@ -15,7 +15,7 @@ from sklearn.utils.validation import column_or_1d, check_arrays
 from numpy.random.mtrand import RandomState
 from scipy.stats import ks_2samp
 
-from commonutils import check_sample_weight, compute_cut_for_efficiency, computeSignalKnnIndices
+from commonutils import check_sample_weight, compute_cut_for_efficiency, computeSignalKnnIndices, sigmoid_function
 
 
 __author__ = 'Alex Rogozhnikov'
@@ -323,10 +323,11 @@ def compute_bin_efficiencies(y_score, bin_indices, cut, sample_weight=None, minl
     return bin_passed_cut / numpy.maximum(bin_total, 1)
 
 
-def compute_group_efficiencies(y_score, groups_indices, cut, sample_weight=None):
+def compute_group_efficiencies(y_score, groups_indices, cut, sample_weight=None, smoothing=0.0):
     y_score = column_or_1d(y_score)
     sample_weight = check_sample_weight(y_score, sample_weight=sample_weight)
-    passed_cut = y_score > cut
+    # with smoothing=0, this is
+    passed_cut = sigmoid_function(y_score - cut, width=smoothing)
 
     if isinstance(groups_indices, numpy.ndarray) and numpy.ndim(groups_indices) == 2:
         # this speedup is specially for knn
@@ -433,9 +434,9 @@ test_compare_sde_computations()
 
 def theil(x, weights):
     """Theil index of array with regularization"""
-    assert numpy.all(x >= 0)
-    x_mean = numpy.average(x, weights=weights)
-    normed = x / (x_mean + 1e-100)
+    assert numpy.all(x >= 0), "negative numbers can't be used in Theil"
+    x_mean = numpy.average(x, weights=weights) + 1e-100
+    normed = x / x_mean
     normed[normed < 1e-10] = 1e-10
     return numpy.average(normed * numpy.log(normed), weights=weights)
 
@@ -494,7 +495,7 @@ test_theil()
 #endregion
 
 
-#region Similarity-based measures of flatness, KS, CvM
+#region Similarity-based measures of flatness: KS, CvM
 
 def _prepare_data(data, weights):
     """Prepares the distribution to be used later in KS and CvM"""
