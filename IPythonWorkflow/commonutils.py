@@ -280,19 +280,10 @@ def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
     return weighted_percentile(signal_proba, percentiles, sample_weight=sig_weights)
 
 
-#TODO replace this function with one from metrics
-def compute_groups_efficiencies(global_cut, knn_indices, answers, y_pred,
-                                sample_weight=None, smoothing_width=0.0):
-    """Fast implementation in numpy"""
-    assert len(answers) == len(y_pred), 'different size'
-    sample_weight = check_sample_weight(answers, sample_weight)
-    predictions = sigmoid_function(y_pred - global_cut, smoothing_width)
-    groups_predictions = numpy.take(predictions, knn_indices)
-    groups_weights = numpy.take(sample_weight, knn_indices)
-    return numpy.average(groups_predictions, weights=groups_weights, axis=1)
-
 #region Knn-related things
 
+# TODO update interface here and in all other places to work
+# without columns
 def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, n_neighbors=50):
     """For each event returns the knn closest signal(!) events. No matter of what class the event is.
     :type uniform_variables: list of names of variables, using which we want to compute the distance
