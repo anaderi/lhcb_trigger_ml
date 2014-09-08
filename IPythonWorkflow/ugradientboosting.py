@@ -17,7 +17,7 @@ from sklearn.utils.validation import check_arrays, column_or_1d
 
 from commonutils import check_sample_weight, computeSignalKnnIndices
 import commonutils
-from metrics import compute_group_weights, compute_divided_weight
+from metrics import compute_group_weights
 import metrics
 
 
@@ -281,10 +281,10 @@ class AbstractFlatnessLossFunction(AbstractLossFunction):
         for label in self.uniform_label:
             self.group_indices[label] = self.compute_groups_indices(X, y, label=label)
             self.group_weights[label] = compute_group_weights(self.group_indices[label], sample_weight=sample_weight)
-            for group in self.group_indices:
+            for group in self.group_indices[label]:
                 occurences[group] += 1
 
-        out_of_bins = (occurences == 0) & (~numpy.in1d(y, self.uniform_label))
+        out_of_bins = (occurences == 0) & numpy.in1d(y, self.uniform_label)
         if numpy.mean(out_of_bins) > 0.01:
             warnings.warn("%i events out of all bins " % numpy.sum(out_of_bins), UserWarning)
 
@@ -301,30 +301,8 @@ class AbstractFlatnessLossFunction(AbstractLossFunction):
         raise NotImplementedError()
 
     def __call__(self, pred):
-        # computing the common distribution of signal
-        # taking only signal by now
-        # this is approximate computation!
-
-        #TODO reimplement, this is wrong implementation
+        #TODO implement
         return 0
-        loss = 0
-
-        for label in self.uniform_label:
-            label_mask = self.y == label
-            sorted_pred = numpy.sort(pred[label_mask])
-
-            for group_weight, group_indices in zip(self.group_weights[label], self.group_indices[label]):
-                probs_in_bin = numpy.take(pred, group_indices)
-                probs_in_bin = numpy.sort(probs_in_bin)
-                positions = numpy.searchsorted(sorted_pred, probs_in_bin)
-                global_effs = positions / float(len(sorted_pred))
-                local_effs = (numpy.arange(0, len(probs_in_bin)) + 0.5) / len(probs_in_bin)
-                bin_loss = numpy.sum((global_effs - local_effs) ** self.power)
-                loss += bin_loss * group_weight
-
-        # Ada loss now
-        loss += self.ada_coefficient * numpy.sum(numpy.exp(-self.y_signed * pred))
-        return loss
 
     def negative_gradient(self, y_pred):
         y_pred = numpy.ravel(y_pred)
