@@ -2,10 +2,10 @@
 \documentclass{JINST}
 
 
-\title{New Approaches to Uniform Boosting}
+\title{New approaches for boosting to uniformity}
 
 \author{
-Aleksandar Bukva, 
+Aleksandar Bukva$^{\rm ADD}$, 
 Vladimir Gligorov$^d$,
 Alex Rogozhnikov$^{a,b}$\thanks{Corresponding author.}~ ,
 Andrey Ustuzhanin$^b$ and
@@ -26,7 +26,7 @@ E-mail: \email{alex.rogozhnikov@yandex.ru}}
 
 
 % AMS packages:
-\usepackage{amsmath, amsthm, amsfonts}
+\usepackage{amsmath, amsthm, amsfonts, xspace}
 
 
 % Theorems
@@ -49,6 +49,10 @@ E-mail: \email{alex.rogozhnikov@yandex.ru}}
 
 %-----------------------------------------------------------------
 
+\def \x {\ensuremath{\vec{x}}\xspace}
+\def \y {\ensuremath{\vec{y}}\xspace}
+\def\knn{\text{knn}}
+\def\knni{\text{knn}(i)}
 
 \begin{document}
 \maketitle
@@ -58,20 +62,17 @@ E-mail: \email{alex.rogozhnikov@yandex.ru}}
 
 \input{parts/introduction}
 
-\section{Uniformity Measurement}
+%\section{Uniformity Measurement}
+%\input{parts/metrics}
+%\section{Approaches Proposed}
+%\input{parts/approaches}
 
-\input{parts/metrics}
+\section{Uniformity Boosting Methods}
+\input{parts/methods}
 
-\section{Approaches Proposed}
-
-\input{parts/approaches}
-
-\section{Dataset}
+\section{Example Analysis}
 
 \input{parts/dataset}
-
-\section{Plots}
-
 \input{parts/plots}
 
 \section{Timings}
@@ -84,6 +85,8 @@ E-mail: \email{alex.rogozhnikov@yandex.ru}}
 
 \section{Source code}
 
+%\textcolor{red}{xxx}
+
 The link on the repository ans links to final notebooks with results in the article.
 
 \acknowledgments
@@ -92,35 +95,19 @@ The link on the repository ans links to final notebooks with results in the arti
 
 \begin{thebibliography}{9}
 
-% The examples of items:
-% \bibitem{bib1}
-% Authors,
-% \emph{Title},
-% \emph{J. Ref.} \textbf{vol} (year) page.
+\bibitem{ref:lhcbhlt} R. Aaij {\em et al.} [LHCb Trigger Group], {\em The LHCb trigger and its performance}, JINST {\bf 8}, P04022 (2013). [arXiv:1211.3055]
 
-% \bibitem{bib2}
-% A. Pietropaolo et al., \emph{DINS measurements on VESUVIO in the
-%     resonance detector configuration: proton mean kinetic energy in
-%     water}, \jinst{1}{2006}{P04001}.
+\bibitem{ref:bbdt}  V. Gligorov and M. Williams, {\em Efficient, reliable and fast high-level triggering using a bonsai boosted decision tree}, JINST {\bf 8}, P02013 (2013). [arXiv:1210.6861]
 
-% \bibitem{bib3}
-% A.I. Harris,
-% \emph{Spectroscopy with multichannel correlation radiometers},
-% \href{http://dx.doi.org/10.1063/1.1898643}
-% {\emph{Rev.\ Sci.\ Instrum.} {\bf 76} (2005) 054503}
-% [\astroph{0504449}].
+\bibitem{ref:uboost} J. Stevens and M. Williams, {\em uBoost: A boosting method for producing uniform selection efficiencies from multivariate classifiers}, JINST {\bf 8}, P12013 (2013) [arXiv:1305.7248]
 
-% \bibitem{bib4}
-% G.F. Knoll, \emph{Radiation detection and measurements}, John Wiley
-%     and Sons, Inc., New York 2000.
-
-% \bibitem{bib5}
-% V. Dangendorf, \emph{Time-resolved fast-neutron imaging with a
-% pulse-counting image intensifier}, in proceedings of
-% \emph{International workshop on fast neutron detectors and
-% applications}, April, 3--6, 2006 University of Cape Town, South Africa
-% \pos{PoS(FNDA2006)008}.
 
 \end{thebibliography}
+
+\appendix
+\section{Other Flatness Loss Criteria}
+
+ADD THEIL, ETC DESCRIPTIONS AND HOW TO IMPLEMENT IN THE ALGORITHM HERE.
+
 
 \end{document}
