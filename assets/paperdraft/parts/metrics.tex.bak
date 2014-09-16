@@ -262,4 +262,5 @@ while the second one has minus sign in front.
 	\caption{SDE and Theil}
 \end{figure}
 
-From these figures we can see that SDE has the same value and it is not able to make difference between these distributions. In the second case Theil has lower value which indicates that distribution is flatter. In the combination with SDE it can be used to detarmine the type of a distribution. Lower value of SDE can indicate that distribution is flat or has some narrow peaks or pits, and by using Theil we can distinguish between these two cases.
+From these figures we can see that SDE has the same value and it is not able to make difference between these distributions, while Theil can detect
+these changes which are in the acordance with the very purpose of Theil measure.
