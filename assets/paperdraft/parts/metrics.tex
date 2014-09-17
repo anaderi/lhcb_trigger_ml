@@ -147,7 +147,7 @@ but Cram\'er--von Mises similarity is more informative (usually $p=2$ is used):
 The good point is we don't need to select some global efficiencies like in the other metrics.
 
 
-\subsection{Connection Between SDE and Distance Similarity Approach}
+\subsection{Connection Between SDE and Distribution Similarity Approach}
 
 SDE and DSA based on Cram\'er--von Mises similarity can be shown to have connection.
 Let's consider the SDE with global efficiencies $= [1/N, 2/N, \dots, N/N]$. In the limit $N \to \infty$
@@ -215,5 +215,51 @@ This effect can be suppressed by dividing initial weight of the event by the num
 
 
 \subsection{Advantages and Disadvantages of Different Metrics}
+Let us compare two metrics that have shown most appropriate for our problem, SDE and Theil. We have some linearly spaced array of mass of particles
+from interval $[0,1]$, some constant $\alpha$ linearly sapced in interval $[.1,1]$. The predictions are correlated with mass via beta distribution.
+We have two distributions that are different in a way that they are symmetrical. SDE should show no changes if we flip the distribution, while the Theil should make difference between pit and peak. First distribution with a peak is given by:
 
-... TODO, here some plots with comparison, maybe timings ...
+\[
+	p\text{[i]}=\textbf{beta}(\alpha \cdot \bar m, \text{abs}(m\text[i]-\bar m))
+\]
+
+while the second one has minus sign in front.
+\begin{figure}[H]
+\centering
+		\begin{subfigure}[b]{0.95\textwidth}
+			\includegraphics[width=\textwidth]{graphs/distribution1.png}
+			\caption{Mass vs prediction}
+		\end{subfigure}
+		\begin{subfigure}[b]{0.95\textwidth}
+			\includegraphics[width=\textwidth]{graphs/efficiencies1.png}
+			\caption{Efficiencies}
+		\end{subfigure}
+		\caption{Peak distribution}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+	\includegraphics[width=8cm]{graphs/measures1.png}
+	\caption{SDE and Theil}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+		\begin{subfigure}[b]{0.95\textwidth}
+			\includegraphics[width=\textwidth]{graphs/distribution2.png}
+			\caption{Mass vs prediction}
+		\end{subfigure}
+		\begin{subfigure}[b]{0.95\textwidth}
+			\includegraphics[width=\textwidth]{graphs/efficiencies2.png}
+			\caption{Efficiencies}
+		\end{subfigure}
+		\caption{Pit distribution}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+	\includegraphics[width=8cm]{graphs/measures2.png}
+	\caption{SDE and Theil}
+\end{figure}
+
+From these figures we can see that SDE has the same value and it is not able to make difference between these distributions. In the second case Theil has lower value which indicates that distribution is flatter. In the combination with SDE it can be used to detarmine the type of a distribution. Lower value of SDE can indicate that distribution is flat or has some narrow peaks or pits, and by using Theil we can distinguish between these two cases.

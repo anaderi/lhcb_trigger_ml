@@ -3,9 +3,14 @@
 # This file contains some helpful functions and classes
 # which are often used (by other modules)
 
-
 from __future__ import print_function
 from __future__ import division
+from sklearn.utils.validation import check_arrays
+
+try:
+    from collections import OrderedDict
+except ImportError:
+    from ordereddict import OrderedDict
 
 import math
 import io
@@ -16,7 +21,6 @@ from scipy.special import expit
 import sklearn.cross_validation
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.neighbors.unsupervised import NearestNeighbors
-from sklearn.metrics import auc
 
 __author__ = "Alex Rogozhnikov"
 
@@ -34,17 +38,6 @@ def execute_notebook(filename):
             ip.run_cell(cell.input)
 
 
-def check_sample_weight(y_true, sample_weight):
-    """Checks the weights, returns normalized version """
-    if sample_weight is None:
-        return numpy.ones(len(y_true), dtype=numpy.float)
-    else:
-        sample_weight = numpy.array(sample_weight, dtype=numpy.float)
-        assert len(y_true) == len(sample_weight), \
-            "The lengths are different: {0} and {1}".format(len(y_true), len(sample_weight))
-        return sample_weight
-
-
 def map_on_cluster(ipc_profile, *args, **kw_args):
     """The same as map, but the first argument is ipc_profile
     :param str|None ipc_profile: the IPython cluster profile to use.
@@ -54,7 +47,63 @@ def map_on_cluster(ipc_profile, *args, **kw_args):
         return map(*args, **kw_args)
     else:
         from IPython.parallel import Client
+
         return Client(profile=ipc_profile).load_balanced_view().map_sync(*args, **kw_args)
+
+
+def sigmoid_function(x, width):
+    """ Sigmoid function is smoothing oh Heaviside function,
+    the less width, the closer we are to Heaviside function
+    :type x: array-like with floats, arbitrary shape
+    :type width: float, if width == 0, this is simply Heaviside function
+    """
+    assert width >= 0, 'the width should be non-negative'
+    if abs(width) > 0.0001:
+        return expit(numpy.clip(x / width, -500, 500))
+    else:
+        return (x > 0) * 1.0
+
+
+def generate_sample(n_samples, n_features, distance=2.0):
+    """Generates some test distribution,
+    signal and background distributions are gaussian with same dispersion and different centers,
+    all variables are independent (gaussian correlation matrix is identity)"""
+    from sklearn.datasets import make_blobs
+
+    centers = numpy.zeros((2, n_features))
+    centers[0, :] = - distance / 2
+    centers[1, :] = distance / 2
+
+    X, y = make_blobs(n_samples=n_samples, n_features=n_features, centers=centers)
+    columns = ["column" + str(x) for x in range(n_features)]
+    X = pandas.DataFrame(X, columns=columns)
+    return X, y
+
+
+def check_sample_weight(y_true, sample_weight):
+    """Checks the weights, returns normalized version """
+    if sample_weight is None:
+        return numpy.ones(len(y_true), dtype=numpy.float)
+    else:
+        sample_weight = numpy.array(sample_weight, dtype=numpy.float)
+        assert len(y_true) == len(sample_weight), \
+            "The length of weights is different: not {0}, but {1}".format(len(y_true), len(sample_weight))
+        return sample_weight
+
+
+def reorder_by_first(*arrays):
+    """ Applies the same permutation to all passed arrays,
+    permutation sorts the first passed array """
+    arrays = check_arrays(*arrays)
+    order = numpy.argsort(arrays[0])
+    return [arr[order] for arr in arrays]
+
+
+def reorder_by_first_inverse(*arrays):
+    """The same as reorder, but the first array is ordered by descending"""
+    arrays = check_arrays(*arrays)
+    order = numpy.argsort(-arrays[0])
+    return [arr[order] for arr in arrays]
 
 
 def train_test_split(*arrays, **kw_args):
@@ -62,7 +111,7 @@ def train_test_split(*arrays, **kw_args):
     Uses the same parameters: test_size, train_size, random_state
     :type list[numpy.array|pandas.DataFrame] arrays:
     """
-    assert len(arrays) > 0, "at least one array should be given"
+    assert len(arrays) > 0, "at least one array should be passed"
     length = len(arrays[0])
     for array in arrays:
         assert len(array) == length, "different size"
@@ -78,6 +127,23 @@ def train_test_split(*arrays, **kw_args):
     return result
 
 
+def test_splitting():
+    signal_df = pandas.DataFrame(numpy.ones([10, 10]))
+    bg_df = pandas.DataFrame(numpy.zeros([10, 10]))
+
+    common_X = pandas.concat([signal_df, bg_df], ignore_index=True)
+    common_y = numpy.concatenate([numpy.ones(len(signal_df)), numpy.zeros(len(bg_df))])
+
+    trainX, testX, trainY, testY = train_test_split(common_X, common_y)
+
+    for (index, row), label in zip(trainX.iterrows(), trainY):
+        assert numpy.all(label == row), 'wrong data partition'
+    for (index, row), label in zip(testX.iterrows(), testY):
+        assert numpy.all(label == row), 'wrong data partition'
+
+test_splitting()
+
+
 def weighted_percentile(array, percentiles, sample_weight=None, array_sorted=False, old_style=False):
     array = numpy.array(array)
     percentiles = numpy.array(percentiles)
@@ -85,8 +151,8 @@ def weighted_percentile(array, percentiles, sample_weight=None, array_sorted=Fal
     assert numpy.all(percentiles >= 0) and numpy.all(percentiles <= 1), 'Percentiles should be in [0, 1]'
 
     if not array_sorted:
-        order = numpy.argsort(array)
-        array, sample_weight = array[order], sample_weight[order]
+        array, sample_weight = reorder_by_first(array, sample_weight)
+
     weighted_quantiles = numpy.cumsum(sample_weight) - 0.5 * sample_weight
     if old_style:
         # To be convenient with numpy.percentile
@@ -123,92 +189,6 @@ test_percentile(100, 20)
 test_percentile(20, 100)
 
 
-def test_splitting():
-    signal_df = pandas.DataFrame(numpy.ones([10, 10]))
-    bg_df = pandas.DataFrame(numpy.zeros([10, 10]))
-
-    common_X = pandas.concat([signal_df, bg_df], ignore_index=True)
-    common_y = numpy.concatenate([numpy.ones(len(signal_df)), numpy.zeros(len(bg_df))])
-
-    trainX, testX, trainY, testY = train_test_split(common_X, common_y)
-
-    for (index, row), label in zip(trainX.iterrows(), trainY):
-        assert numpy.all(label == row), 'wrong data partition'
-    for (index, row), label in zip(testX.iterrows(), testY):
-        assert numpy.all(label == row), 'wrong data partition'
-
-test_splitting()
-
-
-class Binner:
-    def __init__(self, values, n_bins, sample_weight=None):
-        """Binner is a class that helps to split the values into several bins.
-        Initially an array of values is given, which is then splitted into 'bins_number' equal parts,
-        and thus we are computing limits (boundaries of bins)."""
-        percentiles = [i / n_bins for i in range(1, n_bins)]
-        sample_weight = check_sample_weight(values,  sample_weight=sample_weight)
-        self.limits = weighted_percentile(values, percentiles, sample_weight=sample_weight)
-
-    def get_bins(self, values):
-        return numpy.searchsorted(self.limits, values)
-
-    def set_limits(self, limits):
-        self.limits = limits
-
-    @property
-    def n_bins(self):
-        return len(self.limits) + 1
-
-    def split_into_bins(self, *arrays):
-        """Splits the data of parallel arrays into bins, the first array is binning variable"""
-        values = arrays[0]
-        numpy_arrays = []
-        for i, array in enumerate(arrays):
-            assert len(array) == len(values), "passed arrays have different lengths"
-            numpy_arrays.append(numpy.array(array))
-        bins = self.get_bins(values)
-        result = []
-        for bin in range(len(self.limits) + 1):
-            indices = bins == bin
-            result.append([array[indices] for array in numpy_arrays])
-        return result
-
-
-def test_binner():
-    """This function tests binner class"""
-    random = RandomState()
-    binner = Binner(random.permutation(30), 3)
-    assert numpy.all(binner.limits > [9, 19]), 'failed on the limits'
-    assert numpy.all(binner.limits < [10, 20]), 'failed on the limits'
-    bins = binner.get_bins([-1000, 1000, 0, 10, 20, 9.0, 10.1, 19.0, 20.1])
-    assert numpy.all(bins == [0, 2, 0, 1, 2, 0, 1, 1, 2]), 'wrong binning'
-
-    binner = Binner(random.permutation(20), 5)
-    p = random.permutation(40)
-    # checking whether binner preserves correspondence
-    list1 = list(binner.split_into_bins(numpy.array(range(-10, 30))[p], numpy.array(range(0, 40))[p]))
-    for a, b in list1:
-        for x, y in zip(a, b):
-            assert x + 10 == y, 'transpositions are wrong after binning'
-
-    binner = Binner(random.permutation(30), 3)
-    result2 = list(binner.split_into_bins(range(10, 20)))
-    answer2 = [[], range(10, 20), []]
-
-    for a, b in zip(result2, answer2):
-        for x, y in zip(a[0], b):
-            assert x == y, 'binning is wrong'
-
-    result3 = list(binner.split_into_bins(random.permutation(45)))
-    answer3 = list(binner.split_into_bins(range(45)))
-    for x, y in zip(result3, answer3):
-        assert set(x[0]) == set(y[0]), "binner doesn't work well with permutations"
-
-    print('binner is ok')
-
-test_binner()
-
-
 def build_normalizer(signal, sample_weight=None):
     """Prepares normalization function for some set of values
     transforms it to uniform distribution from [0, 1]. Example of usage:
@@ -222,8 +202,7 @@ def build_normalizer(signal, sample_weight=None):
     """
     sample_weight = check_sample_weight(signal, sample_weight)
     assert numpy.all(sample_weight >= 0.), 'sample weight must be non-negative'
-    order = numpy.argsort(signal)
-    signal, sample_weight = signal[order], sample_weight[order]
+    signal, sample_weight = reorder_by_first(signal, sample_weight)
     predictions = numpy.cumsum(sample_weight) / numpy.sum(sample_weight)
 
     def normalizing_function(data):
@@ -248,27 +227,24 @@ def test_build_normalizer(checks=10):
     predictions = numpy.sort(predictions)
     result = weighted_normalizer(predictions)
     result2 = numpy.cumsum(predictions) / numpy.sum(predictions)
-    assert numpy.all(numpy.abs(result-result2) < 0.005)
+    assert numpy.all(numpy.abs(result - result2) < 0.005)
     print("normalizer is ok")
-
 
 test_build_normalizer()
 
 
-# Functions primarily for uBoost
-
-def compute_cut_for_efficiency(efficiency, y_true, y_pred, sample_weight=None):
+def compute_cut_for_efficiency(efficiency, mask, y_pred, sample_weight=None):
     """ Computes such cut(s), that provide given signal efficiency.
     :type efficiency: float or numpy.array with target efficiencies, shape = [n_effs]
-    :type y_true: array-like, shape = [n_samples], labels (zeros ans ones)
+    :type mask: array-like, shape = [n_samples], True for needed classes
     :type y_pred: array-like, shape = [n_samples], predictions or scores (float)
     :type sample_weight: None | array-like, shape = [n_samples]
     :return: float or numpy.array, shape = [n_effs]
     """
-    sample_weight = check_sample_weight(y_true, sample_weight)
-    assert len(y_true) == len(y_pred), 'lengths are different'
+    sample_weight = check_sample_weight(mask, sample_weight)
+    assert len(mask) == len(y_pred), 'lengths are different'
     efficiency = numpy.array(efficiency)
-    is_signal = y_true > 0.5
+    is_signal = mask > 0.5
     y_pred, sample_weight = y_pred[is_signal], sample_weight[is_signal]
     return weighted_percentile(y_pred, 1. - efficiency, sample_weight=sample_weight)
 
@@ -297,52 +273,17 @@ def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
     :type y_true: numpy.array, of zeros and ones, shape = [n_samples]
     :type y_pred: numpy.array, prediction probabilities returned by classifier, shape = [n_samples, 2]
     """
-    if sample_weight is not None:
-        raise ValueError("sample weight is not supported")
     assert len(y_true) == len(y_pred), "different size"
     signal_proba = y_pred[y_true > 0.5]
     percentiles = 1. - target_efficiency
-    return weighted_percentile(signal_proba, percentiles)
+    sig_weights = None if sample_weight is None else sample_weight[y_true > 0.5]
+    return weighted_percentile(signal_proba, percentiles, sample_weight=sig_weights)
 
 
-def compute_groups_efficiencies(global_cut, knn_indices, answers, y_pred,
-                                sample_weight=None, smoothing_width=0.0):
-    """Fast implementation in numpy"""
-    assert len(answers) == len(y_pred), 'different size'
-    sample_weight = check_sample_weight(answers, sample_weight)
-    predictions = sigmoid_function(y_pred - global_cut, smoothing_width)
-    groups_predictions = numpy.take(predictions, knn_indices)
-    groups_weights = numpy.take(sample_weight, knn_indices)
-    return numpy.average(groups_predictions, weights=groups_weights, axis=1)
+#region Knn-related things
 
-
-def sigmoid_function(x, width):
-    """ Sigmoid function is smoothing oh Heaviside function, the less width, the closer we are to Heaviside function
-    :type x: array-like with floats, arbitrary shape
-    :type width: float, if width == 0, this is simply Heaviside function
-    """
-    assert width >= 0, 'the width should be non-negative'
-    if abs(width) > 0.0001:
-        return expit(numpy.clip(x / width, -500, 500))
-    else:
-        return (x > 0) * 1.0
-
-
-def generate_sample(n_samples, n_features, distance=2.0):
-    """Generates some test distribution,
-    signal and background distributions are gaussian with same dispersion and different centers,
-    all variables are independent (gaussian correlation matrix is identity)"""
-    from sklearn.datasets import make_blobs
-    centers = numpy.zeros((2, n_features))
-    centers[0, :] = - distance / 2
-    centers[1, :] = distance / 2
-
-    X, y = make_blobs(n_samples=n_samples, n_features=n_features, centers=centers)
-    columns = ["column" + str(x) for x in range(n_features)]
-    X = pandas.DataFrame(X, columns=columns)
-    return X, y
-
-
+# TODO update interface here and in all other places to work
+# without columns
 def computeSignalKnnIndices(uniform_variables, dataframe, is_signal, n_neighbors=50):
     """For each event returns the knn closest signal(!) events. No matter of what class the event is.
     :type uniform_variables: list of names of variables, using which we want to compute the distance
@@ -394,12 +335,15 @@ def test_compute_knn_indices(n_events=100):
 
 test_compute_knn_indices()
 
+#endregion
+
 
 def smear_dataset(testX, smeared_variables=None, smearing_factor=0.1):
     """For the selected features 'smears' them in dataset,
     pay attention, that only float feature can be smeared by now.
     If smeared variables is None, all the features are smeared"""
     assert isinstance(testX, pandas.DataFrame), "the passed object is not of type pandas.DataFrame"
+    testX = pandas.DataFrame.copy(testX)
     if smeared_variables is None:
         smeared_variables = testX.columns
     for var in smeared_variables:
@@ -424,67 +368,23 @@ def memory_usage():
     return result
 
 
-def roc_curve(y_true, y_score, sample_weight=None):
-    """ The same as sklearn.metrics.roc_curve, but this one supports weights    """
-    sample_weight = check_sample_weight(y_true, sample_weight)
-    assert len(y_true) == len(y_score), 'the lengths are different'
-    assert set(y_true) == {0, 1}, "the labels should be 0 and 1, labels are " + str(set(y_true))
-    order = numpy.argsort(y_score)[::-1]
-    thresholds = y_score[order]
-    y_true = y_true[order]
-    sample_weight = sample_weight[order]
-    tpr = numpy.insert(numpy.cumsum(sample_weight * y_true), 0, 0.)
-    tpr /= tpr[-1]
-    fpr = numpy.insert(numpy.cumsum(sample_weight * (1 - y_true)), 0, 0.)
-    fpr /= fpr[-1]
-    thresholds = numpy.insert(thresholds, 0, thresholds[0] + 1.)
-    return fpr, tpr, thresholds
-
-
-def roc_auc_score(y_true, y_score, sample_weight=None):
-    """The same as sklearn.metrics.roc_auc_score, but supports weights """
-    if len(numpy.unique(y_true)) != 2:
-        raise ValueError("AUC is defined for binary classification only")
-    fpr, tpr, _ = roc_curve(y_true, y_score, sample_weight=sample_weight)
-    return auc(fpr, tpr, reorder=True)
-
-
-def optimal_sensitivity(y_true, y_score, sample_weight=None):
-    """Returns maximal value for sensitivity metrics: s / sqrt(s+b) """
-    sample_weight = check_sample_weight(y_true, sample_weight=sample_weight)
-    order = numpy.argsort(-y_score)
-    y_true, sample_weight = y_true[order], sample_weight[order]
-    s_cumulative = numpy.cumsum(sample_weight * y_true)
-    b_cumulative = numpy.cumsum(sample_weight * (1-y_true))
-    optimal = numpy.max(s_cumulative / numpy.sqrt(s_cumulative + b_cumulative))
-    return optimal
-
-
-def test_roc_curve(size=100):
-    import sklearn.metrics
-    y = (numpy.random.random(size) > 0.5) * 1
-    pred = numpy.random.random(size)
-    fpr1, tpr1, thr1 = sklearn.metrics.roc_curve(y, pred)
-    fpr2, tpr2, thr2 = roc_curve(y, pred)
-    assert numpy.all(fpr1 == fpr2)
-    assert numpy.all(tpr1 == tpr2)
-    assert numpy.all(thr1 == thr2)
-
-# test_roc_curve(10)
-
-
-def export_root_to_csv(filename, branches=None):
-    """From selected file exports all the trees in separate files, exports all the branches,
-    requires rootpy and root_numpy modules"""
-    import root_numpy
-    import os
-    trees = root_numpy.list_trees(filename)
-    print("The following branches are found:\n %s" % trees)
-    result = []
-    for tree_name in trees:
-        x = root_numpy.root2array(filename, treename=tree_name, branches=branches)
-        new_file_name = os.path.splitext(filename)[0] + '_' + tree_name + '.csv'
-        pandas.DataFrame(x).to_csv(new_file_name)
-        result.append(new_file_name)
-    print("Successfully converted")
+def subdict(start_dict, keys=None):
+    """Returns the ordered dictionary from initial one
+     which contains only listed keys
+    """
+    if keys is None:
+        return OrderedDict(start_dict)
+    result = OrderedDict()
+    for key in keys:
+        result[key] = start_dict[key]
     return result
+
+
+def indices_of_values(array):
+    indices = numpy.argsort(array)
+    sorted_array = array[indices]
+    diff = numpy.nonzero(numpy.ediff1d(sorted_array))[0]
+    limits = [0] + list(diff + 1) + [len(array)]
+    for i in range(len(limits) - 1):
+        yield sorted_array[limits[i]], indices[limits[i]: limits[i+1]]
+

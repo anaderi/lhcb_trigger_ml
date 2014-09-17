@@ -1,0 +1,130 @@
+\pdfoutput=1 % only if pdf/png/jpg images are used
+\documentclass{JINST}
+
+
+\title{New Approaches to Uniform Boosting}
+
+\author{
+Aleksandar Bukva$^e$, 
+Vladimir Gligorov$^d$,
+Alex Rogozhnikov$^{a,b}$\thanks{Corresponding author.}~ ,
+Andrey Ustuzhanin$^b$ and
+Mike Williams$^c$\\
+\llap{$^a$}Lomonosov Moscow State University, Moscow, Russia\\
+\llap{$^b$}Yandex LLC, Moscow, Russia\\
+\llap{$^c$}Massachusetts Institute of Technology, Cambridge, MA, United States \\
+\llap{$^d$}Organisation Europ\'eenne pour la Recherche Nucl\'eaire (CERN), Geneva, Switzerland  \\
+\llap{$^e$}Faculty of Physics, Belgrade, Serbia \\
+E-mail: \email{alex.rogozhnikov@yandex.ru}}
+
+
+\abstract{
+\input{parts/abstract}
+}
+
+
+
+
+
+% AMS packages:
+\usepackage{amsmath, amsthm, amsfonts}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}	
+
+
+% Theorems
+%-----------------------------------------------------------------
+
+\newtheorem{thm}{Theorem}[section]
+\newtheorem{cor}[thm]{Corollary}
+\newtheorem{lem}[thm]{Lemma}
+\newtheorem{prop}[thm]{Proposition}
+\theoremstyle{definition}
+\newtheorem{defn}[thm]{Definition}
+\theoremstyle{remark}
+\newtheorem{rem}[thm]{Remark}
+
+\def\RR{\mathbb{R}}
+\def\ZZ{\mathbb{Z}}
+\newcommand{\abs}[1]{\left\vert#1\right\vert}
+\newcommand{\sgn}{\operatorname{sgn}}
+
+
+%-----------------------------------------------------------------
+
+
+\begin{document}
+\maketitle
+
+
+\section{Introduction}
+
+\input{parts/introduction}
+
+\section{Uniformity Measurement}
+
+\input{parts/metrics}
+
+\section{Approaches Proposed}
+
+\input{parts/approaches}
+
+\section{Dataset}
+
+\input{parts/dataset}
+
+\section{Plots}
+
+\input{parts/plots}
+
+\section{Timings}
+
+\input{parts/timings}
+
+\section{Summary}
+
+\input{parts/summary}
+
+\section{Source code}
+
+The link on the repository ans links to final notebooks with results in the article.
+
+\acknowledgments
+
+
+
+\begin{thebibliography}{9}
+
+% The examples of items:
+% \bibitem{bib1}
+% Authors,
+% \emph{Title},
+% \emph{J. Ref.} \textbf{vol} (year) page.
+
+% \bibitem{bib2}
+% A. Pietropaolo et al., \emph{DINS measurements on VESUVIO in the
+%     resonance detector configuration: proton mean kinetic energy in
+%     water}, \jinst{1}{2006}{P04001}.
+
+% \bibitem{bib3}
+% A.I. Harris,
+% \emph{Spectroscopy with multichannel correlation radiometers},
+% \href{http://dx.doi.org/10.1063/1.1898643}
+% {\emph{Rev.\ Sci.\ Instrum.} {\bf 76} (2005) 054503}
+% [\astroph{0504449}].
+
+% \bibitem{bib4}
+% G.F. Knoll, \emph{Radiation detection and measurements}, John Wiley
+%     and Sons, Inc., New York 2000.
+
+% \bibitem{bib5}
+% V. Dangendorf, \emph{Time-resolved fast-neutron imaging with a
+% pulse-counting image intensifier}, in proceedings of
+% \emph{International workshop on fast neutron detectors and
+% applications}, April, 3--6, 2006 University of Cape Town, South Africa
+% \pos{PoS(FNDA2006)008}.
+
+\end{thebibliography}
+
+\end{document}

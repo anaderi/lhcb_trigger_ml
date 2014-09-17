@@ -5,7 +5,7 @@
 \title{New approaches for boosting to uniformity}
 
 \author{
-Aleksandar Bukva$^{\rm ADD}$, 
+Aleksandar Bukva$^e$, 
 Vladimir Gligorov$^d$,
 Alex Rogozhnikov$^{a,b}$\thanks{Corresponding author.}~ ,
 Andrey Ustuzhanin$^b$ and
@@ -14,6 +14,7 @@ Mike Williams$^c$\\
 \llap{$^b$}Yandex LLC, Moscow, Russia\\
 \llap{$^c$}Massachusetts Institute of Technology, Cambridge, MA, United States \\
 \llap{$^d$}Organisation Europ\'eenne pour la Recherche Nucl\'eaire (CERN), Geneva, Switzerland  \\
+\llap{$^e$}Faculty of Physics, Belgrade, Serbia \\
 E-mail: \email{alex.rogozhnikov@yandex.ru}}
 
 
@@ -26,8 +27,11 @@ E-mail: \email{alex.rogozhnikov@yandex.ru}}
 
 
 % AMS packages:
-\usepackage{amsmath, amsthm, amsfonts, xspace}
 
+\usepackage{amsmath, amsthm, amsfonts, xspace}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}	
 
 % Theorems
 %-----------------------------------------------------------------
@@ -49,8 +53,8 @@ E-mail: \email{alex.rogozhnikov@yandex.ru}}
 
 %-----------------------------------------------------------------
 
-\def \x {\ensuremath{\vec{x}}\xspace}
-\def \y {\ensuremath{\vec{y}}\xspace}
+\def\x {\ensuremath{\vec{x}}\xspace}
+\def\y {\ensuremath{\vec{y}}\xspace}
 \def\knn{\text{knn}}
 \def\knni{\text{knn}(i)}
 
@@ -62,13 +66,8 @@ E-mail: \email{alex.rogozhnikov@yandex.ru}}
 
 \input{parts/introduction}
 
-%\section{Uniformity Measurement}
-%\input{parts/metrics}
-%\section{Approaches Proposed}
-%\input{parts/approaches}
-
 \section{Uniformity Boosting Methods}
-\input{parts/methods}
+\input{ugb}
 
 \section{Example Analysis}
 
@@ -107,7 +106,13 @@ The link on the repository ans links to final notebooks with results in the arti
 \appendix
 \section{Other Flatness Loss Criteria}
 
-ADD THEIL, ETC DESCRIPTIONS AND HOW TO IMPLEMENT IN THE ALGORITHM HERE.
+Clean all this up...
+
+%\section{Uniformity Measurement}
+\input{parts/metrics}
+%\section{Approaches Proposed}
+\input{parts/approaches}
+
 
 
 \end{document}

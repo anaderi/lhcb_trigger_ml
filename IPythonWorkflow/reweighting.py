@@ -1,5 +1,4 @@
 import numpy
-import math
 
 from collections import defaultdict
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
@@ -7,9 +6,24 @@ from sklearn.ensemble.forest import RandomForestClassifier
 from sklearn.tree.tree import DecisionTreeClassifier
 
 import commonutils
+from metrics import compute_group_efficiencies
 
 __author__ = "Alex Rogozhnikov"
 
+
+"""
+About
+
+A simple way of uniforming is tried here:
+Each time we simply increase weights in the
+regions with lower-than-average local efficiency
+
+Pay attention that here we don't use boosting of any kind,
+each time we just train new classifier with new weights.
+
+This approach turned out to be very inefficient.
+
+"""
 
 class ReweightClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, uniform_variables, knn=50, iterations=10,
@@ -46,20 +60,21 @@ class ReweightClassifier(BaseEstimator, ClassifierMixin):
 
         self.debug_dict['knn_indices'] = knn_indices
 
+        estimator = None
         for iteration in range(1, self.iterations + 1):
             estimator = clone(self.base_estimator)
             estimator.fit(X_train, y, sample_weight=weights)
-            predict_probas = estimator.predict_proba(X_train)
-
+            predict_proba = estimator.predict_proba(X_train)
 
             if self.efficiencies_as_sum:
                 # here we compute local efficiency as mean probability of signal among knn
-                local_efficiencies = numpy.take(predict_probas[:, 1], knn_indices).mean(axis=1)
+                local_efficiencies = numpy.take(predict_proba[:, 1], knn_indices).mean(axis=1)
             else:
-                global_cut = commonutils.compute_bdt_cut(0.5, y, predict_probas)
-                local_efficiencies = commonutils.compute_groups_efficiencies(global_cut, knn_indices, y, predict_probas,
-                                                                          smoothing_width=0.01)
-            mse = math.sqrt(numpy.var(numpy.log(local_efficiencies)))
+                # here we compute local efficiency at the cut, corresponding to global_efficiency=0.5
+                global_cut = commonutils.compute_bdt_cut(0.5, y, predict_proba[:, 1])
+                local_efficiencies = compute_group_efficiencies(predict_proba[:, 1], knn_indices,
+                                                                cut=global_cut, sample_weight=None)
+            mse = numpy.std(numpy.log(local_efficiencies))
 
             weights *= numpy.exp(- local_efficiencies * y * self.learning_rate * mse)
             bg_weight = numpy.mean(weights[y])
@@ -97,16 +112,16 @@ class ReweightClassifier(BaseEstimator, ClassifierMixin):
 
 
 def test_reweighting():
-    trainX, trainY = commonutils.generateSample(4000, 5, 2.0)
-    testX, testY = commonutils.generateSample(4000, 5, 2.0)
+    trainX, trainY = commonutils.generate_sample(4000, 5, 2.0)
+    testX, testY = commonutils.generate_sample(4000, 5, 2.0)
 
-    reweighter = ReweightClassifier(uniform_variables=trainX.columns[:1],
-                                    base_estimator=RandomForestClassifier(n_estimators=10),
-                                    iterations=10, learning_rate=100)
-    reweighter.fit(trainX, trainY)
-    reweighter.predict(testX)
-    reweighter.predict_proba(testX)
-    reweighter.staged_predict_proba(testX)
+    reweighting = ReweightClassifier(uniform_variables=trainX.columns[:1],
+                                     base_estimator=RandomForestClassifier(n_estimators=10),
+                                     iterations=10, learning_rate=100)
+    reweighting.fit(trainX, trainY)
+    reweighting.predict(testX)
+    reweighting.predict_proba(testX)
+    reweighting.staged_predict_proba(testX)
     print "reweighting is ok"
 
 

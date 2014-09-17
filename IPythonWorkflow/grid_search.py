@@ -214,6 +214,7 @@ class SimpleParameterOptimizer(AbstractParameterGenerator):
             new_state_indices = list(start_indices)
 
             p = 1. - len(self.queued_tasks_) / self.n_evaluations
+            p = numpy.clip(p, 0, 100)
             distance = self.random_state.binomial(self.dimensions_sum // 6, p) + 1
             for _ in range(distance):
                 axis = self.random_state.randint(len(self.dimensions))
@@ -436,7 +437,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                 assert len(result) == portion, "The length of result is very strange"
                 for state_indices, state_dict, score in zip(state_indices_array, state_dict_array, result):
                     params = ", ".join([k + '=' + str(v) for k, v in state_dict.iteritems()])
-                    if isinstance(Exception, score):
+                    if isinstance(score, Exception):
                         # returned exception
                         message = 'Fail during training on the node \nException ' + str(score) +\
                                   '\nParameters:' + params
