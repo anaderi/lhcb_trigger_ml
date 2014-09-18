@@ -1,1 +1,24 @@
-Here should be some description of $D \to hhh$ sample.
+\section{Datasets}
+This study uses simulated event samples produced using the official LHCb simulation framework.
+The software used for the generation of the events is described in LHCb publications as follows :
+
+\begin{quote}
+In the simulation, $pp$ collisions are generated using
+PYTHIA~\cite{Sjostrand:2006za} 
+with a specific LHCb configuration~\cite{LHCb-PROC-2010-056}.  Decays of hadronic particles
+are described by EvtGen~\cite{Lange:2001uf}, in which final state
+radiation is generated using PHOTOS~\cite{Golonka:2005pn}. The
+interaction of the generated particles with the detector and its
+response are implemented using the GEANT
+toolkit~\cite{Allison:2006ve, Agostinelli:2002hh} as described in
+Ref.~\cite{LHCb-PROC-2011-006}.
+\end{quote}
+
+All simulated event samples are generated inside the LHCb detector acceptance.
+The signal used in this analysis consists of $D_s^\pm\to\pi^+\pi^-\pi^\pm$ decays, simulated
+using the $\textrm{D}\_\textrm{DALITZ}$ model of EvtGen to simulate the intermediate resonances which contribute to the
+three pion final state. The background candidates are three pion combinations reconstructed in
+simulated samples of $c\bar{c}$ and $b\bar{b}$ events, where the charm and bottom quark decays are
+inclusively modelled by EvtGen. The simulated events contain ``truth'' information which identifies them as
+signal or background, and which identifies the physical origin of the three pion combinations reconstructed
+in the $c\bar{c}$ and $b\bar{b}$ simulated samples.
