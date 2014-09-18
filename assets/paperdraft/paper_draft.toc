@@ -1,19 +1,19 @@
 \contentsline {section}{\numberline {1}Introduction}{1}
-\contentsline {section}{\numberline {2}Uniformity Measurement}{2}
-\contentsline {subsection}{\numberline {2.1}Ideal uniformity}{2}
-\contentsline {subsection}{\numberline {2.2}Some Restrictions on Uniformity Metrics}{3}
-\contentsline {subsection}{\numberline {2.3}Standard Deviation of Efficiency on Bins (SDE)}{3}
-\contentsline {subsection}{\numberline {2.4}Theil Index of Efficiency}{4}
-\contentsline {subsection}{\numberline {2.5}Distribution Similarity Approach}{4}
-\contentsline {subsection}{\numberline {2.6}Connection Between SDE and Distribution Similarity Approach}{5}
-\contentsline {subsection}{\numberline {2.7}Knn-based modifications}{5}
-\contentsline {subsection}{\numberline {2.8}Advantages and Disadvantages of Different Metrics}{6}
-\contentsline {section}{\numberline {3}Approaches Proposed}{7}
-\contentsline {subsection}{\numberline {3.1}Mean Ada Boost}{7}
-\contentsline {subsection}{\numberline {3.2}Gradient Boosting with AdaLoss Modification (knn-Ada)}{8}
-\contentsline {subsection}{\numberline {3.3}Gradient Boosting with Flatness Loss (FL)}{9}
-\contentsline {section}{\numberline {4}Dataset}{10}
-\contentsline {section}{\numberline {5}Plots}{10}
-\contentsline {section}{\numberline {6}Timings}{10}
-\contentsline {section}{\numberline {7}Summary}{10}
-\contentsline {section}{\numberline {8}Source code}{10}
+\contentsline {section}{\numberline {2}Uniformity Boosting Methods}{2}
+\contentsline {section}{\numberline {3}Example Analysis}{4}
+\contentsline {section}{\numberline {4}Datasets}{4}
+\contentsline {section}{\numberline {5}Timings}{5}
+\contentsline {section}{\numberline {6}Summary}{5}
+\contentsline {section}{\numberline {7}Source code}{5}
+\contentsline {section}{\numberline {A}Other Flatness Loss Criteria}{6}
+\contentsline {subsection}{\numberline {A.1}Ideal uniformity}{6}
+\contentsline {subsection}{\numberline {A.2}Some Restrictions on Uniformity Metrics}{6}
+\contentsline {subsection}{\numberline {A.3}Standard Deviation of Efficiency on Bins (SDE)}{7}
+\contentsline {subsection}{\numberline {A.4}Theil Index of Efficiency}{8}
+\contentsline {subsection}{\numberline {A.5}Distribution Similarity Approach}{8}
+\contentsline {subsection}{\numberline {A.6}Connection Between SDE and Distribution Similarity Approach}{9}
+\contentsline {subsection}{\numberline {A.7}Knn-based modifications}{9}
+\contentsline {subsection}{\numberline {A.8}Advantages and Disadvantages of Different Metrics}{10}
+\contentsline {subsection}{\numberline {A.9}Mean Ada Boost}{11}
+\contentsline {subsection}{\numberline {A.10}Gradient Boosting with AdaLoss Modification (knn-Ada)}{12}
+\contentsline {subsection}{\numberline {A.11}Gradient Boosting with Flatness Loss (FL)}{13}
