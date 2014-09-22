@@ -43,7 +43,7 @@ The gradient-boosting algorithm is general in that it only requires the analyst 
 For example, the loss function obtained from Eq.~\ref{eq:loss_general} using $A_{\rm knn}$, which we refer to as kNNAdaLoss and denote $L_{\rm knn}$, accounts for the score of each event's $k$ nearest neighbors and not just each event individually.
 The pseudo-residuals of $L_{\rm knn}$ are 
 \begin{equation}
-  -\frac{\partial L_{\rm knn}}{\partial s_k} = -\sum\limits_i \gamma_i a_{ik}^{\rm knn} {\rm exp}\left[-\gamma_i \sum_j a_{ij}^{\rm knn} s_j \right].
+  -\frac{\partial L_{\rm knn}}{\partial s_k} = \sum\limits_i \gamma_i a_{ik}^{\rm knn} {\rm exp}\left[-\gamma_i \sum_j a_{ij}^{\rm knn} s_j \right].
 \end{equation}
 One can see that the direction of the gradient will be influenced the most by events whose $k$-nearest-neighbor events are classified poorly. 
 
@@ -69,4 +69,4 @@ This so-called flatness loss penalizes non-uniformity but does not consider the 
 \end{equation}  
 where $\alpha$ is a real-valued parameter that is typically chosen to be small.  The first term in Eq.~\ref{eq:L_ada_flat} penalizes non-uniformity, while that second term penalizes poor classification.  
 
-The loss function given in Eq.~\ref{eq:L_ada_flat} can also be constructed without binning the data using k-nearest-neighbor events.  The cummulative distribution $F_{\rm knn}(s)$ is easily obtained and the bin weight, $w_b$, is replaced by ???
+The loss function given in Eq.~\ref{eq:L_ada_flat} can also be constructed without binning the data using k-nearest-neighbor events.  The cummulative distribution $F_{\rm knn}(s)$ is easily obtained and the bin weight, $w_b$, is replaced by a k-nearest-neighbor weight, $w_{\rm knn}$.  First, each event is weighted by the inverse of the number of times it is included in the k-nearest-neighbor sample of another event.  Then, $w_{\rm knn}$ is the sum of such weights in a k-nearest-neighbor sample divided by the total sum of such weights in the full sample.   This procedure is followed to offset the fact that some events are found in more k-nearest-neighbor samples than other events.  
