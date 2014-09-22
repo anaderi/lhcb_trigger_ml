@@ -353,6 +353,7 @@ class uBoostBDT:
             if self.keep_debug_info:
                 self.debug_dict['weights'].append(sample_weight.copy())
 
+        self.classes_ = estimator.classes_
         if not self.keep_debug_info:
             self.knn_indices = None
 
@@ -559,6 +560,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
                        self.efficiency_steps * [sample_weight],
                        self.efficiency_steps * [neighbours_matrix])
 
+        self.classes_ = self.classifiers[0].classes_
         return self
 
     def predict(self, X):
