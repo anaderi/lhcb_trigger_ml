@@ -149,7 +149,7 @@ def generate_max_voter(event_indices):
     groups = commonutils.indices_of_values(event_indices)
     def voter(cumulative_score, knn_scores):
         result = numpy.zeros(len(cumulative_score))
-        for group in groups:
+        for key, group in groups:
             result[group] = numpy.max(cumulative_score[group])
     return voter
 
