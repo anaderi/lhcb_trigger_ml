@@ -105,7 +105,6 @@ So, the derivative looks like:
 Let $\bin(i)$ be a bin to which event $i$ belongs, then we can compute:
 \def\binIweight{\text{weight}_\text{\bin(i)}}
 
-% TODO sign 
 
 \begin{multline*}
 	- \dfrac{\partial} {\partial \, \score_i} \FL = 
@@ -122,7 +121,25 @@ Let $\bin(i)$ be a bin to which event $i$ belongs, then we can compute:
 		\Bigg|_{x=\score_i}
 \end{multline*}
 
-TODO give explanations here
+Explanation:
+\begin{multline*}
+	- \dfrac{\partial} {\partial \, \score_i} \FL = 
+		- \binIweight \frac{\partial }{ \partial \, \score_i} \int \abs{F_{\bin(i)}(x) - F(x)}^p dx = \\
+	= \binIweight \abs{F_{\bin(i)}(x) - F(x)}^p \bigg|_{x=\score_i-}^{x=\score_i+} = \\
+	= \{ \text{assuming that $F_{\bin(i)}(x)$, $F(x)$ changed small } \} = \\
+	= \binIweight p \abs{F_{\bin(i)}(x) - F(x)}^{p-1} \sgn(F_{\bin(i)}(x) - F(x)) \left[F(x-) - F(x+) + F_{\bin(i)}(x+) - F_{\bin(i)}(x-)\right] \bigg|_{x=\score_i}= \\
+	= \binIweight p \abs{F_{\bin(i)}(x) - F(x)}^{p-1} \sgn(F_{\bin(i)}(x) - F(x)) \left[- \frac{w_i}{\sum_j w_j} + \frac{w_i}{\binIweight} \right] \bigg|_{x=\score_i}= \\
+	= \{ \text{ignoring $\frac{w_i}{\sum_j w_j}$}  \}
+	\cong \binIweight \, p \,  \abs{F_{\bin(i)}(x) - F(x)}^{p-1} 
+	% 	\sgn[F_{\bin(i)}(x) - F(x)]
+	% 	\dfrac{w_i}{\binIweight}
+	% 	\Bigg|_{x=\score_i} = \\
+	% = 
+	% 	w_i \, p \,  \abs{F_{\bin(i)}(x) - F(x)}^{p-1}
+	% 	\sgn[F_{\bin(i)}(x) - F(x)]
+	% 	\Bigg|_{x=\score_i}
+\end{multline*}
+
 
 The next thing we need to point is FL doesn't take into account the quality of predictions. So what we use in practice is linear combination of FlatnessLoss and AdaLoss:
 \[

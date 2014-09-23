@@ -27,7 +27,6 @@ __all__ = ['sde', 'cvm_flatness', 'cvm_2samp', 'theil']
 
 #region Utilities
 
-
 def compute_cdf(ordered_weights):
     """Computes cumulative distribution function (CDF) by ordered weights,
     be sure that sum(ordered_weights) == 1
@@ -54,6 +53,7 @@ AsSignal - classified as signal
 IsBackgroundAsSignal - background, but classified as signal
 ... and so on. Cute, right?
 
+There are many ways to denote this things
 tpr = s = isSasS / isS
 fpr = b = isBasS / isB
 
@@ -256,14 +256,14 @@ README on flatness
 
 this metrics are unfortunately more complicated than usual ones
 and require more information: not only predictions and classes,
-but also mass (or other variables along which we want to split data)
+but also mass (or other variables along which we want to hav uniformity)
 
 Here we compute the different metrics of uniformity of predictions:
 
-SDE (formerly MSEE) - the standard deviation of efficiency
-Theil - Theil index of Efficiency (Theil index is used in economics)
-KS  - based on Kolmogorov-Smirnov distance between distributions
-CVM - based on Cramer-von Mises similarity between distributions
+SDE  - the standard deviation of efficiency
+Theil- Theil index of Efficiency (Theil index is used in economics)
+KS   - based on Kolmogorov-Smirnov distance between distributions
+CVM  - based on Cramer-von Mises similarity between distributions
 
 Mask is needed to show the events of needed class,
 for instance, if we want to compute the uniformity on signal predictions,
@@ -442,7 +442,6 @@ def theil(x, weights):
 
 
 def compute_theil_on_bins(y_pred, mask, bin_indices, target_efficiencies, sample_weight):
-    warnings.warn('Theil on bins is in experimental version', UserWarning)
     y_pred = column_or_1d(y_pred)
     sample_weight = check_sample_weight(y_pred, sample_weight=sample_weight)
 
