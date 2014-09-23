@@ -151,6 +151,7 @@ def generate_max_voter(event_indices):
         result = numpy.zeros(len(cumulative_score))
         for key, group in groups:
             result[group] = numpy.max(cumulative_score[group])
+        return result
     return voter
 
 
