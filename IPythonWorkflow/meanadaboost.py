@@ -14,6 +14,7 @@ from commonutils import check_sample_weight, computeKnnIndicesOfSameClass
 
 # In this module some very simple modifications of AdaBoost
 # is presented. In weights boosting it uses mean of neighbours scores,
+import commonutils
 
 
 __author__ = 'Alex Rogozhnikov'
@@ -81,7 +82,7 @@ class MeanAdaBoostClassifier(BaseEstimator, ClassifierMixin):
             elif self.voting == 'matrix':
                 voted_score = A.dot(cumulative_score)
             else: # self.voting is callable
-                voted_score = self.voting(knn_scores)
+                voted_score = self.voting(cumulative_score, knn_scores)
 
             weight = sample_weight * numpy.exp(- y_signed * voted_score)
             weight = self.normalize_weights(y=y, sample_weight=weight)
@@ -136,5 +137,20 @@ class MeanAdaBoostClassifier(BaseEstimator, ClassifierMixin):
     def staged_predict_proba(self, X):
         for score in self.staged_predict_score(X):
             yield self.score_to_proba(score=score)
+
+
+def generate_max_voter(event_indices):
+    """
+    This voter is prepared specially for using in triggers.
+    Voting returns max(svr predictions),
+    :param event_indices: array, each element is
+
+    """
+    groups = commonutils.indices_of_values(event_indices)
+    def voter(cumulative_score, knn_scores):
+        result = numpy.zeros(len(cumulative_score))
+        for group in groups:
+            result[group] = numpy.max(cumulative_score[group])
+    return voter
 
 
