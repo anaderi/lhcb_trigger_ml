@@ -189,6 +189,7 @@ class Predictions(object):
         for name, values in result.iteritems():
             pylab.plot(values.keys(), values, label=name)
         pylab.xlabel('stage')
+        return result
 
     #endregion
 
@@ -272,7 +273,8 @@ class Predictions(object):
             assert len(bin_centers[-1]) == n_bins
         return bin_centers
 
-    def sde_curves(self, uniform_variables, target_efficiencies=None, n_bins=20, step=3, power=2., label=1):
+    def sde_curves(self, uniform_variables, target_efficiencies=None, n_bins=20, step=3, power=2., label=1,
+                   return_data=False):
         mask = self.y == label
         bin_indices = self._compute_bin_indices(uniform_variables, n_bins=n_bins, mask=mask)
         target_efficiencies = self._check_efficiencies(target_efficiencies)
@@ -281,14 +283,15 @@ class Predictions(object):
             return compute_sde_on_bins(pred[:, label], mask=mask, bin_indices=bin_indices,
                                        target_efficiencies=target_efficiencies, power=power,
                                        sample_weight=self.checked_sample_weight)
-        result = pandas.DataFrame(self._map_on_staged_proba(compute_sde, step=step))
+        result = self._plot_curves(compute_sde, step=step)
         pylab.xlabel("stage"), pylab.ylabel("SDE")
-        for name, sde_values in result.iteritems():
-            pylab.plot(numpy.array(sde_values.index), numpy.array(sde_values), label=name)
         pylab.ylim(0, pylab.ylim()[1] * 1.15)
         pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.00), ncol=3, fancybox=True, shadow=True)
+        if return_data:
+            return result
 
-    def sde_knn_curves(self, uniform_variables, target_efficiencies=None, knn=30, step=3, power=2, label=1):
+    def sde_knn_curves(self, uniform_variables, target_efficiencies=None, knn=30, step=3, power=2, label=1,
+                       return_data=True):
         """Warning: this functions is very slow, specially on large datasets"""
         mask = self.y == label
         knn_indices = computeSignalKnnIndices(uniform_variables, self.X, is_signal=mask, n_neighbors=knn)
@@ -299,14 +302,15 @@ class Predictions(object):
             return compute_sde_on_groups(pred[:, label], mask, groups_indices=knn_indices,
                                          target_efficiencies=target_efficiencies,
                                          power=power, sample_weight=self.sample_weight)
-        result = pandas.DataFrame(self._map_on_staged_proba(compute_sde, step=step))
+        result = self._plot_curves(compute_sde, step=step)
         pylab.xlabel("stage"), pylab.ylabel("SDE")
-        for name, sde_values in result.iteritems():
-            pylab.plot(numpy.array(sde_values.index), numpy.array(sde_values), label=name)
         pylab.ylim(0, pylab.ylim()[1] * 1.15)
         pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.00), ncol=3, fancybox=True, shadow=True)
+        if return_data:
+            return result
 
-    def theil_curves(self, uniform_variables, target_efficiencies=None, n_bins=20, label=1, step=3):
+
+    def theil_curves(self, uniform_variables, target_efficiencies=None, n_bins=20, label=1, step=3, return_data=True):
         mask = self.y == label
         bin_indices = self._compute_bin_indices(uniform_variables, n_bins=n_bins, mask=mask)
         target_efficiencies = self._check_efficiencies(target_efficiencies)
@@ -315,24 +319,28 @@ class Predictions(object):
             return compute_theil_on_bins(pred[:, label], mask=mask, bin_indices=bin_indices,
                                          target_efficiencies=target_efficiencies,
                                          sample_weight=self.checked_sample_weight)
-        self._plot_curves(compute_theil, step=step)
+        result = self._plot_curves(compute_theil, step=step)
         pylab.ylabel("Theil Index")
         pylab.ylim(0, pylab.ylim()[1] * 1.15)
         pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.00), ncol=3, fancybox=True, shadow=True)
+        if return_data:
+            return result
 
-    def ks_curves(self, uniform_variables, n_bins=20, label=1, step=3):
+    def ks_curves(self, uniform_variables, n_bins=20, label=1, step=3, return_data=True):
         mask = self.y == label
         bin_indices = self._compute_bin_indices(uniform_variables, n_bins=n_bins, mask=mask)
 
         def compute_ks(pred):
             return bin_based_ks(pred[:, label], mask=mask, bin_indices=bin_indices,
                                 sample_weight=self.checked_sample_weight)
-        self._plot_curves(compute_ks, step=step)
+        result = self._plot_curves(compute_ks, step=step)
         pylab.ylabel("KS flatness")
         pylab.ylim(0, pylab.ylim()[1] * 1.15)
         pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.00), ncol=3, fancybox=True, shadow=True)
+        if return_data:
+            return result
 
-    def cvm_curves(self, uniform_variables, n_bins=20, label=1, step=3, power=1.):
+    def cvm_curves(self, uniform_variables, n_bins=20, label=1, step=3, power=1., return_data=True):
         """power = 0.5 to compare with SDE"""
         mask = self.y == label
         bin_indices = self._compute_bin_indices(uniform_variables, n_bins=n_bins, mask=mask)
@@ -340,10 +348,12 @@ class Predictions(object):
         def compute_cvm(pred):
             return bin_based_cvm(pred[mask, label], bin_indices=bin_indices[mask],
                                  sample_weight=self.checked_sample_weight[mask]) ** power
-        self._plot_curves(compute_cvm, step=step)
+        result = self._plot_curves(compute_cvm, step=step)
         pylab.ylabel('CvM flatness')
         pylab.ylim(0, pylab.ylim()[1] * 1.15)
         pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.00), ncol=3, fancybox=True, shadow=True)
+        if return_data:
+            return result
 
     def efficiency(self, uniform_variables, stages=None, target_efficiencies=None, n_bins=20, label=1):
         # TODO rewrite completely this function
@@ -364,7 +374,7 @@ class Predictions(object):
 
         if len(uniform_variables) == 1:
             effs = self._map_on_stages(stages=stages,
-                    function=lambda pred: [compute_bin_effs(pred, eff) for eff in target_efficiencies])
+                function=lambda pred: [compute_bin_effs(pred, eff) for eff in target_efficiencies])
             effs = pandas.DataFrame(effs)
             x_limits, = self._compute_bin_centers(uniform_variables, n_bins=n_bins, mask=mask)
             for stage_name, stage in effs.iterrows():
