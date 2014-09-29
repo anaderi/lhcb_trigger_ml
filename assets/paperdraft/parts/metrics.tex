@@ -146,9 +146,23 @@ VAVA : Suggest to combine a Theil of Theils, i.e. treat each global efficiency a
 \label{sec:similarity}
 
 %Let's start from reformulation of what is uniform predictions in signal. First we split all signal events into some bins in uniform variables. There is some empirical distribution $F_\bin$ of predictions in each bin. 
+\begin{figure}[H]
+\label{fig:dsavisualization}
+\centering
+		\begin{subfigure}[b]{0.95\textwidth}
+			\includegraphics[width=\textwidth]{graphs/bins_uniform_distribution.pdf}
+			\caption{Predictions are uniform in mass, the distribution in the bin (yellow) is close to the global(blue).}
+		\end{subfigure}
+		\begin{subfigure}[b]{0.95\textwidth}
+			\includegraphics[width=\textwidth]{graphs/bins_nonuniform_distribution.pdf}
+			\caption{Distribution with peak in the middle, he distributions are quite different now.}
+		\end{subfigure}
+		% \caption{Peak response distribution and efficiencies as a function of mass. }
+\end{figure}
 Instead of measuring uniformity in terms of binned efficiencies, it is possible to consider the distribution of
 the binned classifier predictions, $F_\bin$, directly.
 Ideal uniformity means that all the distributions $F_\bin$ are equal and hence equal to the global distribution $F(x)$. 
+This is demonstrated on figure \ref{
 To 'measure' non-flatness we can use some distribution distance, like Kolmogorov-Smirnov:
 \[
 	 \sum_{\bin} \binweight \max_x \abs{F_{\bin}(x) - F(x)},
