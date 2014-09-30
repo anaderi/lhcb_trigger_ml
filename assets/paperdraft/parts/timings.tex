@@ -7,5 +7,6 @@ Presented in this paper classifiers are building $M$ trees, though there is more
 	\item meanAdaBoost: $O(k \times N)$
 	\item knnAdaLoss: $O(k \times N)$, for the arbitrary matrix $A$ it is 
 	$O( \text{\#nonzero elements in the matrix})$
-	\item FlatnessLoss: $O(N \ln N)$
+	\item FlatnessLoss on bins: $O(N \ln N)$
+	\item FlatnessLoss on knn: $O(N \ln N + N k \ln k) $ 
 \end{itemize}

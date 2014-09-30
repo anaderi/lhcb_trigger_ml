@@ -135,34 +135,35 @@ In our case we have to alter formula a bit to take into account that different b
 \[
 	\theil(\globaleff) = \sum_\bin \binweight \; \frac{\bineff}{\globaleff} \; \ln{\frac{\bineff}{\globaleff}}.
 \]
-
-TODO how to combine Theil for different global efficiencies?
-VAVA : Suggest to combine a Theil of Theils, i.e. treat each global efficiency as a bin?
+To measure the overall non-flatness, we
+average values for several global efficiencies:
 \[
-	\theil = ??? \text{from} \theil(\globaleff)
+	\theil  =  \frac{1}{k} 
+	\sum_{\globaleff \in [\globaleff_1 \dots \globaleff_k] }  
+		\theil(\globaleff)
 \]
 
 \subsection{Distribution Similarity Approach}
 \label{sec:similarity}
 
 %Let's start from reformulation of what is uniform predictions in signal. First we split all signal events into some bins in uniform variables. There is some empirical distribution $F_\bin$ of predictions in each bin. 
-\begin{figure}[H]
-\label{fig:dsavisualization}
-\centering
-		\begin{subfigure}[b]{0.95\textwidth}
+\begin{figure}
+		\centering
+		\begin{subfigure}[b]{0.8\textwidth}
 			\includegraphics[width=\textwidth]{graphs/bins_uniform_distribution.pdf}
-			\caption{Predictions are uniform in mass, the distribution in the bin (yellow) is close to the global(blue).}
+			\caption{Predictions are uniform in mass, the distribution of predictions in the bin (yellow) is close to the global (blue).
+			Yellow rectangle shows the events in the bin over mass.}
 		\end{subfigure}
-		\begin{subfigure}[b]{0.95\textwidth}
+		\begin{subfigure}[b]{0.8\textwidth}
 			\includegraphics[width=\textwidth]{graphs/bins_nonuniform_distribution.pdf}
-			\caption{Distribution with peak in the middle, he distributions are quite different now.}
+			\caption{Distribution with peak in the middle, the distribution in the bin is quite different from global.}
 		\end{subfigure}
-		% \caption{Peak response distribution and efficiencies as a function of mass. }
+		\caption{Demonstration of distribution similarity approach. \label{fig:dsavisualization}}
 \end{figure}
 Instead of measuring uniformity in terms of binned efficiencies, it is possible to consider the distribution of
 the binned classifier predictions, $F_\bin$, directly.
 Ideal uniformity means that all the distributions $F_\bin$ are equal and hence equal to the global distribution $F(x)$. 
-This is demonstrated on figure \ref{
+This is demonstrated on figure \ref{fig:dsavisualization}.
 To 'measure' non-flatness we can use some distribution distance, like Kolmogorov-Smirnov:
 \[
 	 \sum_{\bin} \binweight \max_x \abs{F_{\bin}(x) - F(x)},
@@ -209,7 +210,7 @@ The weights for $\knni$ are proportional to the total weight of events in $\knni
 \[
 	\weightknni = \alpha \sum_{j \in \knni} w_j, \qquad \alpha^{-1} = \sum_i \sum_{j \in \knni} w_j,
 \]
-so again weights are normed to 1: $\sum_{i} \knni = 1$. 
+so again weights are normed to 1: $\sum_{i} \weightknni = 1$. 
 
 It is then possible to write the knn versions of SDE
 \[
@@ -217,18 +218,16 @@ It is then possible to write the knn versions of SDE
 		= \sum_{i \in \text{events}} \weightknni \abs{\effknni - \globaleff}^2,
 \]
 \[
-	\knnSDE^2 = \sum_{\globaleff \in [\globaleff_1, \dots \globaleff_k]}
-		\knnSDE^2(\globaleff),
+	\knnSDE^2 = \frac{1}{k} \sum_{\globaleff \in [\globaleff_1, \dots \globaleff_k]} \knnSDE^2(\globaleff),
 \]
 the Theil index of Efficiency
 \[
 	\text{knnTheil}(\globaleff) = \sum_{i \in \text{events}} \weightknni \; \frac{\effknni}{\globaleff} \; \ln{\frac{\effknni}{\globaleff}},
 \]
 \[
-	\text{knnTheil} = ??? \text{knnTheil}(\globaleff)
+	\text{knnTheil} = \frac{1}{k} \sum_{\globaleff \in [\globaleff_1, \dots \globaleff_k]} \text{knnTheil}(\globaleff),
 \]
 and the similarity-based measure:
-
 \[
 	 \sum_{i \in \text{events}} \weightknni \int \abs{\Fknn(x) - F(x)}^p dF(x).
 \]
@@ -252,7 +251,6 @@ We have two distributions that are different in a way that they are symmetrical.
 while the second one has minus sign in front. Figures~\ref{fig:peakdists}~and~\ref{fig:pitdists} show the distribution of the predictions
 and classifier efficiency as a function of mass for the peak and pit distributions, respectively. 
 \begin{figure}[H]
-\label{fig:peakdists}
 \centering
 		\begin{subfigure}[b]{0.95\textwidth}
 			\includegraphics[width=\textwidth]{graphs/PeakDistributions.png}
@@ -263,11 +261,10 @@ and classifier efficiency as a function of mass for the peak and pit distributio
 			\caption{Mass vs efficiency. The different coloured lines correspond to
 different global classifier efficiencies, as explained in the legend on the leftmost subplot.}
 		\end{subfigure}
-		\caption{Peak response distribution and efficiencies as a function of mass. }
+		\caption{Peak response distribution and efficiencies as a function of mass. \label{fig:peakdists}}
 \end{figure}
 
 \begin{figure}[H]
-\label{fig:pitdists}
 \centering
 		\begin{subfigure}[b]{0.95\textwidth}
 			\includegraphics[width=\textwidth]{graphs/PitDistributions.png}
@@ -278,7 +275,7 @@ different global classifier efficiencies, as explained in the legend on the left
 			\caption{Mass vs efficiency. The different coloured lines correspond to
 different global classifier efficiencies, as explained in the legend on the leftmost subplot.}
 		\end{subfigure}
-		\caption{Pit response distribution and efficiencies as a function of mass.}
+		\caption{Pit response distribution and efficiencies as a function of mass. \label{fig:pitdists}}
 \end{figure}
 
 \begin{figure}[H]
@@ -294,7 +291,6 @@ From these figures we can see that SDE has the same value and it is not able to 
 When our classifiers where applied to data set $D \to hhh$ we got uniformity measures for the SDE and Theil
 metrics shown in Fig.~\ref{fig:d2hhhsdetheil}.
 \begin{figure}[H]
-\label{fig:d2hhhsdetheil}
 \centering
 		\begin{subfigure}[b]{0.95\textwidth}
 			\includegraphics[width=\textwidth]{graphs/D23hSignalEffs.png}
@@ -304,7 +300,7 @@ metrics shown in Fig.~\ref{fig:d2hhhsdetheil}.
 			\includegraphics[width=\textwidth]{graphs/D23hBgEffs.png}
 			\caption{Metrics for $D \to hhh$ background.}
 		\end{subfigure}
-		\caption{Uniformity metrics for the $D \to hhh$ data set. The (top) signal and (bottom) background uniformities are plotted as a function of the training stage of a given classifier, listed in the legends on the leftmost plots.}
+		\caption{Uniformity metrics for the $D \to hhh$ data set. The (top) signal and (bottom) background uniformities are plotted as a function of the training stage of a given classifier, listed in the legends on the leftmost plots. \label{fig:d2hhhsdetheil}}
 \end{figure}
 
 Both metrics shown similar results, and that there is no significant difference on real data sets.
