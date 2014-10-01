@@ -45,7 +45,7 @@ The metric should depend only on the order of predictions, not the exact values 
 This is because we care about which events pass the cut and which don't, not about the exact values of predictions.
 For example: correlation of prediction and mass doesn't satisfy this restriction.
 \item
-The metric should be stable against any of its own free paramters : if it uses bins, changing the number of bins shouldn't affect the result,
+The metric should be stable against any of its own free parameters: if it uses bins, changing the number of bins shouldn't affect the result,
 if it uses $k$-nearest neighbors, it should be stable against different values of $k$.
 \end{enumerate}
 In what follows we will consider different metrics which satisfy these criteria, and then compare their performance in
@@ -147,7 +147,7 @@ average values for several global efficiencies:
 \label{sec:similarity}
 
 %Let's start from reformulation of what is uniform predictions in signal. First we split all signal events into some bins in uniform variables. There is some empirical distribution $F_\bin$ of predictions in each bin. 
-\begin{figure}
+\begin{figure}[h]
 		\centering
 		\begin{subfigure}[b]{0.8\textwidth}
 			\includegraphics[width=\textwidth]{graphs/bins_uniform_distribution.pdf}
@@ -250,7 +250,7 @@ We have two distributions that are different in a way that they are symmetrical.
 
 while the second one has minus sign in front. Figures~\ref{fig:peakdists}~and~\ref{fig:pitdists} show the distribution of the predictions
 and classifier efficiency as a function of mass for the peak and pit distributions, respectively. 
-\begin{figure}[H]
+\begin{figure}[h]
 \centering
 		\begin{subfigure}[b]{0.95\textwidth}
 			\includegraphics[width=\textwidth]{graphs/PeakDistributions.png}
@@ -259,12 +259,12 @@ and classifier efficiency as a function of mass for the peak and pit distributio
 		\begin{subfigure}[b]{0.95\textwidth}
 			\includegraphics[width=\textwidth]{graphs/PeakEffs.png}
 			\caption{Mass vs efficiency. The different coloured lines correspond to
-different global classifier efficiencies, as explained in the legend on the leftmost subplot.}
+				different global classifier efficiencies, as explained in the legend on the leftmost subplot.}
 		\end{subfigure}
 		\caption{Peak response distribution and efficiencies as a function of mass. \label{fig:peakdists}}
 \end{figure}
 
-\begin{figure}[H]
+\begin{figure}[h]
 \centering
 		\begin{subfigure}[b]{0.95\textwidth}
 			\includegraphics[width=\textwidth]{graphs/PitDistributions.png}
@@ -273,12 +273,12 @@ different global classifier efficiencies, as explained in the legend on the left
 		\begin{subfigure}[b]{0.95\textwidth}
 			\includegraphics[width=\textwidth]{graphs/PitEffs.png}
 			\caption{Mass vs efficiency. The different coloured lines correspond to
-different global classifier efficiencies, as explained in the legend on the leftmost subplot.}
+				different global classifier efficiencies, as explained in the legend on the leftmost subplot.}
 		\end{subfigure}
 		\caption{Pit response distribution and efficiencies as a function of mass. \label{fig:pitdists}}
 \end{figure}
 
-\begin{figure}[H]
+\begin{figure}[h]
 \centering
 	\includegraphics[width=0.5\textwidth]{graphs/TheilVsMSE.png}
 	\caption{Comparison of SDE and Theil uniformity measures for different values of the constant $\alpha$ for the peak and pit distributions.
@@ -290,7 +290,7 @@ From these figures we can see that SDE has the same value and it is not able to 
 \subsubsection{$D \to hhh$}
 When our classifiers where applied to data set $D \to hhh$ we got uniformity measures for the SDE and Theil
 metrics shown in Fig.~\ref{fig:d2hhhsdetheil}.
-\begin{figure}[H]
+\begin{figure}[h]
 \centering
 		\begin{subfigure}[b]{0.95\textwidth}
 			\includegraphics[width=\textwidth]{graphs/D23hSignalEffs.png}
