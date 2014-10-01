@@ -40,9 +40,6 @@ So the goal of algorithm is now to minimize the loss function. At each stage it 
 \]
 so it is positive for signal events, negative for background events and has larger modulus for the events which are poorly classified.
 
-After a new tree was built, it's output is altered: for each leaf we can compute such a value, that the result will give the smallest possible value for loss.
-
-...computation of optimal value goes here...
 
 This loss function can be easily modified to take in account not only the score for individual elements, but also 'finds' regions with lower-than-average quality.
 
@@ -67,10 +64,6 @@ it's negative gradient is easily computed:
 	 y_k \, \sum_i a_{ik} \exp [- y_i \sum_j a_{ij} \, \score_j ],
 \]
 from this we can see that new algorithm will pay more attention to the events, which has poorly classified neighbors (and neighbors of neighbors). The named loss targets to obtain uniformity in both signal and background.
-
-And the post-correction can be handled by using second-order Newton-Raphson optimization step 
-
-... TODO computation of optimal value goes here ...
 
 One can note, that the matrix $A$ doesn't need to be necessarily square. One can introduce $M$ groups of events (which may intersect), each group consists of several events with close uniform variables (and close events). Then one introduces $A \in \RR^{M \times N}$:
 \[
