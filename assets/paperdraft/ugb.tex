@@ -2,15 +2,15 @@ The variates used in the BDT are denoted by \x, while the variates in which unif
 
 One category of boosting works by assigning training events more weight based on classification erros made by previous members of the series.  For example, the AdaBoost~\cite{ref:adaboost} algorithm updates the weight of event $i$, $w_i$, according to
 \begin{equation}
-w_i^{\prime} = w_i \times {\rm exp}\left[-\gamma_i s_i\right], 
+w_i^{\prime} = w_i \times {\rm exp}\left[-\gamma_i p_i\right], 
 \end{equation}
-where $\gamma = +1(-1)$ for signal(background) events and $s$ is the so-called score of each event which is obtained as the sum of scores of all of the previous classifiers in the series.  
+where $\gamma = +1(-1)$ for signal(background) events and $p$ is the prediction for each event produced by last classifier in the series.  
 The uBoost technique, described in detail in Ref.~\cite{cit:uboost}, alters the event-weight updating procedure to achieve uniformity in the signal-selection efficiency. 
 
 
 Another approach to obtain uniformity, introduced in this paper, involves defining a more general expression of the AdaBoost criteria:
 \begin{equation}
- w_i^{\prime} = w_i \times {\rm exp}\left[-\gamma_i \sum_j a_{ij}\right],
+ w_i^{\prime} = w_i \times {\rm exp}\left[-\gamma_i \sum_j a_{ij} p_j\right],
 \end{equation}
 where $a_{ij}$ are the elements of some matrix $A$\footnote{A natural choice is a square $n\times n$ matrix, but this is not required.}.  For the case where $A$ is the identity matrix, the AdaBoost weighting procedure is recovered.  
 Other choices of $A$ will induce non-local effects, {\em e.g.}, consider the sparse matrix $A_{\rm knn}$ given by
@@ -29,6 +29,7 @@ A popular choice of loss function is the AdaLoss~\cite{ref:adaboost} function
 \begin{equation}
 L_{\rm ada} = \sum\limits_{i=1}^{n} {\rm exp}\left[-\gamma_i s_i\right]. 
 \end{equation}
+So-called scores $s$ are obtained for each event as sum of predictions of all regressots in the series
 At each stage in the gradient boosting process, a {\em regressor} (a decision tree in our case) is trained whose purpose is to decrease the loss.  This is accomplished using the gradient decent method and the {\em pseudo-residuals}
 \begin{equation}
   -\frac{\partial L_{\rm ada}}{\partial s_i} = \gamma_i  {\rm exp}\left[-\gamma_i s_i\right],
@@ -52,15 +53,15 @@ For example, one could perform the Kolmogorov-Smirnov test in each bin and defin
 \begin{equation}
   L_{\rm flat(KS)} = \sum\limits_{b} w_b {\rm max}|F_b(s)-F(s)|,
 \end{equation}
-where $F_{(b)}(s)$ denotes the cummulative distribution of $f_{(b)}(s)$ and $w_b = \sum \delta({\rm bin}_i - b)/n_{\rm signal}$, {\em i.e.} $w_b$ is the fraction of signal events in the bin\footnote{If weighted events are used, then the fractional sum of weights should be used for $w_b$.}.   
+where $F_{(b)}(s)$ denotes the cumulative distribution of $f_{(b)}(s)$ and $w_b = \sum \delta({\rm bin}_i - b)/n_{\rm signal}$, {\em i.e.} $w_b$ is the fraction of signal events in the bin\footnote{If weighted events are used, then the fractional sum of weights should be used for $w_b$.}.   
 
-The gradient of the Kolmogorov-Smirnov loss function is zero for events with responses greater than the value of $s$ at which ${\rm max}|F_b(s)-F(s)|$ occurs.  Thus, it is not suitable for gradient boosting due to its instability.  Instead, we use the following {\em flatness} loss function:
+The gradient of the Kolmogorov-Smirnov loss function is zero for events with responses not equal to than the value of $s$ at which ${\rm max}|F_b(s)-F(s)|$ occurs.  Thus, it is not suitable for gradient boosting due to its instability.  Instead, we use the following {\em flatness} loss function:
 \begin{equation}
   L_{\rm flat} = \sum\limits_{b} w_b \int |F_b(s)-F(s)|^2 ds,
 \end{equation}
-whose pseudo-residuals are
+whose pseudo-residuals are ($b$ is bin containing $k$th event)
 \begin{equation}
- -\frac{\partial L_{\rm flat}}{\partial s_k} \approx - 2\left[F_b(s_k)-F(s_k)\right]/n_{\rm signal}.
+ -\frac{\partial L_{\rm flat}}{\partial s_k} \approx - 2 w_b \left[F_b(s_k)-F(s_k)\right] .
 \end{equation}
 This so-called flatness loss penalizes non-uniformity but does not consider the quality of the classification.  Therefore, the full loss function used is 
 \begin{equation}
@@ -69,4 +70,5 @@ This so-called flatness loss penalizes non-uniformity but does not consider the 
 \end{equation}  
 where $\alpha$ is a real-valued parameter that is typically chosen to be small.  The first term in Eq.~\ref{eq:L_ada_flat} penalizes non-uniformity, while that second term penalizes poor classification.  
 
-The loss function given in Eq.~\ref{eq:L_ada_flat} can also be constructed without binning the data using k-nearest-neighbor events.  The cummulative distribution $F_{\rm knn}(s)$ is easily obtained and the bin weight, $w_b$, is replaced by a k-nearest-neighbor weight, $w_{\rm knn}$.  First, each event is weighted by the inverse of the number of times it is included in the k-nearest-neighbor sample of another event.  Then, $w_{\rm knn}$ is the sum of such weights in a k-nearest-neighbor sample divided by the total sum of such weights in the full sample.   This procedure is followed to offset the fact that some events are found in more k-nearest-neighbor samples than other events.  
+The loss function given in Eq.~\ref{eq:L_ada_flat} can also be constructed without binning the data using k-nearest-neighbor events.  
+The cumulative distribution $F_{\rm knn}(s)$ is easily obtained and the bin weight, $w_b$, is replaced by a k-nearest-neighbor weight, $w_{\rm knn}$.  First, each event is weighted by the inverse of the number of times it is included in the k-nearest-neighbor sample of another event.  Then, $w_{\rm knn}$ is the sum of such weights in a k-nearest-neighbor sample divided by the total sum of such weights in the full sample.   This procedure is followed to offset the fact that some events are found in more k-nearest-neighbor samples than other events.  
