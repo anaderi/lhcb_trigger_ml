@@ -199,11 +199,13 @@ The advantage of this method is that we don't need to select some global efficie
 \def\Fknn{F_{\knni}}
 
 \def\knnSDE{\text{knnSDE}}
+\newcommand*\mean[1]{\overline{#1}}
+
 
 Though operating with bins is usually both simple and very efficient, 
 in many cases it is hard to find the optimal size of bins in the space of uniform features (specifically in the case of more than two dimensions).
 As mentioned earlier, problems can also arise due to bins with very low populations.
-%One more situation when bins-based approach fails, is when we have too few events to obtain a good statistics at least in several bins.
+
 In these cases we can switch to $k$-nearest neighbors: for each signal event we find $k$ nearest signal events (including the event itself)
 in the space of uniform features. Now we can compute the efficiency $\effknni$, from the empirical distribution $\Fknn$ of nearest neighbors. 
 The weights for $\knni$ are proportional to the total weight of events in $\knni$:
@@ -220,7 +222,7 @@ It is then possible to write the knn versions of SDE
 \[
 	\knnSDE^2 = \frac{1}{k} \sum_{\globaleff \in [\globaleff_1, \dots \globaleff_k]} \knnSDE^2(\globaleff),
 \]
-the Theil index of Efficiency
+the Theil index of efficiency
 \[
 	\text{knnTheil}(\globaleff) = \sum_{i \in \text{events}} \weightknni \; \frac{\effknni}{\globaleff} \; \ln{\frac{\effknni}{\globaleff}},
 \]
@@ -240,14 +242,12 @@ as a nearest neighbour.
 
 \subsection{Advantages and Disadvantages of Different Metrics}
 \subsubsection{Theil and SDE}
-Let us compare two metrics that have proven most appropriate for our problem, SDE and Theil. We have some linearly spaced array of mass of particles
-from interval $[0,1]$, some constant $\alpha$ linearly spaced in interval $[.1,1]$. The predictions are correlated with mass via beta distribution.
-We have two distributions that are different in a way that they are symmetrical. SDE should show no changes if we flip the distribution, while the Theil should make difference between pit and peak. First distribution with a peak is given by:
-
+Let us compare two metrics that have proven most appropriate for our problem, SDE and Theil. We have some masses distributed uniformly in $[0,1]$, some constant $\alpha$ from interval $[.1,1]$. The predictions are correlated with mass via beta distribution.
+We have two distributions that are different in a way that they are symmetrical. SDE should show no changes if we flip the distribution, while the Theil should make difference between pit and peak. 
+First distribution with a peak is obtained by generating a prediction for each event according to it mass:
 \[
-	p\text{[i]}=\textbf{beta}(\alpha \cdot \bar m, \text{abs}(m\text[i]-\bar m))
+	p \thicksim \text{Beta}(\alpha \mean{m}, \abs{m - \mean{m}})
 \]
-
 while the second one has minus sign in front. Figures~\ref{fig:peakdists}~and~\ref{fig:pitdists} show the distribution of the predictions
 and classifier efficiency as a function of mass for the peak and pit distributions, respectively. 
 \begin{figure}[h]
@@ -303,5 +303,5 @@ metrics shown in Fig.~\ref{fig:d2hhhsdetheil}.
 		\caption{Uniformity metrics for the $D \to hhh$ data set. The (top) signal and (bottom) background uniformities are plotted as a function of the training stage of a given classifier, listed in the legends on the leftmost plots. \label{fig:d2hhhsdetheil}}
 \end{figure}
 
-Both metrics shown similar results, and that there is no significant difference on real data sets.
+Both metrics shown similar results, and that there is no significant difference on real data sets (as well as CvM).
 The SDE and Theil metrics can be used together in limit cases to more precisely determine nature of a distribution.

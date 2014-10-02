@@ -1,15 +1,24 @@
 \section{Boosting approaches}
 \subsection{Mean Ada Boost}
 
+% PAY ATTENTION:
+% ada update procedure:
+% w_i' = w_i \times \exp[-y_i p_i], where p is prediction of LAST classifier
+% but this can be written as (and prefer this way):
+% w_i = w^{0}_i * exp[- y_i s_i], where w^0_i is initial event weight, s_i is score - the sum of predictions of all classifiers
+% Don't mess this two formulas :)
+
+
+
 This is a modification of AdaBoost algorithm. In AdaBoost one multiplies weights in such a way:
 \[
-	w_i = w_i \times \exp[-y_i \, \text{score}_i],
+	w_i' = w_i \times \exp[-y_i \, p_i],
 \]
 to enlarge the weights of poorly classified events ($y_i$ is $+1$ for signal and $-1$ for background).
 
 But now we use the mean of prediction of $k$ nearest neighbors (of the same class)
 \[
-	w_i = w_i \times \exp[-y_i \, \dfrac{1}{k} \sum_{j \in \knni} \text{score}_j]
+	w_i = w_i \times \exp[-y_i \, \dfrac{1}{k} \sum_{j \in \knni} p_j]
 \]
 Thus boosting focuses not on the events that were poorly classified, but on the regions with poor classification.
 
@@ -124,13 +133,6 @@ Explanation:
 	= \binIweight p \abs{F_{\bin(i)}(x) - F(x)}^{p-1} \sgn(F_{\bin(i)}(x) - F(x)) \left[- \frac{w_i}{\sum_j w_j} + \frac{w_i}{\binIweight} \right] \bigg|_{x=\score_i}= \\
 	= \{ \text{ignoring $\frac{w_i}{\sum_j w_j}$}  \}
 	\cong \binIweight \, p \,  \abs{F_{\bin(i)}(x) - F(x)}^{p-1} 
-	% 	\sgn[F_{\bin(i)}(x) - F(x)]
-	% 	\dfrac{w_i}{\binIweight}
-	% 	\Bigg|_{x=\score_i} = \\
-	% = 
-	% 	w_i \, p \,  \abs{F_{\bin(i)}(x) - F(x)}^{p-1}
-	% 	\sgn[F_{\bin(i)}(x) - F(x)]
-	% 	\Bigg|_{x=\score_i}
 \end{multline*}
 
 
