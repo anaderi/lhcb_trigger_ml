@@ -1,21 +1,9 @@
-Methods of machine learning are playing an important role in particles physics nowadays, in particular, multivariate analysis (MVA). 
-Different classifiers like boosted decision trees (BDTs) and artificial neural networks (ANNs) are often used as an important step in analysis selection criteria. 
+Methods of machine learning play an important role in modern particles physics. 
+Multivariate classifiers, {\em e.g.}, boosted decision trees (BDTs) and artificial neural networks (ANNs), are now commonly used in analysis selection criteria. BDTs are now even used in software triggers~\cite{ref:lhcbhlt,ref:bbdt}. 
+To enhance the performance, a series of classifiers is typically trained; this is a technique known as boosting.
+Boosting  involves training many simple classifiers and then building a single composite classifier from their responses.
+The classifiers are trained in series with the inputs of each member being augmented based on the performance of its predecessors.  This augmentation is designed such that each new classifier targets more those events which were poorly classified by previous members of the series.  The classifier obtained by combining all members of the series is typically much more powerful than any of the individual members. 
 
-BDTs are now even used in software triggers [link]. The main point of boosting technique is training many simple classifiers and building a composition of their outputs.
-Classifiers are trained one-after-another, their inputs are augmented in such a way that new classifier should target more at those events which were poorly classified by previous ones. The resulting classifier obtained by combining them often much more powerful, than individual ones.
-
-
-In practice, however, there are some restrictions that trained classifier should meet (apart from having good classification quality, which is usually measured by some integrated FOM). For example, in an amplitude analysis obtaining a uniform efficiency in a multivariate space of physics variates, i.e., variates that are of physical interest, is often times more important than any integrated FOM based on the total amount of signal and background. Such analyses often have many variates in which a uniform efficiency is desired. A uniform efficiency reduces systematic uncertainties and helps maintain sensitivity to all hypotheses being tested.
-
-The one approach that was already proposed is uBoost (uniform BOOSTing) --- a modification of AdaBoost algorithm~\cite{ref:FS1997}
-
-Why do we need such algorithms:
-
-\begin{enumerate}
-	\item The result of classification is stable to check different hypotheses
-	\item To get unbiased distribution of signal, this enables us to compute real mass of particle
-	\item Not to get fake peak, thus not get a false discovery
-\end{enumerate}
-
-The features, along which we want the prediction to be flat, will be referred to as 
-\textit{uniform variables}. In high energy physics these are usually masses.
+In particle physics, the most common usage of BDTs is in classifying candidates as signal or background.  The BDT is determined by optimizing some figure of merit (FOM), {\em e.g.}, the signal purity or approximate signal significance.  This approach is optimal for a counting experiment; however, in many cases the BDT-based selection obtained in this way is not optimal.  
+For example, in a Dalitz-plot (or any angular or amplitude analysis) analysis, obtaining a selection efficiency on signal candidates that is uniform across the Dalitz-plot is more important than any integrated FOM.  Similarly, when measuring a mean particle lifetime, obtaining an efficiency that is uniform in lifetime is what is desired.  In both cases, obtaining a uniform selection efficiency greatly reduces the systematic uncertainties involved in the measurement.  
+When searching for a new particle, an analyst may want a uniform efficiency in mass for selecting background candidates so that the BDT-based selection does not generate a fake signal peak.  Furthermore, the analyst may also desire a uniform selection efficiency of signal candidates in mass (or other variates) since the new particle mass is not known.  In such cases, the BDT is often trained on simulated data generated with several values of mass (lifetime, {\em etc.}).  A uniform selection efficiency in mass ensures that the BDT is sensitive to the full range of masses involved in the search. 
