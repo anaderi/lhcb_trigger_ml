@@ -1,0 +1,42 @@
+The variates used in the BDT are denoted by \x, while the variates in which uniformity is desired are denoted by \y.  Some (perhaps all) of the \x variantes will be {\em biasing} in \y, {\em i.e.} they provide discriminating power between signal and background that varies in \y.  A uniform BDT selection efficiency can be obtained by removing all such variates; however, this will also reduce the power of the BDT.  The goal of boosting algorithms presented in this paper is to {\em balance} the biases to produce the optimal uniform selection.
+
+Traditional boosting works by assigning training events more weight based on classification erros made by previous members of the series.  For example, in gradient boosting~\cite{ref:gradboost} the analyst chooses a differentiable loss function with the goal of building a classifier that minimizes the loss.  
+A popular choice of loss function is the AdaBoost~\cite{ref:adaboost} loss function defined as follows:
+\begin{equation}
+L_{\rm Ada} = \sum\limits_{i=1}^{n}w_i \times {\rm exp}\left[-\gamma_i s_i\right], 
+\end{equation}
+where $w$ is the weight of each event, $\gamma = +1(-1)$ for signal(background) events and $s$ the so-called score of each event which is obtained as the sum of scores of all of the previous classifiers in the series.   
+At each stage in the gradient boosting process, a {\em regressor} (a decision tree in our case) is trained whose purpose is to decrease the loss.  This is accomplished utilizing the {\em pseudo-residuals}
+\begin{equation}
+  -\frac{\partial L_{\rm Ada}}{\partial s_i} = w_i \gamma_i  {\rm exp}\left[-\gamma_i s_i\right],
+\end{equation}
+which are positive(negative) for signal(background) events and have larger modulai for poorly classified events, and the gradient descent method.  
+
+The gradient-boosting algorithm is general in that it only requires the analyst specify a loss function and its gradient.  The AdaBoost loss function considers each event individually, but can easily be modified to take into account {\em non-local} properties of the classifier as follows:
+\begin{equation}
+  \label{eq:loss_general}
+  L_{\rm general} = \sum\limits_{i=1}^{n} w_i {\rm exp}\left[-\gamma_i \sum\limits_{j} a_{ij} s_j \right], 
+\end{equation} 
+where $A$ is a matrix\footnote{A natural choice is a square $n\times n$ matrix, but this is not required.}.  For the case where $A$ is the identity matrix, the AdaBoost loss function is recovered.  
+Other choices of $A$ will induce non-local effects, {\em e.g.}, consider the sparse matrix 
+\begin{equation}
+  a_{ij}^{\rm knn} = \begin{cases} 
+    1, & j \in \knn(i), \text{ events $i$ and $j$ belong to the same class} \\
+    0, & \text{otherwise},
+\end{cases}
+\end{equation}
+where $\knn(i)$ denotes the set of $k$-nearest-neighbor events to event $i$.   The loss function obtained from Eq.~\ref{eq:loss_general} using $A^{\rm knn}$, denoted by $L_{\rm knn}$, accounts for the score of each event's $k$ nearest neighbors and not just each event individually.
+The pseudo-residuals are then
+\begin{equation}
+  -\frac{\partial L_{\rm knn}}{\partial s_k} = -\sum\limits_i w_i \gamma_i a_{ik} {\rm exp}\left[-\gamma_i \sum_j a_{ij} s_j \right].
+\end{equation}
+One can see that the direction of the gradient will be influenced the most by events whose $k$-nearest-neighbor events are classified poorly. 
+
+Another approach is to include in the definition of the loss function some uniformity metric.  Consider first the case where the data has been binned in \y.  If the distribution of classifier responses in each bin, $f_b(s)$, is the same as the global response distribution, $f(s)$, then any cut made on the response will produce a uniform selection efficiency in \y.  Therefore, performing a one-dimensional goodness-of-fit test of the hypothesis $f_b \equiv f$ in each bin provides an assessment of the selection uniformity.  
+For example, one could perform the Kolmogorov-Smirnov test in each bin and define a loss function as follows:
+\begin{equation}
+  L_{\rm flat(KS)} = \sum\limits_{b} w_b {\rm max}|F_b(s)-F(s)|,
+\end{equation}
+where $F_{(b)}(s)$ denotes the cummulative distribution of $f_{(b)}(s)$ and $w_b = \sum \delta({\rm bin}_i - b) w_i$, {\em i.e.} $w_b$ is the sum of the weights of the signal events in the bin.   
+
+The gradient of the Kolmogorov-Smirnov loss function is zero for events with responses greater than the value of $s$ at which ${\rm max}|F_b(s)-F(s)|$ occurs.  

@@ -3,9 +3,9 @@ while AdaBoost trains $M$ trees (a user-defined number), uBoost builds $100 \tim
 The algorithms presented in this paper only build $M$ trees; however, the boosting involves some more complicated algorithms.  Training each of the $M$ trees scales as follows for $N$ training events:
 \begin{itemize}
        \item kNNAdaBoost: $O(k \times N)$;
-	\item UGBkNNknn: $O(k \times N)$ for $A_{\rm knn}$, and  
+	\item uGBkNNknn: $O(k \times N)$ for $A_{\rm knn}$, and  
 	$O( \text{\#nonzero elements in the matrix})$ for arbitrary matrix $A$;
-	\item UGBFL(bin): $O(N \ln N)$;
-	\item UGBFL(kNN): $O(N \ln N + N k \ln k) $.
+	\item uGBFL(bin): $O(N \ln N)$;
+	\item uGBFL(kNN): $O(N \ln N + N k \ln k) $.
 \end{itemize}
-In the example analysis studied in this paper, we find that the training time for these new algorithms is within a factor of two the same as AdaBoost.  The CPU-resource usage of these new algorithms is not prohibative. 
+In the example analysis studied in this paper, we find that the training time for these new algorithms is within a factor of two the same as AdaBoost.  The CPU-resource usage of these new algorithms is not prohibitive. 

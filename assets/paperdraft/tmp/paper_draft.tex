@@ -1,0 +1,113 @@
+\pdfoutput=1 % only if pdf/png/jpg images are used
+\documentclass{JINST}
+
+
+\title{New approaches for boosting to uniformity}
+
+\author{
+Aleksandar Bukva$^{\rm ADD}$, 
+Vladimir Gligorov$^d$,
+Alex Rogozhnikov$^{a,b}$\thanks{Corresponding author.}~ ,
+Andrey Ustuzhanin$^b$ and
+Mike Williams$^c$\\
+\llap{$^a$}Lomonosov Moscow State University, Moscow, Russia\\
+\llap{$^b$}Yandex LLC, Moscow, Russia\\
+\llap{$^c$}Massachusetts Institute of Technology, Cambridge, MA, United States \\
+\llap{$^d$}Organisation Europ\'eenne pour la Recherche Nucl\'eaire (CERN), Geneva, Switzerland  \\
+E-mail: \email{alex.rogozhnikov@yandex.ru}}
+
+
+\abstract{
+\input{parts/abstract}
+}
+
+
+
+
+
+% AMS packages:
+\usepackage{amsmath, amsthm, amsfonts, xspace}
+
+
+% Theorems
+%-----------------------------------------------------------------
+
+\newtheorem{thm}{Theorem}[section]
+\newtheorem{cor}[thm]{Corollary}
+\newtheorem{lem}[thm]{Lemma}
+\newtheorem{prop}[thm]{Proposition}
+\theoremstyle{definition}
+\newtheorem{defn}[thm]{Definition}
+\theoremstyle{remark}
+\newtheorem{rem}[thm]{Remark}
+
+\def\RR{\mathbb{R}}
+\def\ZZ{\mathbb{Z}}
+\newcommand{\abs}[1]{\left\vert#1\right\vert}
+\newcommand{\sgn}{\operatorname{sgn}}
+
+
+%-----------------------------------------------------------------
+
+\def \x {\ensuremath{\vec{x}}\xspace}
+\def \y {\ensuremath{\vec{y}}\xspace}
+\def\knn{\text{knn}}
+\def\knni{\text{knn}(i)}
+
+\begin{document}
+\maketitle
+
+
+\section{Introduction}
+
+\input{parts/introduction}
+
+%\section{Uniformity Measurement}
+\input{parts/metrics}
+%\section{Approaches Proposed}
+\input{parts/approaches}
+
+\section{Uniformity Boosting Methods}
+\input{ugb}
+
+\section{Example Analysis}
+
+\input{parts/dataset}
+\input{parts/plots}
+
+\section{Timings}
+
+\input{parts/timings}
+
+\section{Summary}
+
+\input{parts/summary}
+
+\section{Source code}
+
+%\textcolor{red}{xxx}
+
+The link on the repository ans links to final notebooks with results in the article.
+
+\acknowledgments
+
+
+
+\begin{thebibliography}{9}
+
+\bibitem{ref:lhcbhlt} R. Aaij {\em et al.} [LHCb Trigger Group], {\em The LHCb trigger and its performance}, JINST {\bf 8}, P04022 (2013). [arXiv:1211.3055]
+
+\bibitem{ref:bbdt}  V. Gligorov and M. Williams, {\em Efficient, reliable and fast high-level triggering using a bonsai boosted decision tree}, JINST {\bf 8}, P02013 (2013). [arXiv:1210.6861]
+
+\bibitem{ref:uboost} J. Stevens and M. Williams, {\em uBoost: A boosting method for producing uniform selection efficiencies from multivariate classifiers}, JINST {\bf 8}, P12013 (2013) [arXiv:1305.7248]
+
+
+\end{thebibliography}
+
+\appendix
+\section{Other Flatness Loss Criteria}
+
+ADD THEIL, ETC DESCRIPTIONS AND HOW TO IMPLEMENT IN THE ALGORITHM HERE.
+
+
+\end{document}

@@ -51,7 +51,7 @@ if it uses $k$-nearest neighbors, it should be stable against different values o
 In what follows we will consider different metrics which satisfy these criteria, and then compare their performance in
 some test cases.
 
-\subsection{Standard Deviation of Efficiency on Bins (SDE)}
+\subsection*{Standard Deviation of Efficiency on Bins (SDE)}
 
 \def\bineff{\text{eff}_\text{bin}}
 \def\binweight{\text{weight}_\text{bin}}
@@ -123,7 +123,7 @@ Another power $p \neq 2$ can be used as well, but $p=2$ is considered as the def
 %
 %
 
-\subsection{Theil Index of Efficiency}
+\subsection*{Theil Index of Efficiency}
 \def\theil{\text{Theil}}
 
 The Theil Index is frequently used to measure economic inequality:
@@ -143,7 +143,7 @@ average values for several global efficiencies:
 		\theil(\globaleff)
 \]
 
-\subsection{Distribution Similarity Approach}
+\subsection*{Distribution Similarity Approach}
 \label{sec:similarity}
 
 %Let's start from reformulation of what is uniform predictions in signal. First we split all signal events into some bins in uniform variables. There is some empirical distribution $F_\bin$ of predictions in each bin. 
@@ -191,7 +191,7 @@ The advantage of this method is that we don't need to select some global efficie
 %\] The hard thing now is to believe this is literally the same and these two expressions are equal.
 %
 
-\subsection{Knn-based modifications}
+\subsection*{Knn-based modifications}
 
 \def\knni{\text{knn}(i)}
 \def\effknni{\text{eff}_{\knni}}
@@ -240,8 +240,8 @@ because some events are selected as nearest neighbours much more frequently than
 This effect can be suppressed by dividing the initial weight of the event by the number of times it is selected 
 as a nearest neighbour. 
 
-\subsection{Advantages and Disadvantages of Different Metrics}
-\subsubsection{Theil and SDE}
+\subsection*{Advantages and Disadvantages of Different Metrics}
+\subsubsection*{Theil and SDE}
 Let us compare two metrics that have proven most appropriate for our problem, SDE and Theil. We have some masses distributed uniformly in $[0,1]$, some constant $\alpha$ from interval $[0,1]$. 
 The predictions are correlated with mass via beta distribution.
 First distribution with a peak is obtained by generating a prediction for each event according to its mass:
@@ -295,7 +295,7 @@ The Theil can clearly distinguish between these two while the SDE measure cannot
 From these figures we can see that SDE doesn't make any difference between these distributions, while Theil has lower value in the second case 
 which indicates that distribution is flatter. This example demonstrates that Theil has larger penalty for distributions with narrow peaks rather than with narrow pits in the distribution of efficiecies.
 
-\subsubsection{$D \to hhh$}
+\subsubsection*{$D \to hhh$}
 When our classifiers where applied to data set $D \to hhh$ we got uniformity measures for the SDE and Theil
 metrics shown in Fig.~\ref{fig:d2hhhsdetheil}.
 \begin{figure}[h]

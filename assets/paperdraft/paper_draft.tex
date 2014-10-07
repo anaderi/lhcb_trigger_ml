@@ -5,18 +5,18 @@
 \title{New approaches for boosting to uniformity}
 
 \author{
-Aleksandar Bukva$^e$, 
+Alex Rogozhnikov$^{a,b}$\thanks{Corresponding author.}~,
+Aleksandar Bukva$^c$, 
 Vladimir Gligorov$^d$,
-Alex Rogozhnikov$^{a,b}$\thanks{Corresponding author.}~,\newline
-Andrey Ustyuzhanin$^{b,f,g}$ and
-Mike Williams$^c$\\
+Andrey Ustyuzhanin$^{b,e,f}$ and
+Mike Williams$^g$\\
 \llap{$^a$}Lomonosov Moscow State University, Moscow, Russia\\
 \llap{$^b$}Yandex, Moscow, Russia\\
-\llap{$^c$}Massachusetts Institute of Technology, Cambridge, MA, United States \\
+\llap{$^c$}Faculty of Physics, Belgrade, Serbia \\
 \llap{$^d$}Organisation Europ\'eenne pour la Recherche Nucl\'eaire (CERN), Geneva, Switzerland  \\
-\llap{$^e$}Faculty of Physics, Belgrade, Serbia \\
-\llap{$^f$}Moscow Institute of Physics and Technology, Moscow, Russia\\
-\llap{$^g$}Imperial College, London, UK\\
+\llap{$^e$}Moscow Institute of Physics and Technology, Moscow, Russia\\
+\llap{$^f$}Imperial College, London, UK\\
+\llap{$^g$}Massachusetts Institute of Technology, Cambridge, MA, United States \\
 E-mail: \email{alex.rogozhnikov@yandex.ru}}
 
 
@@ -76,7 +76,7 @@ E-mail: \email{alex.rogozhnikov@yandex.ru}}
 \input{parts/dataset}
 \input{parts/plots}
 
-\section{Timings}
+\section{CPU Resources}
 
 \input{parts/timings}
 
@@ -86,14 +86,14 @@ E-mail: \email{alex.rogozhnikov@yandex.ru}}
 
 \section{Source code}
 
-%\textcolor{red}{xxx}
-
-The link on the repository ans links to final notebooks with results in the article.
+UPDATE THIS WITH CODE LOCATION.
+%The link on the repository ans links to final notebooks with results in the article.
 
 \acknowledgments
 
 These results were obtained using events generated with the official LHCb simulation, and we are grateful to the LHCb collaboration for this privilege. 
 We particularly acknowledge the work of the LHCb Simulation and Core Computing teams in tuning the simulation software and managing the productions of simulated events.
+MW is supported by NSF grant PHY-1306550.
 
 \begin{thebibliography}{9}
 
@@ -109,66 +109,71 @@ V. Gligorov and M. Williams,
 JINST {\bf 8}, P02013 (2013). 
 [arXiv:1210.6861]
 
+\bibitem{ref:FS1997}
+{Y. Freund, and R. Schapire},
+\emph{A Decision-Theoretic Generalization of On-Line Learning and an Application to Boosting}, 
+{\emph{Journal of Computer and System Sciences} {\bf 55(1)} (August 1997) 119-139}.
+
 \bibitem{ref:uboost} 
 J. Stevens and M. Williams,
 {\em uBoost: A boosting method for producing uniform selection efficiencies from multivariate classifiers}, 
 JINST {\bf 8}, P12013 (2013). 
 [arXiv:1305.7248]
 
+\bibitem{ref:F1999}
+{Jerome H. Friedman},
+\emph{Greedy Function Approximation: A Gradient Boosting Machine},
+\href{http://statweb.stanford.edu/~jhf/ftp/trebst.pdf}
+{\emph{Annals of Statistics} {\bf 29} (2000) 1189-1232}.
+
+
+
 \bibitem{Sjostrand:2006za}
-{"Sj\"{o}strand, Torbj\"{o}rn and Mrenna, Stephen and Skands, Peter"},
+T.~Sj\"{o}strand, S.~Mrenna and P.~Skands,
 \emph{PYTHIA 6.4 physics and manual},
 \href{http://dx.doi.org/10.1088/1126-6708/2006/05/026}
 {\emph{JHEP} {\bf 05} (2006) 026}.
 [\hepph{0603175}]
 
 \bibitem{LHCb-PROC-2010-056}
-{"Belyaev, I. and others"},
+I.~Belyaev, I. {\em et al.},
 \emph{Handling of the generation of primary events in GAUSS, the LHCb simulation framework},
 \href{http://dx.doi.org/10.1109/NSSMIC.2010.5873949}
 {\emph{NSS/MIC} {\bf IEEE} (2010) 1155}.
 
 \bibitem{Lange:2001uf}
-{"Lange, D. J."},
+D.J.~Lange,
 \emph{The EvtGen particle decay simulation package},
 \href{http://dx.doi.org/10.1016/S0168-9002(01)00089-4}
 {\emph{NIM} {\bf A462} (2001) 152-155}.
 
 \bibitem{Golonka:2005pn}
-{"Golonka, Piotr and Was, Zbigniew"},
+P.~Golonka and Z.~Was,
 \emph{PHOTOS Monte Carlo: a precision tool for QED corrections in $Z$ and $W$ decays},
 \href{http://dx.doi.org/10.1140/epjc/s2005-02396-4}
 {\emph{EPJ} {\bf C45} (2006) 97-107}.
 [\hepph{0506026}]
 
 \bibitem{Allison:2006ve}
-{"Allison, John and Amako, K. and Apostolakis, J. and Araujo, H. and Dubois, P.A. and others"},
+J.~Allison {\em et al.},
 \emph{Geant4 developments and applications},
 \href{http://dx.doi.org/10.1109/TNS.2006.869826}
 {\emph{IEEE TNS} {\bf 53} (2006) 270}.
 
 \bibitem{Agostinelli:2002hh}
-{"Agostinelli, S. and others"},
+S.~Agostinelli {\em et al.},
 \emph{Geant4: a simulation toolkit},
 \href{http://dx.doi.org/10.1016/S0168-9002(03)01368-8}
 {\emph{NIM} {\bf A506} (2003) 250}.
 
 \bibitem{LHCb-PROC-2011-006}
-{"Clemencic, M and others"},
+M~Clemencic {\em et al.},
 \emph{The LHCb simulation application, GAUSS : design, evolution and experience},
 \href{http://dx.doi.org/10.1088/1742-6596/331/3/032023}
 {\emph{J. Phys. Conf. Ser.} {\bf 331} (2011) 032023}.
 
-\bibitem{ref:FS1997}
-{Y. Freund, and R. Schapire},
-\emph{A Decision-Theoretic Generalization of On-Line Learning and an Application to Boosting}, 
-{\emph{Journal of Computer and System Sciences} {\bf 55(1)} (August 1997) 119-139}.
 
-\bibitem{ref:F1999}
-{Jerome H. Friedman},
-\emph{Greedy Function Approximation: A Gradient Boosting Machine},
-\href{http://statweb.stanford.edu/~jhf/ftp/trebst.pdf}
-{\emph{Annals of Statistics} {\bf 29} (2000) 1189-1232}.
+
 
 
 % The examples of items:
