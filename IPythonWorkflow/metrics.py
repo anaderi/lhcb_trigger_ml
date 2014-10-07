@@ -164,7 +164,7 @@ def test_roc_curve(size=100):
     fpr1, tpr1, thr1 = sklearn.metrics.roc_curve(y, pred)
     fpr2, tpr2, thr2 = roc_curve(y, pred)
     # this is insufficient test really
-    assert auc(fpr1, tpr1) == auc(fpr2, tpr2)
+    assert numpy.allclose(auc(fpr1, tpr1), auc(fpr2, tpr2))
 
 test_roc_curve(100)
 
@@ -515,6 +515,12 @@ def _ks_2samp_fast(prepared_data1, data2, prepared_weights1, weights2, F1):
     prepared_weights2 = numpy.bincount(indices, weights=weights2, minlength=len(prepared_data1))
     F2 = compute_cdf(prepared_weights2)
     return numpy.max(numpy.abs(F1 - F2))
+
+def ks_2samp_weighted(data1, data2, weights1, weights2):
+    x = numpy.unique(numpy.concatenate([data1, data2]))
+    inds1 = numpy.searchsorted(x, data1)
+
+
 
 
 def test_ks2samp_fast(size=1000):
