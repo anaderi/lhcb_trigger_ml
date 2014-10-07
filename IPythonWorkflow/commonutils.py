@@ -223,7 +223,7 @@ def test_build_normalizer(checks=10):
     weighted_normalizer = build_normalizer(predictions, sample_weight=predictions)
     result = weighted_normalizer(predictions)
     assert numpy.all(result[numpy.argsort(predictions)] == sorted(result))
-    assert numpy.all(result >= 0) and numpy.all(result <= 1)
+    assert numpy.all(result >= 0) and numpy.all(result <= 1 + 1e-7)
     predictions = numpy.sort(predictions)
     result = weighted_normalizer(predictions)
     result2 = numpy.cumsum(predictions) / numpy.sum(predictions)
