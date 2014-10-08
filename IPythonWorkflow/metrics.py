@@ -6,8 +6,6 @@
 from __future__ import division
 from __future__ import print_function
 
-import warnings
-
 import numpy
 import pandas
 from sklearn.metrics import auc
@@ -27,11 +25,13 @@ __all__ = ['sde', 'cvm_flatness', 'cvm_2samp', 'theil']
 
 #region Utilities
 
+
 def compute_cdf(ordered_weights):
     """Computes cumulative distribution function (CDF) by ordered weights,
     be sure that sum(ordered_weights) == 1
     """
     return numpy.cumsum(ordered_weights) - 0.5 * ordered_weights
+
 
 def generate_test_dataset(n_samples, n_bins):
     random = RandomState()
@@ -369,7 +369,7 @@ def compute_sde_on_bins(y_pred, mask, bin_indices, target_efficiencies, power=2.
                                                     cut=cut, sample_weight=sample_weight)
         result += weighted_deviation(bin_efficiencies, weights=bin_weights, power=power)
 
-    return 10 * (result / len(cuts)) ** (1./power)
+    return (result / len(cuts)) ** (1./power)
 
 
 def compute_sde_on_groups(y_pred, mask, groups_indices, target_efficiencies, sample_weight=None, power=2.):
@@ -382,7 +382,7 @@ def compute_sde_on_groups(y_pred, mask, groups_indices, target_efficiencies, sam
         group_efficiencies = compute_group_efficiencies(y_pred, groups_indices=groups_indices,
                                                         cut=cut, sample_weight=sample_weight)
         sde += weighted_deviation(group_efficiencies, weights=group_weights, power=power)
-    return 10 * (sde / len(cuts)) ** (1./power)
+    return (sde / len(cuts)) ** (1./power)
 
 
 def sde(y, proba, X, uniform_variables, sample_weight=None, label=1, knn=30):
@@ -516,11 +516,18 @@ def _ks_2samp_fast(prepared_data1, data2, prepared_weights1, weights2, F1):
     F2 = compute_cdf(prepared_weights2)
     return numpy.max(numpy.abs(F1 - F2))
 
+
 def ks_2samp_weighted(data1, data2, weights1, weights2):
     x = numpy.unique(numpy.concatenate([data1, data2]))
+    weights1 /= numpy.sum(weights1)
+    weights2 /= numpy.sum(weights2)
     inds1 = numpy.searchsorted(x, data1)
-
-
+    inds2 = numpy.searchsorted(x, data2)
+    w1 = numpy.bincount(inds1, weights=weights1, minlength=len(x))
+    w2 = numpy.bincount(inds2, weights=weights2, minlength=len(x))
+    F1 = compute_cdf(w1)
+    F2 = compute_cdf(w2)
+    return numpy.max(numpy.abs(F1 - F2))
 
 
 def test_ks2samp_fast(size=1000):
@@ -530,8 +537,11 @@ def test_ks2samp_fast(size=1000):
     prep_data, prep_weights, prep_F = _prepare_data(y1, numpy.ones(len(y1)))
     b = _ks_2samp_fast(prep_data, y2, prep_weights, numpy.ones(len(y2)), F1=prep_F)
     c = _ks_2samp_fast(prep_data, y2, prep_weights, numpy.ones(len(y2)), F1=prep_F)
+    d = ks_2samp_weighted(y1, y2, numpy.ones(len(y1)) / 3, numpy.ones(len(y2)) / 4)
     assert numpy.allclose(a, b, rtol=1e-2, atol=1e-3)
     assert numpy.allclose(b, c)
+    assert numpy.allclose(b, d)
+    print('ks2samp is ok')
 
 test_ks2samp_fast()
 
