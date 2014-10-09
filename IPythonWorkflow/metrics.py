@@ -730,7 +730,7 @@ def check_limit(size=2000):
     val2 = compute_sde_on_bins(y_pred, mask=mask, bin_indices=bin_indices, target_efficiencies=effs,
                                sample_weight=sample_weight)
 
-    assert numpy.allclose(val1, (val2 / 10) ** 2, atol=1e-3, rtol=1e-2)
+    assert numpy.allclose(val1, val2 ** 2, atol=1e-3, rtol=1e-2)
 
 
 check_limit()
