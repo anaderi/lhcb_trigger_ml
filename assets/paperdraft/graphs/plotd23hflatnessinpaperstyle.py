@@ -4,13 +4,13 @@ from ROOT import *
 from math import *
 from array import *
 
-basedir = './dto3h/Bg/'
+basedir = './dto3h/Signal/'
 marker = 20
 size = 0.5
 colour = 1
 
-filestoplot = { 'data_sde_bg'   : {'filename':'data_sde_bg'  ,'subclassifiers' : {}},
-                'data_theil_bg' : {'filename':'data_theil_bg','subclassifiers' : {}}}
+filestoplot = { 'data_sde_sig'   : {'filename':'data_sde_sig'  ,'subclassifiers' : {}},
+                'data_theil_sig' : {'filename':'data_theil_sig','subclassifiers' : {}}}
 
 subclassifiercols = {'ada':1,'uGB+knnFL':5,'uBoost':6}
 
@@ -29,7 +29,10 @@ for entry in filestoplot :
       continue
     for subfile in ['ada','uGB+knnFL','uBoost'] :    
       filestoplot[entry]['subclassifiers'][subfile]['x'].append(float(line.split(',')[0]))
-      filestoplot[entry]['subclassifiers'][subfile]['y'].append(float(line.split(',')[subclassifiercols[subfile]].strip('\n')))
+      if entry.find('sde') > -1 :
+        filestoplot[entry]['subclassifiers'][subfile]['y'].append(float(line.split(',')[subclassifiercols[subfile]].strip('\n')))
+      else :
+        filestoplot[entry]['subclassifiers'][subfile]['y'].append(100.*float(line.split(',')[subclassifiercols[subfile]].strip('\n')))
     num += 1
 
   i = 0   
@@ -41,19 +44,23 @@ for entry in filestoplot :
     filestoplot[entry]['subclassifiers'][subfile]['graph'].SetMarkerSize(size)
     filestoplot[entry]['subclassifiers'][subfile]['graph'].SetMarkerStyle(marker+i)
     filestoplot[entry]['subclassifiers'][subfile]['graph'].GetXaxis().SetTitle('classifier stage')
-    filestoplot[entry]['subclassifiers'][subfile]['graph'].GetXaxis().SetNdivisions(510)
+    filestoplot[entry]['subclassifiers'][subfile]['graph'].GetXaxis().SetNdivisions(505)
     filestoplot[entry]['subclassifiers'][subfile]['graph'].GetYaxis().SetTitle('global uniformity')
-    filestoplot[entry]['subclassifiers'][subfile]['graph'].GetXaxis().SetTitleSize(0.075)
-    filestoplot[entry]['subclassifiers'][subfile]['graph'].GetXaxis().SetTitleOffset(0.65)
+    filestoplot[entry]['subclassifiers'][subfile]['graph'].GetXaxis().SetTitleSize(0.09)
+    filestoplot[entry]['subclassifiers'][subfile]['graph'].GetXaxis().SetTitleOffset(0.75)
+    filestoplot[entry]['subclassifiers'][subfile]['graph'].GetXaxis().SetLabelSize(0.065)
+    filestoplot[entry]['subclassifiers'][subfile]['graph'].GetXaxis().SetLabelOffset(0.015)
     filestoplot[entry]['subclassifiers'][subfile]['graph'].GetYaxis().SetTitleSize(0.075)
     filestoplot[entry]['subclassifiers'][subfile]['graph'].GetYaxis().SetTitleOffset(0.95)
+    filestoplot[entry]['subclassifiers'][subfile]['graph'].GetYaxis().SetLabelSize(0.055)
+    filestoplot[entry]['subclassifiers'][subfile]['graph'].GetYaxis().SetDecimals()
 
     i+=1
   thisfile.close() 
 
 #print filestoplot
 
-c1 = TCanvas("c1","c1",1100,800)
+c1 = TCanvas("c1","c1",1920,800)
 c1.Divide(2)
 i=1
 for entry in filestoplot :
@@ -66,9 +73,9 @@ for entry in filestoplot :
     else :
       filestoplot[entry]['subclassifiers'][subfile]['graph'].Draw("PL")
     if entry.find('sde') > -1 :
-      filestoplot[entry]['subclassifiers'][subfile]['graph'].GetYaxis().SetRangeUser(0.0,0.5)  
+      filestoplot[entry]['subclassifiers'][subfile]['graph'].GetYaxis().SetRangeUser(0.0,0.3)  
     else :
-      filestoplot[entry]['subclassifiers'][subfile]['graph'].GetYaxis().SetRangeUser(0.0,0.003)        
+      filestoplot[entry]['subclassifiers'][subfile]['graph'].GetYaxis().SetRangeUser(0.0,0.08)        
     filestoplot[entry]['subclassifiers'][subfile]['graph'].GetXaxis().SetRangeUser(0.0,200.0)  
   i += 1
 #c1.GetPad(0).SetLogy()
@@ -81,11 +88,11 @@ leg.SetFillColor(ROOT.kWhite)
 leg.SetMargin(0.35)
 leg.SetTextSize(0.04)
 for subfile in ['ada','uGB+knnFL','uBoost'] :
-  leg.AddEntry(filestoplot['data_sde_bg']['subclassifiers'][subfile]['graph'],subfile,'pl')
+  leg.AddEntry(filestoplot['data_sde_sig']['subclassifiers'][subfile]['graph'],subfile,'pl')
 leg.Draw("SAME")
 
-c1.SaveAs('D23hBgEffs.pdf')
-c1.SaveAs('D23hBgEffs.png')
+c1.SaveAs('D23hSignalEffs.pdf')
+c1.SaveAs('D23hSignalEffs.png')
 
 
 

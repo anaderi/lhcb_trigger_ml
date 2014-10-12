@@ -733,6 +733,6 @@ def check_limit(size=2000):
     assert numpy.allclose(val1, val2 ** 2, atol=1e-3, rtol=1e-2)
 
 
-check_limit()
+#check_limit()
 
 #endregion

@@ -4,15 +4,15 @@ from ROOT import *
 from math import *
 from array import *
 
-basedir = './data/raspodela2/efikasnosti/'
+basedir = './data/raspodela1/efikasnosti/'
 marker = 20
 size = 0.5
 colour = 1
 
 filestoplot = { '#alpha=0.1':{'dirname':'0','subfiles' : {}},
-                '#alpha=0.28':{'dirname':'1','subfiles' : {}},
+                #'#alpha=0.28':{'dirname':'1','subfiles' : {}},
                 '#alpha=0.47':{'dirname':'2','subfiles' : {}},
-                '#alpha=0.65':{'dirname':'3','subfiles' : {}},
+                #'#alpha=0.65':{'dirname':'3','subfiles' : {}},
                 '#alpha=0.84':{'dirname':'4','subfiles' : {}}}
 
 suffix = 'eff'
@@ -42,18 +42,21 @@ for entry in filestoplot :
     filestoplot[entry]['subfiles'][subfile]['graph'].GetXaxis().SetTitle('mass')
     filestoplot[entry]['subfiles'][subfile]['graph'].GetXaxis().SetNdivisions(510)
     filestoplot[entry]['subfiles'][subfile]['graph'].GetYaxis().SetTitle('efficiency')
-    filestoplot[entry]['subfiles'][subfile]['graph'].GetXaxis().SetTitleSize(0.08)
+    filestoplot[entry]['subfiles'][subfile]['graph'].GetXaxis().SetLabelSize(0.075)
+    filestoplot[entry]['subfiles'][subfile]['graph'].GetXaxis().SetLabelOffset(0.015)
+    filestoplot[entry]['subfiles'][subfile]['graph'].GetXaxis().SetTitleSize(0.10)
     filestoplot[entry]['subfiles'][subfile]['graph'].GetXaxis().SetTitleOffset(0.6)
-    filestoplot[entry]['subfiles'][subfile]['graph'].GetYaxis().SetTitleSize(0.08)
-    filestoplot[entry]['subfiles'][subfile]['graph'].GetYaxis().SetTitleOffset(0.85)
+    filestoplot[entry]['subfiles'][subfile]['graph'].GetYaxis().SetTitleSize(0.10)
+    filestoplot[entry]['subfiles'][subfile]['graph'].GetYaxis().SetLabelSize(0.075)
+    filestoplot[entry]['subfiles'][subfile]['graph'].GetYaxis().SetTitleOffset(0.65)
 
     thisfile.close() 
     i+=1
 
 #print filestoplot
 
-c1 = TCanvas("c1","c1",1600,800)
-c1.Divide(5)
+c1 = TCanvas("c1","c1",1920,500)
+c1.Divide(3)
 i=1
 for entry in filestoplot :
   c1.cd(i)
@@ -80,7 +83,7 @@ for subfile in ['0','2','4','6','8'] :
   leg.AddEntry(filestoplot['#alpha=0.1']['subfiles'][subfile]['graph'],'eff = '+str(int(subfile)+1)+'0\%','pl')
 leg.Draw("SAME")
 
-c1.SaveAs('PitEffs.pdf')
-c1.SaveAs('PitEffs.png')
+c1.SaveAs('PeakEffs.pdf')
+c1.SaveAs('PeakEffs.png')
 
 
