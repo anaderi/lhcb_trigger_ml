@@ -29,7 +29,7 @@ A popular choice of loss function is the so-called AdaLoss function
 \begin{equation}
 L_{\rm ada} = \sum\limits_{i=1}^{n} {\rm exp}\left[-\gamma_i s_i\right]. 
 \end{equation}
-The {\em scores} $s$ are obtained for each event as sum of predictions of all elements in the series. 
+The {\em scores} $s$ are obtained for each event as the sum of predictions of all elements in the series. 
 At each stage in the gradient boosting process, a {\em regressor} (a decision tree in our case) is trained whose purpose is to decrease the loss.  This is accomplished using the gradient decent method and the {\em pseudo-residuals}
 \begin{equation}
   -\frac{\partial L_{\rm ada}}{\partial s_i} = \gamma_i  {\rm exp}\left[-\gamma_i s_i\right],
@@ -49,7 +49,7 @@ The pseudo-residuals of $L_{\rm knn}$ are
 One can see that the direction of the gradient will be influenced the most by events whose $k$-nearest-neighbor events are classified poorly. 
 We generically refer to GB methods designed to achieve uniform selection efficiency as uniform GB (uGB).  The specific algorithm that uses kNNAdaLoss will be called uGBkNN.  
 
-Another approach is to include in the definition of the loss function some uniformity metric.  Consider first the case where the data have been binned in \y.  If the distribution of classifier responses in each bin, $f_b(s)$, is the same as the global response distribution, $f(s)$, then any cut made on the response will produce a uniform selection efficiency in \y.  Therefore, performing a one-dimensional goodness-of-fit test of the hypothesis $f_b \equiv f$ in each bin provides an assessment of the selection uniformity.  
+Another approach is to include some uniformity metric in the definition of the loss function.  Consider first the case where the data have been binned in \y.  If the distribution of classifier responses in each bin, $f_b(s)$, is the same as the global response distribution, $f(s)$, then any cut made on the response will produce a uniform selection efficiency in \y.  Therefore, performing a one-dimensional goodness-of-fit test of the hypothesis $f_b \equiv f$ in each bin provides an assessment of the selection uniformity.  
 For example, one could perform the Kolmogorov-Smirnov test in each bin and define a loss function as follows:
 \begin{equation}
   L_{\rm flat(KS)} = \sum\limits_{b} w_b {\rm max}|F_b(s)-F(s)|,
@@ -69,7 +69,7 @@ This so-called flatness loss penalizes non-uniformity but does not consider the 
 \label{eq:L_ada_flat}
   L_{{\rm ada}+{\rm flat}} = L_{\rm flat} + \alpha L_{\rm ada},
 \end{equation}  
-where $\alpha$ is a real-valued parameter that is typically chosen to be small.  The first term in Eq.~\ref{eq:L_ada_flat} penalizes non-uniformity, while that second term penalizes poor classification.  
+where $\alpha$ is a real-valued parameter that is typically chosen to be small.  The first term in Eq.~\ref{eq:L_ada_flat} penalizes non-uniformity, while the second term penalizes poor classification.  
 We refer to this algorithm as uGB with flatness loss (uGBFL). 
 In principle, many different flatness loss functions can be defined and could be substituted for our choice here.  See Appendix~A for a detailed discussion on this topic. 
 
