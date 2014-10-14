@@ -243,11 +243,11 @@ Let us compare two metrics that have proven most appropriate for our problem, SD
 The predictions are correlated with mass via beta distribution.
 First distribution with a peak is obtained by generating a prediction for each event according to its mass:
 \[
-	p_{\rm peak} \thicksim \text{Beta}(\alpha \mean{m}, \abs{m - \mean{m}})
+	p_{\rm peak} \thicksim \text{Beta}(1 + \alpha f(m), 1), \qquad  f(m) = 5 \times e^{- 100  \abs{m - \overline{m}}^2}
 \]
 The second distribution is obtained by flipping:
 \[
-	p_{\rm pit} \thicksim 1 - \text{Beta}(\alpha \mean{m}, \abs{m - \mean{m}})
+	p_{\rm pit} \thicksim 1 - \text{Beta}(1 + \alpha f(m), 1)
 \]
 SDE should show no changes if we flip the distribution, while the Theil should make difference between pit and peak. 
 
