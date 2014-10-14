@@ -12,7 +12,7 @@ Another approach to obtain uniformity, introduced in this paper, involves defini
 \begin{equation}
  w_i^{\prime} = w_i \times {\rm exp}\left[-\gamma_i \sum_j a_{ij} p_j\right],
 \end{equation}
-where $a_{ij}$ are the elements of some matrix $A$\footnote{A natural choice is a square $n\times n$ matrix, but this is not required.}.  For the case where $A$ is the identity matrix, the AdaBoost weighting procedure is recovered.  
+where $a_{ij}$ are the elements of some square matrix $A$.  For the case where $A$ is the identity matrix, the AdaBoost weighting procedure is recovered.  
 Other choices of $A$ will induce non-local effects, {\em e.g.}, consider the sparse matrix $A_{\rm knn}$ given by
 \begin{equation}
   a_{ij}^{\rm knn} = \begin{cases} 
@@ -41,7 +41,8 @@ The gradient-boosting algorithm is general in that it only requires the analyst 
   \label{eq:loss_general}
   L_{\rm general} = \sum\limits_{i=1}^{n} {\rm exp}\left[-\gamma_i \sum\limits_{j} a_{ij} s_j \right]. 
 \end{equation} 
-For example, the loss function obtained from Eq.~\ref{eq:loss_general} using $A_{\rm knn}$, which we refer to as kNNAdaLoss and denote $L_{\rm knn}$, accounts for the score of each event's $k$ nearest neighbors and not just each event individually.
+For example, the loss function obtained from Eq.~\ref{eq:loss_general} using\footnote{A natural choice is a square $n\times n$ matrix, but this is not required.} 
+$A_{\rm knn}$, which we refer to as kNNAdaLoss and denote $L_{\rm knn}$, accounts for the score of each event's $k$ nearest neighbors and not just each event individually.
 The pseudo-residuals of $L_{\rm knn}$ are 
 \begin{equation}
   -\frac{\partial L_{\rm knn}}{\partial s_k} = \sum\limits_i \gamma_i a_{ik}^{\rm knn} {\rm exp}\left[-\gamma_i \sum_j a_{ij}^{\rm knn} s_j \right].
