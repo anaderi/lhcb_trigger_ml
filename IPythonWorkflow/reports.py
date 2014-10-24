@@ -211,6 +211,11 @@ class Predictions(object):
             pylab.legend(loc="lower left")
         return self
 
+    def root_roc(self):
+        # TODO implement
+        pass
+        # proba_on_stages = pandas.DataFrame(self._get_stages())
+
     def prediction_pdf(self, stages=None, histtype='step', bins=30, show_legend=False):
         proba_on_stages = pandas.DataFrame(self._get_stages(stages))
         for stage_name, proba_on_stage in proba_on_stages.iterrows():
@@ -308,7 +313,6 @@ class Predictions(object):
         pylab.legend(loc='upper center', bbox_to_anchor=(0.5, 1.00), ncol=3, fancybox=True, shadow=True)
         if return_data:
             return result
-
 
     def theil_curves(self, uniform_variables, target_efficiencies=None, n_bins=20, label=1, step=3, return_data=True):
         mask = self.y == label
