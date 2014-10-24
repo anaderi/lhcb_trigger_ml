@@ -1,7 +1,7 @@
 PROJECT=paper_draft
 TEX=pdflatex
 BIBTEX=bibtex
-BUILDTEX=$(TEX) $(PROJECT).tex
+BUILDTEX=$(TEX) $(PROJECT).tex -output-directory=output
 
 all:
 	$(BUILDTEX)
