@@ -1,0 +1,103 @@
+The variates used in the BDT are denoted by \x, while the variates in which uniformity is desired are denoted by \y.  Some (perhaps all) of the \x variates will be {\em biasing} in \y, {\em i.e.} they provide discriminating power between signal and background that varies in \y.  A uniform BDT selection efficiency can be obtained by removing all such variates; however, this will also reduce the power of the BDT.  The goal of boosting algorithms presented in this paper is to {\em balance} the biases to produce the optimal uniform selection.
+
+One category of boosting works by assigning training events more weight based on classification errors made by previous members of the series.  For example, the AdaBoost~\cite{ref:FS1997} algorithm updates the weight of event $i$, $w_i$, according to
+\begin{equation}
+w_i^{\prime} = w_i \times {\rm exp}\left[-\gamma_i p_i\right], 
+\end{equation}
+where $\gamma = +1(-1)$ for signal(background) events and $p$ is the prediction for each event produced by last classifier in the series.  
+The uBoost technique, described in detail in Ref.~\cite{ref:uboost}, alters the event-weight updating procedure to achieve uniformity in the signal-selection efficiency. 
+
+
+Another approach to obtain uniformity, introduced in this paper, involves defining a more general expression of the AdaBoost criteria:
+\begin{equation}
+ w_i^{\prime} = w_i \times {\rm exp}\left[-\gamma_i \sum_j a_{ij} p_j\right],
+\end{equation}
+where $a_{ij}$ are the elements of some square matrix $A$.  For the case where $A$ is the identity matrix, the AdaBoost weighting procedure is recovered.  
+Other choices of $A$ will induce non-local effects, {\em e.g.}, consider the sparse matrix $A_{\rm knn}$ given by
+\begin{equation}
+  a_{ij}^{\rm knn} = \begin{cases} 
+    \frac{1}{k}, & j \in \knni, \text{ events $i$ and $j$ belong to the same class} \\
+    0, & \text{otherwise},
+\end{cases}
+\end{equation}
+where $\knn(i)$ denotes the set of $k$-nearest-neighbor events to event $i$.
+This procedure for updating the event weights, which we refer to as kNNAdaBoost, accounts for the score of each event's $k$ nearest neighbors and not just each event individually.
+
+
+The gradient boosting~\cite{ref:F1999} (GB) algorithm category requires the analyst to choose a differentiable loss function with the goal of building a classifier that minimizes the loss.  
+A popular choice of loss function is the so-called AdaLoss function 
+\begin{equation}
+L_{\rm ada} = \sum\limits_{i=1}^{n} {\rm exp}\left[-\gamma_i s_i\right]. 
+\end{equation}
+The {\em scores} $s$ are obtained for each event as the sum of predictions of all elements in the series. 
+At each stage in the gradient boosting process, a {\em regressor} (a decision tree in our case) is trained whose purpose is to decrease the loss.  This is accomplished using the gradient decent method and the {\em pseudo-residuals}
+\begin{equation}
+  -\frac{\partial L_{\rm ada}}{\partial s_i} = \gamma_i  {\rm exp}\left[-\gamma_i s_i\right],
+\end{equation}
+which are positive(negative) for signal(background) events and have larger moduli for poorly classified events.  
+
+The gradient-boosting algorithm is general in that it only requires the analyst specify a loss function and its gradient.  The AdaLoss function considers each event individually, but can easily be modified to take into account non-local properties of the classifier as follows:
+\begin{equation}
+  \label{eq:loss_general}
+  L_{\rm general} = \sum\limits_{i=1}^{n} {\rm exp}\left[-\gamma_i \sum\limits_{j} a_{ij} s_j \right]. 
+\end{equation} 
+For example, the loss function obtained from Eq.~\ref{eq:loss_general} using\footnote{A natural choice is a square $n\times n$ matrix, but this is not required.} 
+$A_{\rm knn}$, which we refer to as kNNAdaLoss and denote $L_{\rm knn}$, accounts for the score of each event's $k$ nearest neighbors and not just each event individually.
+The pseudo-residuals of $L_{\rm knn}$ are 
+\begin{equation}
+  -\frac{\partial L_{\rm knn}}{\partial s_k} = \sum\limits_i \gamma_i a_{ik}^{\rm knn} {\rm exp}\left[-\gamma_i \sum_j a_{ij}^{\rm knn} s_j \right].
+\end{equation}
+One can see that the direction of the gradient will be influenced the most by events whose $k$-nearest-neighbor events are classified poorly. 
+We generically refer to GB methods designed to achieve uniform selection efficiency as uniform GB (uGB).  The specific algorithm that uses kNNAdaLoss will be called uGBkNN.  
+
+Another approach is to include some uniformity metric in the definition of the loss function.  Consider first the case where the data have been binned in \y.  If the distribution of classifier responses in each bin, $f_b(s)$, is the same as the global response distribution, $f(s)$, then any cut made on the response will produce a uniform selection efficiency in \y.  Therefore, performing a one-dimensional goodness-of-fit test of the hypothesis $f_b \equiv f$ in each bin provides an assessment of the selection uniformity.  
+For example, one could perform the Kolmogorov-Smirnov test in each bin and define a loss function as follows:
+\begin{equation}
+  L_{\rm flat(KS)} = \sum\limits_{b} w_b {\rm max}|F_b(s)-F(s)|,
+\end{equation}
+where $F_{(b)}(s)$ denotes the cumulative distribution of $f_{(b)}(s)$ and $w_b = \sum \delta({\rm bin}_i - b)/n_{\rm signal}$, {\em i.e.} $w_b$ is the fraction of signal events in the bin\footnote{If weighted events are used, then the fractional sum of weights should be used for $w_b$.}.   
+
+The gradient of the Kolmogorov-Smirnov loss function is zero for events with responses greater than the value of $s$ at which ${\rm max}|F_b(s)-F(s)|$ occurs.  Thus, it is not suitable for gradient boosting due to its instability.  Instead, we use the following {\em flatness} loss function:
+\begin{equation}
+  L_{\rm flat} = \sum\limits_{b} w_b \int |F_b(s)-F(s)|^2 ds,
+\end{equation}
+whose pseudo-residuals are ($b$ is the bin containing the $k$th event)
+\begin{equation}
+ -\frac{\partial L_{\rm flat}}{\partial s_k} \approx - 2 w_b \left[F_b(s_k)-F(s_k)\right] .
+\end{equation}
+This so-called flatness loss penalizes non-uniformity but does not consider the quality of the classification.  Therefore, the full loss function used is 
+\begin{equation}
+\label{eq:L_ada_flat}
+  L_{{\rm ada}+{\rm flat}} = L_{\rm flat} + \alpha L_{\rm ada},
+\end{equation}  
+where $\alpha$ is a real-valued parameter that is typically chosen to be small.  The first term in Eq.~\ref{eq:L_ada_flat} penalizes non-uniformity, while the second term penalizes poor classification.  
+We refer to this algorithm as uGB with flatness loss (uGBFL). 
+In principle, many different flatness loss functions can be defined and could be substituted for our choice here.  See Appendix~A for a detailed discussion on this topic. 
+
+The loss function given in Eq.~\ref{eq:L_ada_flat} can also be constructed without binning the data using k-nearest-neighbor events.  
+The cumulative distribution $F_{\rm knn}(s)$ is easily obtained and the bin weight, $w_b$, is replaced by a k-nearest-neighbor weight, $w_{\rm knn}$.  First, each event is weighted by the inverse of the number of times it is included in the k-nearest-neighbor sample of another event.  Then, $w_{\rm knn}$ is the sum of such weights in a k-nearest-neighbor sample divided by the total sum of such weights in the full sample.   This procedure is followed to offset the fact that some events are found in more k-nearest-neighbor samples than other events.  
+We study two versions of uGBFL below: uGBFL using bins denoted by uGBFL(bin) and uGBFL using kNN collections denoted by uGBFL(kNN).  
+The algorithms are summarized in Table~\ref{tab:algs}.
+
+\begin{table}
+  \begin{center}
+    \caption{\label{tab:algs} Description of uniform boosting algorithms.}
+    \begin{tabular}{c|c}
+      %\toprule
+      \hline
+      Name & Description \\
+      \hline
+      %\midrule
+        uBoost & algorithm introduced in Ref.~\cite{ref:uboost}\\
+      \hline
+      %\midrule 
+        kNNAda & AdaBoost modification using matrix $A_{\rm knn}$ \\
+        uGBkNN & gradient boost using kNNAdaLoss loss function \\
+        uGBFL(bin) & gradient boost using flatness loss $+ \alpha$ AdaLoss as in Eq.~\ref{eq:L_ada_flat} (data binned for FL) \\
+        uGBFL(kNN) & same as uGBFL(bin) except kNN events are used rather than bins \\
+      \hline
+      %\bottomrule
+    \end{tabular}
+  \end{center}
+\end{table}
+
