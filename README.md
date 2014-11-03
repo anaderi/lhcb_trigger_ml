@@ -15,7 +15,7 @@ which is good for development, analysis and presenting results (plots, histogram
 
 # Main points
 * working on uniform classifiers - the classifiers with low correlation of predictions and mass (or some other variable(s))
-  * MSE - the measure of uniformity
+  * measures of uniformity (`MSE`, `Theil`, `CvM`, `KS`)
   * __uBoost__ optimized implementation inside
   * __uniformGradientBoosting__ (with different losses, specially __FlatnessLoss__ is very interesting)
 * parameter optimization  <br />
@@ -44,13 +44,15 @@ The libraries you need are `numpy`, `scipy`, `pandas`, `scikit-learn`, `matplotl
 and maybe something else, basically the packages are installed via command-line:
 <pre>sudo pip install numpy scipy pandas scikit-learn matplotlib rootpy root-numpy</pre>
 IPython can be installed via pip as well
-<pre>sudo pip install ipython </pre>
+<pre>sudo pip install "ipython[notebook]" </pre>
 
-To download the repository, clone it with git
+To use the repository, clone it with git
 <pre>git clone https://github.com/anaderi/lhcb_trigger_ml.git
+cd lhcb_trigger_ml
+sudo pip install -e .
 </pre>
 
-To run IPython, there is shell script: IpythonWorkflow/runIpython.sh
+To run IPython, there is shell script: hep_ml/runIpython.sh
 
 In order to work with .root files, you need CERN ROOT (make sure you have it by typing `root` in the console) 
 with pyROOT package.
