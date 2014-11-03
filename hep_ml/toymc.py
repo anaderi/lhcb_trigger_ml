@@ -1,19 +1,28 @@
-from __future__ import division
-from __future__ import print_function
+"""
+This module contains procedures to generate toy Monte-Carlo (toyMC)
+by using modified SMOTE approach.
+
+Mathematically, toyMC generation is like trying to generate data
+from same distribution as you already have.
+
+SMOTE approach relies on assumption that events close in euclidean metrics
+in dataset are really close.
+
+The more data -> the better toyMC.
+"""
+from __future__ import division, print_function
 
 import math
 import numpy
 import pandas
+import pylab
 from scipy.stats.stats import pearsonr
 from sklearn.neighbors import NearestNeighbors
-from commonutils import map_on_cluster, check_sample_weight
+from .commonutils import map_on_cluster, check_sample_weight
 
 __author__ = 'Alex Rogozhnikov'
+__all__ = ['generate_toymc_with_special_features']
 
-# About
-
-# This module contains procedures to generate Toy Monte-Carlo
-# by using modified SMOTE approach
 
 # TODO test whether we really need to symmetrize, in the other case everything can be simplified
 # TODO use classifier-based measure of quality
@@ -40,8 +49,9 @@ def count_probabilities(primary_weights, secondary_weights, knn):
     return probabilities
 
 
-def generate_toymc(data, size, knn=4, symmetrize=True, power=2.0, reweighting_iterations=5, sample_weight=None):
-    """Generates toy Monte-Carlo, the dataset with distribution very close to the original one
+def generate_toymc(data, size, knn=4, symmetrize=True, power=2.0, 
+                   reweighting_iterations=5, sample_weight=None, random_state=numpy.random):
+    """Generates toy Monte-Carlo, the dataset with distribution very close to the original one.
 
     :type data: numpy.array | pandas.DataFrame, the original distribution
     :type size: int, the number of events to generate
@@ -101,9 +111,9 @@ def generate_toymc(data, size, knn=4, symmetrize=True, power=2.0, reweighting_it
         secondary_weights *= ((sample_weight / probabilities) ** 0.5)
 
     # generating indices and weights
-    k_1 = numpy.random.choice(input_length, p=sample_weight, size=size)
+    k_1 = random_state.choice(input_length, p=sample_weight, size=size)
         # randint(0, input_length, size)
-    t_1 = 0.6 * numpy.random.random(size) ** power
+    t_1 = 0.6 * random_state.random(size) ** power
     t_2 = 1. - t_1
 
     k_2 = numpy.zeros(size, dtype=int)
@@ -112,7 +122,7 @@ def generate_toymc(data, size, knn=4, symmetrize=True, power=2.0, reweighting_it
         neigh_weights = numpy.take(secondary_weights, neighs)
         neigh_weights /= numpy.sum(neigh_weights)
         # selected_neigh = getRandom(neighs, weights)
-        k_2[i] = numpy.random.choice(neighs, p=neigh_weights)
+        k_2[i] = random_state.choice(neighs, p=neigh_weights)
 
     numpied_df = data.values
     first = numpy.multiply(t_1[:, numpy.newaxis], numpied_df[k_1, :])
@@ -177,70 +187,23 @@ def generate_toymc_with_special_features(data, size, clustering_features=None, i
     return result
 
 
-# def compare_covariance_3d(data, toy_data, n_features=6):
-#     import pylab
-#     data_cov = numpy.cov(data.T)[:n_features,:n_features]
-#     toy_cov = numpy.cov(toy_data.T)[:n_features,:n_features]
-#
-#     pylab.figure(figsize=(12, 5))
-#     assert data_cov.shape == toy_cov.shape, "different size of matrices"
-#     vars1, vars2 = data_cov.shape
-#     x, y = range(vars1), range(vars2)
-#     X, Y = numpy.meshgrid(x, y)
-#     X = X.flatten()
-#     Y = Y.flatten()
-#     Z_min = numpy.zeros_like(X)
-#     Z_max_left = data_cov.flatten()
-#     Z_max_right = toy_cov.flatten()
-#
-#     maximal_cov = max(numpy.max(toy_cov), numpy.max(data_cov))
-#
-#     pylab.subplot(121, projection='3d')
-#     pylab.bar3d(X - 0.5, Y - 0.5, Z_min, 1, 1, Z_max_left,  color='b', zsort='average')
-#     pylab.zlim(0, maximal_cov)
-#     pylab.title("Original MC")
-#     pylab.view_init(35, 225 + 30)
-#
-#     pylab.subplot(122, projection='3d')
-#     pylab.bar3d(X - 0.5, Y - 0.5, Z_min, 1, 1, Z_max_right, color='b', zsort='average')
-#     pylab.zlim(0, maximal_cov)
-#     pylab.title("Toy MC")
-#     pylab.view_init(35, 225 + 30)
-#     pylab.show()
-
-
-def test_on_dataframe(df, excluded_features=None, clustering_features=None, integer_features=None):
-    """Prints comparison of distributions: original one and toymc.
-    :type excluded_features:  features we absolutely don't take into account
+def compare_toymc(data, clustering_features=None, integer_features=None):
+    """Prints comparison of distributions: original one and generated toyMC.
+    Should be used in IPython notebook.
+    :param pandas.DataFrame data: the dataset we generate toyMC for.
     :type clustering_features: list | None, very close to integer ones, usually have some bool or integer values,
         but events with different values in these columns should not be mixed together
         example: 'isSignal', number of muons
     :type integer_features: list | None, features that have some discrete values, but events can be mixed together
         if they have different values in these columns, the result will be integer
-        example: some weight of event, which should be integer due to technical restrictions
+        example: some weight of event, which should be integer due to technical restrictions, isolation vars.
     """
+    assert isinstance(data, pandas.DataFrame), 'need a Pandas.DataFrame here'
     from IPython.display import display_html
-    import pylab
 
-    if excluded_features is None:
-        excluded_features = []
-    else:
-        print("\nEXCLUDED columns:\n", list(excluded_features))
+    def print_title(title):
+        display_html("<h3>{}</h3>".format(title), raw=True)
 
-    selected_columns = [col for col in df.columns if col not in excluded_features]
-    print("\nSTAYED columns:\n", selected_columns)
-
-    if integer_features is None:
-        integer_features = []
-    else:
-        print("\nINTEGER columns:\n", list(integer_features))
-
-    if clustering_features is None:
-        clustering_features = []
-    else:
-        print("\nCLUSTERING columns:\n", list(clustering_features))
-
-    data = df[selected_columns]
     toy_data = generate_toymc_with_special_features(data, len(data), clustering_features=clustering_features,
                                                     integer_features=integer_features)
 
@@ -248,13 +211,13 @@ def test_on_dataframe(df, excluded_features=None, clustering_features=None, inte
     n_cols = 3
     n_rows = (len(data.columns) + n_cols - 1) // n_cols
     pylab.figure(figsize=(18, 5 * n_rows))
-    for i, column in enumerate(data.columns):
-        pylab.subplot(n_rows, n_cols, i + 1)
+    for i, column in enumerate(data.columns, 1):
+        pylab.subplot(n_rows, n_cols, i)
         pylab.title(column)
         pylab.hist([data[column], toy_data[column]], histtype='step', bins=20)
     pylab.show()
 
-    print("\nMEANS AND STD")
+    print_title("Means and std")
     mean_index = []
     mean_rows = []
     for column in data.columns:
@@ -269,7 +232,7 @@ def test_on_dataframe(df, excluded_features=None, clustering_features=None, inte
     display_html(pandas.DataFrame(mean_rows, index=mean_index,
         columns=['mean orig', 'mean toy', 'difference', 'error, %', 'std orig', 'std toy', 'difference', 'error, %']))
 
-    print("\nCOVARIANCES")
+    print_title('Covariance')
     cov_index = []
     cov_rows = []
     for i, first_column in enumerate(data.columns, ):
@@ -291,27 +254,12 @@ def test_on_dataframe(df, excluded_features=None, clustering_features=None, inte
             pylab.subplot(121)
             pylab.plot(data[first_column], data[second_column], '.', alpha=0.1)
             pylab.xlim(x_min, x_max), pylab.ylim(y_min, y_max)
-            pylab.title("original MC")
+            pylab.title("original data")
 
             pylab.subplot(122)
             pylab.plot(toy_data[first_column], toy_data[second_column], '.', alpha=0.1)
             pylab.ylim(y_min, y_max), pylab.xlim(x_min, x_max)
             pylab.title("toy MC")
 
-            pylab.suptitle(str(first_column) + " vs " + str(second_column))
+            pylab.suptitle("{} vs {}".format(first_column, second_column))
             pylab.show()
-
-
-def test_toy_monte_carlo(size=100):
-    df = pandas.DataFrame(numpy.random.random((size, 40)))
-    res = generate_toymc_with_special_features(df, 5000)
-    assert isinstance(res, pandas.DataFrame), "something wrong with MonteCarlo"
-    print("toymc is ok")
-
-
-if __name__ == '__main__':
-    test_on_dataframe(pandas.DataFrame(numpy.random.normal(size=(1000, 10))))
-    import cProfile
-    cProfile.run("test_toy_monte_carlo(10000)")
-else:
-    test_toy_monte_carlo(1000)

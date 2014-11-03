@@ -8,11 +8,7 @@ from __future__ import print_function
 from __future__ import division
 from itertools import islice
 
-try:
-    from collections import OrderedDict
-except ImportError:
-    from ordereddict import OrderedDict
-
+from collections import OrderedDict
 import time
 import numpy
 import pandas
@@ -515,32 +511,5 @@ def plot_classes_distribution(X, y, var_names):
                 pylab.plot(X.loc[y == label, x_var], X.loc[y == label, y_var], '.',
                            alpha=alpha, label='class=' + str(label))
         else:
-            raise ValueError("More than tow variables are not implemented")
+            raise ValueError("More than two variables are not implemented")
 
-
-def test_reports():
-    from commonutils import generate_sample
-    from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
-    trainX, trainY = generate_sample(1000, 10)
-    testX, testY = generate_sample(1000, 10)
-
-    for low_memory in [True]:
-        classifiers = ClassifiersDict()
-        classifiers['ada'] = AdaBoostClassifier(n_estimators=20)
-        classifiers['forest'] = RandomForestClassifier(n_estimators=20)
-
-        classifiers.fit(trainX, trainY).test_on(testX, testY, low_memory=low_memory)\
-            .roc().show().print_mse(['column0'], in_html=False)\
-            .mse_curves(['column0']).show() \
-            .correlation_curves('column1', ).show() \
-            .learning_curves().show() \
-            .efficiency(trainX.columns[:1], n_bins=7).show() \
-            .efficiency(trainX.columns[:2], n_bins=12, target_efficiencies=[0.5]).show() \
-            .roc(stages=[10, 15]).show() \
-            .hist(['column0']).show()\
-            .compute_metrics(stages=[5, 10], metrics=roc_auc_score)
-
-if __name__ == "__main__":
-    from matplotlib.cbook import Null
-    pylab = Null()
-    test_reports()

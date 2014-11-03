@@ -31,9 +31,8 @@ __copyright__ = "Copyright 2014, Yandex"
 __all__ = ["uBoostBDT", "uBoostClassifier"]
 
 
-# TODO (Alex) update interface of knn function
-# TODO (Alex) take weights into account when computing efficiencies
-# TODO (Alex) add uniform label
+# TODO update interface of knn function
+# TODO take weights into account when computing efficiencies
 
 
 class uBoostBDT:
@@ -136,8 +135,7 @@ class uBoostBDT:
         Reference
         ----------
         .. [1] Justin Stevens, Mike Williams 'uBoost: A boosting method for
-            producing uniform
-            selection efficiencies from multivariate classifiers'
+            producing uniform selection efficiencies from multivariate classifiers'
         """
 
         self.base_estimator = base_estimator
@@ -588,7 +586,7 @@ def generate_mask(n_samples, bagging=True, random_generator=np.random):
         (see http://en.wikipedia.org/wiki/Bootstrap_aggregating)
         if True, usual bootstrap aggregating is used
            (sampling with replacement at each iteration, size=len(X))
-        if float, used sampling with replacement, the size of generated
+        if float, used sampling without replacement, the size of generated
            set is bagging * len(X)
         if False, returns 1."""
     if bagging is True:
@@ -609,6 +607,5 @@ def minimal_test():
     uboost = uBoostClassifier(['column0'], n_estimators=2, efficiency_steps=3)
     uboost.fit(trainX, trainY)
     result = uboost.predict_proba(trainX)
-    assert len(result) == len(trainX)
 
 minimal_test()

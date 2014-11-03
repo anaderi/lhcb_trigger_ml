@@ -3,15 +3,12 @@
 # this module contains different metrics of uniformity
 # and the metrics of quality as well (which support weights, actually)
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
 
 import numpy
 import pandas
 from sklearn.metrics import auc
 from sklearn.utils.validation import column_or_1d, check_arrays
-from numpy.random.mtrand import RandomState
-from scipy.stats import ks_2samp
 
 from commonutils import check_sample_weight, compute_cut_for_efficiency, computeSignalKnnIndices, sigmoid_function
 
@@ -31,16 +28,6 @@ def compute_cdf(ordered_weights):
     be sure that sum(ordered_weights) == 1
     """
     return numpy.cumsum(ordered_weights) - 0.5 * ordered_weights
-
-
-def generate_test_dataset(n_samples, n_bins):
-    random = RandomState()
-    y = random.uniform(size=n_samples) > 0.5
-    pred = random.uniform(size=(n_samples, 2))
-    weights = random.exponential(size=(n_samples,))
-    bins = random.randint(0, n_bins, n_samples)
-    groups = bin_to_group_indices(bin_indices=bins, mask=(y == 1))
-    return y, pred, weights, bins, groups
 
 #endregion
 
@@ -74,10 +61,10 @@ def check_metrics_arguments(y_true, y_pred, sample_weight, two_class=True, binar
         'The lengths of y_true and y_pred are different: %i and %i' % (len(y_true), len(y_pred))
     if two_class:
         assert numpy.in1d(y_true, [0, 1]).all(), 'The y_true array should contain only two labels: 0 and 1, ' \
-            'it contains:' + str(numpy.unique(y_true))
+                                                 'it contains:' + str(numpy.unique(y_true))
     if binary_pred:
         assert numpy.in1d(y_pred, [0, 1]).all(), 'The y_pred array should contain only two labels: 0 and 1, ' \
-            'it contains:' + str(numpy.unique(y_pred))
+                                                 'it contains:' + str(numpy.unique(y_pred))
     return y_true, y_pred, sample_weight
 
 
@@ -157,17 +144,6 @@ def optimal_sensitivity(y_true, y_score, sample_weight=None):
     return numpy.max(s / numpy.sqrt(s + b))
 
 
-def test_roc_curve(size=100):
-    import sklearn.metrics
-    y = (numpy.random.random(size) > 0.5) * 1
-    pred = numpy.random.random(size) * 10
-    fpr1, tpr1, thr1 = sklearn.metrics.roc_curve(y, pred)
-    fpr2, tpr2, thr2 = roc_curve(y, pred)
-    # this is insufficient test really
-    assert numpy.allclose(auc(fpr1, tpr1), auc(fpr2, tpr2))
-
-test_roc_curve(100)
-
 #endregion
 
 
@@ -226,27 +202,6 @@ def bin_to_group_indices(bin_indices, mask):
         result.append(numpy.where(mask & (bin_indices == bin_id))[0])
     return result
 
-
-def test_bin_to_group_indices(size=100, bins=10):
-    bin_indices = RandomState().randint(0, bins, size=size)
-    mask = RandomState().randint(0, 2, size=size) > 0.5
-    group_indices = bin_to_group_indices(bin_indices, mask=mask)
-    assert numpy.sum([len(group) for group in group_indices]) == numpy.sum(mask)
-    a = numpy.sort(numpy.concatenate(group_indices))
-    b = numpy.where(mask > 0.5)[0]
-    assert numpy.all(a == b), 'group indices are computed wrongly'
-
-test_bin_to_group_indices()
-
-
-def test_bins(size=500, n_bins=10):
-    columns = ['var1', 'var2']
-    df = pandas.DataFrame(numpy.random.random((size, 2)), columns=columns)
-    x_limits = numpy.linspace(0, 1, n_bins + 1)[1:-1]
-    bins = compute_bin_indices(df, columns, [x_limits, x_limits])
-    assert numpy.all(0 <= bins) and numpy.all(bins < n_bins * n_bins), "the bins with wrong indices appeared"
-
-test_bins()
 
 #endregion
 
@@ -346,6 +301,7 @@ def weighted_deviation(a, weights, power=2.):
     mean = numpy.average(a, weights=weights)
     return numpy.average(numpy.abs(mean - a) ** power, weights=weights)
 
+
 #endregion
 
 
@@ -369,7 +325,7 @@ def compute_sde_on_bins(y_pred, mask, bin_indices, target_efficiencies, power=2.
                                                     cut=cut, sample_weight=sample_weight)
         result += weighted_deviation(bin_efficiencies, weights=bin_weights, power=power)
 
-    return (result / len(cuts)) ** (1./power)
+    return (result / len(cuts)) ** (1. / power)
 
 
 def compute_sde_on_groups(y_pred, mask, groups_indices, target_efficiencies, sample_weight=None, power=2.):
@@ -382,7 +338,7 @@ def compute_sde_on_groups(y_pred, mask, groups_indices, target_efficiencies, sam
         group_efficiencies = compute_group_efficiencies(y_pred, groups_indices=groups_indices,
                                                         cut=cut, sample_weight=sample_weight)
         sde += weighted_deviation(group_efficiencies, weights=group_weights, power=power)
-    return (sde / len(cuts)) ** (1./power)
+    return (sde / len(cuts)) ** (1. / power)
 
 
 def sde(y, proba, X, uniform_variables, sample_weight=None, label=1, knn=30):
@@ -413,18 +369,6 @@ def sde(y, proba, X, uniform_variables, sample_weight=None, label=1, knn=30):
 
     return compute_sde_on_groups(proba[:, label], mask=mask, groups_indices=groups,
                                  target_efficiencies=[0.5, 0.6, 0.7, 0.8, 0.9], sample_weight=sample_weight)
-
-
-def test_compare_sde_computations(n_samples=1000, n_bins=10):
-    y, pred, weights, bins, groups = generate_test_dataset(n_samples=n_samples, n_bins=n_bins)
-    target_efficiencies = RandomState().uniform(size=3)
-    a = compute_sde_on_bins(pred[:, 1], mask=(y == 1), bin_indices=bins,
-                            target_efficiencies=target_efficiencies, sample_weight=weights)
-    b = compute_sde_on_groups(pred[:, 1], mask=(y == 1), groups_indices=groups,
-                              target_efficiencies=target_efficiencies, sample_weight=weights)
-    assert numpy.allclose(a, b)
-
-test_compare_sde_computations()
 
 
 #endregion
@@ -483,14 +427,6 @@ def theil_flatness(y, proba, X, uniform_variables, sample_weight=None, label=1, 
                                    target_efficiencies=[0.5, 0.6, 0.7, 0.8, 0.9], sample_weight=sample_weight)
 
 
-def test_theil(n_samples=1000, n_bins=10):
-    y, pred, weights, bins, groups = generate_test_dataset(n_samples=n_samples, n_bins=n_bins)
-    a = compute_theil_on_bins(pred[:, 1], y == 1, bins, [0.5, 0.78], sample_weight=weights)
-    b = compute_theil_on_groups(pred[:, 1], y == 1, groups, [0.5, 0.78], sample_weight=weights)
-    assert numpy.allclose(a, b)
-
-test_theil()
-
 #endregion
 
 
@@ -530,22 +466,6 @@ def ks_2samp_weighted(data1, data2, weights1, weights2):
     return numpy.max(numpy.abs(F1 - F2))
 
 
-def test_ks2samp_fast(size=1000):
-    y1 = RandomState().uniform(size=size)
-    y2 = y1[RandomState().uniform(size=size) > 0.5]
-    a = ks_2samp(y1, y2)[0]
-    prep_data, prep_weights, prep_F = _prepare_data(y1, numpy.ones(len(y1)))
-    b = _ks_2samp_fast(prep_data, y2, prep_weights, numpy.ones(len(y2)), F1=prep_F)
-    c = _ks_2samp_fast(prep_data, y2, prep_weights, numpy.ones(len(y2)), F1=prep_F)
-    d = ks_2samp_weighted(y1, y2, numpy.ones(len(y1)) / 3, numpy.ones(len(y2)) / 4)
-    assert numpy.allclose(a, b, rtol=1e-2, atol=1e-3)
-    assert numpy.allclose(b, c)
-    assert numpy.allclose(b, d)
-    print('ks2samp is ok')
-
-test_ks2samp_fast()
-
-
 def bin_based_ks(y_pred, mask, sample_weight, bin_indices):
     """Kolmogorov-Smirnov flatness on bins"""
     assert len(y_pred) == len(sample_weight) == len(bin_indices) == len(mask)
@@ -582,16 +502,6 @@ def groups_based_ks(y_pred, mask, sample_weight, groups_indices):
     return result
 
 
-def test_ks(n_samples=1000, n_bins=10):
-    y, pred, weights, bins, groups = generate_test_dataset(n_samples=n_samples, n_bins=n_bins)
-    mask = y == 1
-    a = bin_based_ks(pred[:, 1], mask=mask, sample_weight=weights, bin_indices=bins)
-    b = groups_based_ks(pred[:, 1], mask=mask, sample_weight=weights, groups_indices=groups)
-    assert numpy.allclose(a, b)
-
-test_ks()
-
-
 def cvm_2samp(data1, data2, weights1=None, weights2=None, power=2.):
     """A handmade function for Cramer-von Mises similarity,
     \int |F_2 - F_1|^p dF_1
@@ -619,19 +529,6 @@ def _cvm_2samp_fast(prepared_data1, data2, prepared_weights1, weights2, F1, powe
     prepared_weights2 = numpy.bincount(indices, weights=weights2, minlength=len(prepared_data1))
     F2 = compute_cdf(prepared_weights2)
     return numpy.average(numpy.abs(F1 - F2) ** power, weights=prepared_weights1)
-
-
-def test_fast_cvm(n_samples=1000):
-    random = RandomState()
-    data1 = random.uniform(size=n_samples)
-    weights1 = random.uniform(size=n_samples)
-    mask = random.uniform(size=n_samples) > 0.5
-    data2 = data1[mask]
-    weights2 = weights1[mask]
-    a = cvm_2samp(data1, data2, weights1, weights2)
-    prepared_data1, prepared_weights1, F1 = _prepare_data(data1, weights1)
-    b = _cvm_2samp_fast(prepared_data1, data2, prepared_weights1, weights2, F1=F1)
-    assert numpy.allclose(a, b)
 
 
 def bin_based_cvm(y_pred, sample_weight, bin_indices):
@@ -699,40 +596,7 @@ def cvm_flatness(y, proba, X, uniform_variables, sample_weight=None, label=1, kn
                                              is_signal=signal_mask, n_neighbors=knn)
     groups_indices = groups_indices[signal_mask, :]
 
-    return group_based_cvm(proba[:, label], mask=signal_mask, groups_indices=groups_indices, sample_weight=sample_weight)
-
-
-def check_cvm(size=1000):
-    y_pred = numpy.random.random(size)
-    y = numpy.random.random(size) > 0.5
-    sample_weight = numpy.random.exponential(size=size)
-    bin_indices = numpy.random.randint(0, 10, size=size)
-    mask = y == 1
-    groups_indices = bin_to_group_indices(bin_indices=bin_indices, mask=mask)
-    cvm1 = bin_based_cvm(y_pred[mask], sample_weight=sample_weight[mask], bin_indices=bin_indices[mask])
-    cvm2 = group_based_cvm(y_pred, mask=mask, sample_weight=sample_weight, groups_indices=groups_indices)
-    assert numpy.allclose(cvm1, cvm2)
-
-check_cvm()
-
-
-def check_limit(size=2000):
-    """ Checks that in the limit CvM coincides with MSE """
-    effs = numpy.linspace(0, 1, 2000)
-    y_pred = numpy.random.random(size)
-    y = numpy.random.random(size) > 0.5
-    sample_weight = numpy.random.exponential(size=size)
-    bin_indices = numpy.random.randint(0, 10, size=size)
-    y_pred += bin_indices * numpy.random.random()
-    mask = y == 1
-
-    val1 = bin_based_cvm(y_pred[mask], sample_weight=sample_weight[mask], bin_indices=bin_indices[mask])
-    val2 = compute_sde_on_bins(y_pred, mask=mask, bin_indices=bin_indices, target_efficiencies=effs,
-                               sample_weight=sample_weight)
-
-    assert numpy.allclose(val1, val2 ** 2, atol=1e-3, rtol=1e-2)
-
-
-#check_limit()
+    return group_based_cvm(proba[:, label], mask=signal_mask, groups_indices=groups_indices,
+                           sample_weight=sample_weight)
 
 #endregion

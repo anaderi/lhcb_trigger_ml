@@ -6,19 +6,17 @@ import copy
 import numbers
 import warnings
 
+import numpy
 import pandas
 import scipy.sparse as sparse
-from sklearn.base import BaseEstimator, ClassifierMixin
-import numpy
 
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.tree.tree import DecisionTreeRegressor, DTYPE
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays, column_or_1d
 
-from commonutils import check_sample_weight, computeSignalKnnIndices
-import commonutils
-from metrics import compute_group_weights
-import metrics
+from .commonutils import check_sample_weight, computeSignalKnnIndices, indices_of_values, sigmoid_function
+from .metrics import compute_group_weights, compute_bin_indices, bin_to_group_indices
 
 
 __author__ = 'Alex Rogozhnikov'
@@ -36,16 +34,6 @@ def compute_positions(y_pred, sample_weight):
     return efficiencies[numpy.argsort(order)]
 
 
-def check_orders(size=10):
-    effs1 = compute_positions(numpy.arange(size), numpy.ones(size))
-    p = numpy.random.permutation(size)
-    effs2 = compute_positions(numpy.arange(size)[p], numpy.ones(size))
-    assert numpy.all(effs1[p] == effs2), 'Efficiencies are wrong'
-    assert numpy.all(effs1 == numpy.sort(effs1))
-
-check_orders()
-
-
 def random_sample_mask(size, n_inbag, random_state):
     if n_inbag >= size:
         return numpy.ones(size, dtype=bool)
@@ -59,7 +47,7 @@ def random_sample_mask(size, n_inbag, random_state):
 
 class AbstractLossFunction(BaseEstimator):
     def fit(self, X, y, sample_weight):
-        """ This method is optional, it is called before all the others"""
+        """ This method is optional, it is called before all the others."""
         pass
 
     def negative_gradient(self, y_pred):
@@ -83,7 +71,7 @@ class AbstractLossFunction(BaseEstimator):
         masked_terminal_regions = terminal_regions.copy()
         masked_terminal_regions[~update_mask] = -1
 
-        for leaf, indices_in_leaf in commonutils.indices_of_values(masked_terminal_regions):
+        for leaf, indices_in_leaf in indices_of_values(masked_terminal_regions):
             if leaf == -1:
                 continue
             self.update_tree_leaf(tree, leaf=leaf, indices_in_leaf=indices_in_leaf,
@@ -122,6 +110,7 @@ class AdaLossFunction(AbstractLossFunction):
         return 0.5 * numpy.log(w1 / w2)
 
 #region MatrixLossFunction
+
 
 class KnnLossFunction(AbstractLossFunction):
     def __init__(self, uniform_variables):
@@ -185,7 +174,7 @@ class SimpleKnnLossFunction(KnnLossFunction):
         :param list[str] uniform_variables: the features, along which uniformity is desired
         :param int knn: the number of nonzero elements in the row, corresponding to event in 'uniform class'
         :param int|list[int] uniform_label: the label (labels) of 'uniform classes'
-        :param bool distinguish_classes: if True, 1's will be placed only for
+        :param bool distinguish_classes: if True, 1's will be placed only for events of same class.
         """
         self.knn = knn
         self.distinguish_classes = distinguish_classes
@@ -204,7 +193,7 @@ class SimpleKnnLossFunction(KnnLossFunction):
                 mask = label_mask
             else:
                 mask = numpy.ones(len(trainY), dtype=numpy.bool)
-            knn_indices = commonutils.computeSignalKnnIndices(self.uniform_variables, trainX, mask, self.knn)
+            knn_indices = computeSignalKnnIndices(self.uniform_variables, trainX, mask, self.knn)
             knn_indices = knn_indices[label_mask, :]
             ind_ptr = numpy.arange(0, n_label * self.knn + 1, self.knn)
             column_indices = knn_indices.flatten()
@@ -374,8 +363,8 @@ class BinFlatnessLossFunction(AbstractFlatnessLossFunction):
             bin_limits = []
             for axis_limits in extended_bin_limits:
                 bin_limits.append(axis_limits[1 + shift:-1:2])
-            bin_indices = metrics.compute_bin_indices(X, self.uniform_variables, bin_limits)
-            groups_indices += list(metrics.bin_to_group_indices(bin_indices, mask=label_mask))
+            bin_indices = compute_bin_indices(X, self.uniform_variables, bin_limits)
+            groups_indices += list(bin_to_group_indices(bin_indices, mask=label_mask))
         return groups_indices
 
 
@@ -406,13 +395,22 @@ class KnnFlatnessLossFunction(AbstractFlatnessLossFunction):
 #TODO different kinds of updating (all, other, random and so on)
 
 class uGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
-    def __init__(self, loss=None, n_estimators=10, learning_rate=0.1,
-                 subsample=1., min_samples_split=2, min_samples_leaf=1,
-                 max_features=None, max_leaf_nodes=None,
-                 max_depth=3, init_estimator=None, update_tree=False,
-                 criterion='mse', splitter='best', train_variables=None, random_state=None):
-
-        """This class supports only two-class classification and only special losses
+    def __init__(self, loss=None,
+                 n_estimators=10,
+                 learning_rate=0.1,
+                 subsample=1.,
+                 min_samples_split=2,
+                 min_samples_leaf=1,
+                 max_features=None,
+                 max_leaf_nodes=None,
+                 max_depth=3,
+                 init_estimator=None,
+                 update_tree=False,
+                 criterion='mse',
+                 splitter='best',
+                 train_variables=None,
+                 random_state=None):
+        """This version of gradient boosting supports only two-class classification and only special losses
         derived from AbstractLossFunction.
         :type loss: AbstractLossFunction
         """
@@ -491,6 +489,7 @@ class uGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
             y_pred += self.learning_rate * tree.predict(X)
             self.estimators.append(tree)
             self.scores.append(self.loss(y_pred))
+        return self
 
     def get_train_vars(self, X):
         if self.train_variables is None:
@@ -500,7 +499,7 @@ class uGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
 
     def score_to_proba(self, score):
         result = numpy.zeros([len(score), 2], dtype=float)
-        result[:, 1] = commonutils.sigmoid_function(score, width=1.)
+        result[:, 1] = sigmoid_function(score, width=1.)
         result[:, 0] = 1. - result[:, 1]
         return result
 
@@ -526,6 +525,9 @@ class uGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
 
     def predict_proba(self, X):
         return self.score_to_proba(self.predict_score(X))
+
+    def predict(self, X):
+        return numpy.argmax(self.predict_proba(X), axis=1)
 
 #endregion
 

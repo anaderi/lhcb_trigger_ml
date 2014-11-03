@@ -5,8 +5,8 @@ from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.ensemble.forest import RandomForestClassifier
 from sklearn.tree.tree import DecisionTreeClassifier
 
-import commonutils
-from metrics import compute_group_efficiencies
+from .. import commonutils
+from ..metrics import compute_group_efficiencies
 
 __author__ = "Alex Rogozhnikov"
 

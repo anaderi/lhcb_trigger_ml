@@ -3,9 +3,10 @@
 # this module is implementation of optimized grid_search,
 # which uses some metropolis-like algorithm.
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
+
 from itertools import islice
+from collections import defaultdict, OrderedDict
 from warnings import warn
 import numpy
 import pandas
@@ -17,13 +18,7 @@ from sklearn.cross_validation import StratifiedKFold
 from sklearn.grid_search import _check_param_grid
 from sklearn.metrics.metrics import roc_auc_score
 from sklearn.utils.random import check_random_state
-import commonutils
-from collections import defaultdict
-
-try:
-    from collections import OrderedDict
-except ImportError:
-    from ordereddict import OrderedDict
+from . import commonutils
 
 __author__ = 'Alex Rogozhnikov'
 
@@ -237,48 +232,10 @@ class SimpleParameterOptimizer(AbstractParameterGenerator):
             self.grid_scores_[state_indices] = value
 
 
-class FunctionOptimizer(object):
-    """Class was created to test different optimizing algorithms on functions,
-    it gets any function of several variables and just optimizes it"""
-    def __init__(self, function, param_grid, n_evaluations=100, parameter_generator_type=None):
-        """
-        :type function: some function, we are looking for its maximal value.
-        :type parameter_generator_type: (param_grid, n_evaluations) -> AbstractParameterGenerator
-        """
-        self.function = function
-        if parameter_generator_type is None:
-            parameter_generator_type = SimpleParameterOptimizer
-        self.generator = parameter_generator_type(param_grid, n_evaluations)
-
-    def optimize(self):
-        assert isinstance(self.generator, AbstractParameterGenerator), 'the generator should be an instance of ' \
-            'abstract parameter generator'
-        for _ in range(self.generator.n_evaluations):
-            next_indices, next_params = self.generator.generate_next_point()
-            value = self.function(**next_params)
-            self.generator.add_result(state_indices=next_indices, value=value)
-
-    def print_results(self, reorder=True):
-        self.generator.print_results(reorder=reorder)
-
-
-def test_simple_optimizer(n_evaluations=60):
-    optimizer = FunctionOptimizer(lambda x, y, z, w: x * y * z * w,
-                                  param_grid={'x': range(11), 'y': range(11), 'z': range(11), 'w': range(11)},
-                                  n_evaluations=n_evaluations)
-    optimizer.optimize()
-    assert len(optimizer.generator.grid_scores_) == n_evaluations
-    assert len(optimizer.generator.queued_tasks_) == n_evaluations
-    assert set(optimizer.generator.grid_scores_.keys()) == optimizer.generator.queued_tasks_
-    # optimizer.print_results()
-
-
-test_simple_optimizer()
-
-
 def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
-                        score_function, sample_weight=None, label=1, scorer_needs_x=False, catch_exceptions=True):
-    """This function is needed """
+                        score_function, sample_weight=None, label=1,
+                        scorer_needs_x=False, catch_exceptions=True):
+    """This function is needed to train classifier with some parameters on the cluster."""
     try:
         k_folder = StratifiedKFold(y=y, n_folds=folds, shuffle=True)
         score = 0.
@@ -475,24 +432,4 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
 
     def print_param_stats(self, best=0.3):
         self.generator.print_param_stats(best=best)
-
-
-def test_grid_search():
-    from sklearn.ensemble import AdaBoostClassifier
-    from sklearn.tree import DecisionTreeClassifier, ExtraTreeClassifier
-    grid = {'base_estimator': [DecisionTreeClassifier(max_depth=3), DecisionTreeClassifier(max_depth=4),
-                               ExtraTreeClassifier(max_depth=4)],
-            'learning_rate': [0.01, 0.1, 0.5, 1.],
-            'n_estimators': [5, 10, 15, 20, 30, 40, 50, 75, 100, 125],
-            'algorithm': ['SAMME', 'SAMME.R']}
-    grid = OrderedDict(grid)
-
-    trainX, trainY = commonutils.generate_sample(2000, 10, distance=0.5)
-    grid_cv = GridOptimalSearchCV(AdaBoostClassifier(), grid, n_evaluations=10, refit=True, log_name='test')
-    grid_cv.fit(trainX, trainY)
-    grid_cv.predict_proba(trainX)
-    grid_cv.predict(trainX)
-    # grid_cv.print_param_stats([0.1, 0.3, 0.5, 0.7])
-
-test_grid_search()
 

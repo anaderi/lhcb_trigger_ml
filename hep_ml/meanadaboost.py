@@ -1,4 +1,8 @@
-from __future__ import division
+"""
+In this module some very simple modifications of AdaBoost is implemented.
+In weights boosting it uses mean of neighbours scores,
+"""
+from __future__ import division, print_function, absolute_import
 
 import numbers
 import numpy
@@ -8,20 +12,15 @@ import sklearn
 from sklearn.tree.tree import DecisionTreeClassifier
 from sklearn.utils.validation import column_or_1d, check_arrays
 from sklearn.base import BaseEstimator, ClassifierMixin
-from commonutils import check_sample_weight, computeKnnIndicesOfSameClass
 
-# About
-
-# In this module some very simple modifications of AdaBoost
-# is presented. In weights boosting it uses mean of neighbours scores,
-import commonutils
+from .commonutils import check_sample_weight, computeKnnIndicesOfSameClass, indices_of_values
 
 
 __author__ = 'Alex Rogozhnikov'
 
 # TODO add some tests and assertions here
 # TODO algorithm based on predict (SAMME)?
-# TODO multiclass classification?
+# TODO multi-class classification?
 
 
 class MeanAdaBoostClassifier(BaseEstimator, ClassifierMixin):
@@ -144,9 +143,9 @@ def generate_max_voter(event_indices):
     This voter is prepared specially for using in triggers.
     Voting returns max(svr predictions),
     :param event_indices: array, each element is
-
     """
-    groups = commonutils.indices_of_values(event_indices)
+    groups = indices_of_values(event_indices)
+
     def voter(cumulative_score, knn_scores):
         result = numpy.zeros(len(cumulative_score))
         for key, group in groups:

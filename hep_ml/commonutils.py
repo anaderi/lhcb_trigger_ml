@@ -1,17 +1,11 @@
-# About
+"""
+commonutils contains some helpful functions and classes
+which are often used (by other modules)
+"""
 
-# This file contains some helpful functions and classes
-# which are often used (by other modules)
+from __future__ import print_function, division, absolute_import
 
-from __future__ import print_function
-from __future__ import division
-from sklearn.utils.validation import check_arrays
-
-try:
-    from collections import OrderedDict
-except ImportError:
-    from ordereddict import OrderedDict
-
+from collections import OrderedDict
 import math
 import io
 import numpy
@@ -19,7 +13,7 @@ import pandas
 from numpy.random.mtrand import RandomState
 from scipy.special import expit
 import sklearn.cross_validation
-from sklearn.metrics.pairwise import pairwise_distances
+from sklearn.utils.validation import check_arrays
 from sklearn.neighbors.unsupervised import NearestNeighbors
 
 __author__ = "Alex Rogozhnikov"
@@ -39,7 +33,7 @@ def execute_notebook(filename):
 
 
 def map_on_cluster(ipc_profile, *args, **kw_args):
-    """The same as map, but the first argument is ipc_profile
+    """The same as map, but the first argument is ipc_profile. Distributes the task over IPython cluster.
     :param str|None ipc_profile: the IPython cluster profile to use.
     :return: the result of mapping
     """
@@ -52,7 +46,7 @@ def map_on_cluster(ipc_profile, *args, **kw_args):
 
 
 def sigmoid_function(x, width):
-    """ Sigmoid function is smoothing oh Heaviside function,
+    """ Sigmoid function is smoothing of Heaviside function,
     the less width, the closer we are to Heaviside function
     :type x: array-like with floats, arbitrary shape
     :type width: float, if width == 0, this is simply Heaviside function
@@ -108,8 +102,8 @@ def reorder_by_first_inverse(*arrays):
 
 def train_test_split(*arrays, **kw_args):
     """Does the same thing as train_test_split, but preserves columns in DataFrames.
-    Uses the same parameters: test_size, train_size, random_state
-    :type list[numpy.array|pandas.DataFrame] arrays:
+    Uses the same parameters: test_size, train_size, random_state, and has the same interface
+    :type list[numpy.array|pandas.DataFrame] arrays: arrays to split
     """
     assert len(arrays) > 0, "at least one array should be passed"
     length = len(arrays[0])
@@ -125,23 +119,6 @@ def train_test_split(*arrays, **kw_args):
             result.append(array[train_indices])
             result.append(array[test_indices])
     return result
-
-
-def test_splitting():
-    signal_df = pandas.DataFrame(numpy.ones([10, 10]))
-    bg_df = pandas.DataFrame(numpy.zeros([10, 10]))
-
-    common_X = pandas.concat([signal_df, bg_df], ignore_index=True)
-    common_y = numpy.concatenate([numpy.ones(len(signal_df)), numpy.zeros(len(bg_df))])
-
-    trainX, testX, trainY, testY = train_test_split(common_X, common_y)
-
-    for (index, row), label in zip(trainX.iterrows(), trainY):
-        assert numpy.all(label == row), 'wrong data partition'
-    for (index, row), label in zip(testX.iterrows(), testY):
-        assert numpy.all(label == row), 'wrong data partition'
-
-test_splitting()
 
 
 def weighted_percentile(array, percentiles, sample_weight=None, array_sorted=False, old_style=False):
@@ -163,32 +140,6 @@ def weighted_percentile(array, percentiles, sample_weight=None, array_sorted=Fal
     return numpy.interp(percentiles, weighted_quantiles, array)
 
 
-def test_percentile(size=100, q_size=20):
-    random = RandomState()
-    array = random.permutation(size)
-    quantiles = random.uniform(size=q_size)
-    q_permutation = random.permutation(q_size)
-    result1 = weighted_percentile(array, quantiles)[q_permutation]
-    result2 = weighted_percentile(array, quantiles[q_permutation])
-    result3 = weighted_percentile(array[random.permutation(size)], quantiles[q_permutation])
-    assert numpy.all(result1 == result2) and numpy.all(result1 == result3), 'breaks on permutations'
-
-    # checks that order is kept
-    quantiles = numpy.linspace(0, 1, size * 3)
-    x = weighted_percentile(array, quantiles, sample_weight=random.exponential(size=size))
-    assert numpy.all(x == numpy.sort(x)), "doesn't preserve order"
-
-    array = numpy.array([0, 1, 2, 5])
-    # comparing with simple percentiles
-    for x in random.uniform(size=10):
-        assert numpy.abs(numpy.percentile(array, x * 100) - weighted_percentile(array, x, old_style=True)) < 1e-7, \
-            "doesn't coincide with numpy.percentile"
-
-
-test_percentile(100, 20)
-test_percentile(20, 100)
-
-
 def build_normalizer(signal, sample_weight=None):
     """Prepares normalization function for some set of values
     transforms it to uniform distribution from [0, 1]. Example of usage:
@@ -207,30 +158,8 @@ def build_normalizer(signal, sample_weight=None):
 
     def normalizing_function(data):
         return numpy.interp(data, signal, predictions)
+
     return normalizing_function
-
-
-def test_build_normalizer(checks=10):
-    predictions = numpy.array(RandomState().normal(size=2000))
-    result = build_normalizer(predictions)(predictions)
-    assert numpy.all(result[numpy.argsort(predictions)] == sorted(result))
-    assert numpy.all(result >= 0) and numpy.all(result <= 1)
-    percentiles = [100 * (i + 1.) / (checks + 1.) for i in range(checks)]
-    assert numpy.all(abs(numpy.percentile(result, percentiles) - numpy.array(percentiles) / 100.) < 0.01)
-
-    # testing with weights
-    predictions = numpy.exp(predictions / 2)
-    weighted_normalizer = build_normalizer(predictions, sample_weight=predictions)
-    result = weighted_normalizer(predictions)
-    assert numpy.all(result[numpy.argsort(predictions)] == sorted(result))
-    assert numpy.all(result >= 0) and numpy.all(result <= 1 + 1e-7)
-    predictions = numpy.sort(predictions)
-    result = weighted_normalizer(predictions)
-    result2 = numpy.cumsum(predictions) / numpy.sum(predictions)
-    assert numpy.all(numpy.abs(result - result2) < 0.005)
-    print("normalizer is ok")
-
-test_build_normalizer()
 
 
 def compute_cut_for_efficiency(efficiency, mask, y_pred, sample_weight=None):
@@ -249,24 +178,6 @@ def compute_cut_for_efficiency(efficiency, mask, y_pred, sample_weight=None):
     return weighted_percentile(y_pred, 1. - efficiency, sample_weight=sample_weight)
 
 
-def test_compute_cut():
-    random = RandomState()
-    predictions = random.permutation(100)
-    labels = numpy.ones(100)
-    for eff in [0.1, 0.5, 0.75, 0.99]:
-        cut = compute_cut_for_efficiency(eff, labels, predictions)
-        assert numpy.sum(predictions > cut) / len(predictions) == eff, 'the cut was set wrongly'
-
-    weights = numpy.array(random.exponential(size=100))
-    for eff in random.uniform(size=100):
-        cut = compute_cut_for_efficiency(eff, labels, predictions, sample_weight=weights)
-        lower = numpy.sum(weights[predictions > cut + 1]) / numpy.sum(weights)
-        upper = numpy.sum(weights[predictions > cut - 1]) / numpy.sum(weights)
-        assert lower < eff < upper
-
-test_compute_cut()
-
-
 def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
     """Computes cut which gives fixed efficiency.
     :type target_efficiency: float from 0 to 1 or numpy.array with floats in [0,1]
@@ -280,7 +191,7 @@ def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
     return weighted_percentile(signal_proba, percentiles, sample_weight=sig_weights)
 
 
-#region Knn-related things
+# region Knn-related things
 
 # TODO update interface here and in all other places to work
 # without columns
@@ -312,28 +223,6 @@ def computeKnnIndicesOfSameClass(uniform_variables, X, y, n_neighbours=50):
         result[is_signal, :] = label_knn[is_signal, :]
     return result
 
-
-def test_compute_knn_indices(n_events=100):
-    X, y = generate_sample(n_events, 10, distance=.5)
-    is_signal = y > 0.5
-    signal_indices = numpy.where(is_signal)[0]
-    uniform_columns = X.columns[:1]
-    knn_indices = computeSignalKnnIndices(uniform_columns, X, is_signal, 10)
-    distances = pairwise_distances(X[uniform_columns])
-    for i, neighbours in enumerate(knn_indices):
-        assert numpy.all(is_signal[neighbours]), "returned indices are not signal"
-        not_neighbours = [x for x in signal_indices if not x in neighbours]
-        min_dist = numpy.min(distances[i, not_neighbours])
-        max_dist = numpy.max(distances[i, neighbours])
-        assert min_dist >= max_dist, "distances are set wrongly!"
-
-    knn_all_indices = computeKnnIndicesOfSameClass(uniform_columns, X, is_signal, 10)
-    for i, neighbours in enumerate(knn_all_indices):
-        assert numpy.all(is_signal[neighbours] == is_signal[i]), "returned indices are not signal/bg"
-
-    print("computeSignalKnnIndices is ok")
-
-test_compute_knn_indices()
 
 #endregion
 
@@ -369,9 +258,7 @@ def memory_usage():
 
 
 def subdict(start_dict, keys=None):
-    """Returns the ordered dictionary from initial one
-     which contains only listed keys
-    """
+    """Returns the ordered dictionary from initial one which contains only listed keys """
     if keys is None:
         return OrderedDict(start_dict)
     result = OrderedDict()
@@ -381,10 +268,14 @@ def subdict(start_dict, keys=None):
 
 
 def indices_of_values(array):
+    """For each value in array returns indices with this value
+    :param array:
+    :return:
+    """
     indices = numpy.argsort(array)
     sorted_array = array[indices]
     diff = numpy.nonzero(numpy.ediff1d(sorted_array))[0]
     limits = [0] + list(diff + 1) + [len(array)]
     for i in range(len(limits) - 1):
-        yield sorted_array[limits[i]], indices[limits[i]: limits[i+1]]
+        yield sorted_array[limits[i]], indices[limits[i]: limits[i + 1]]
 

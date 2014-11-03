@@ -1,40 +1,13 @@
 from __future__ import print_function, division
 
-try:
-    from collections import OrderedDict
-except ImportError:
-    from ordereddict import OrderedDict
-
+from collections import OrderedDict
 import numpy
 import pandas
 import sklearn
-from sklearn.base import BaseEstimator, ClassifierMixin, clone
-
-__author__ = "Alex Rogozhnikov"
+from sklearn.base import BaseEstimator, ClassifierMixin
 
 
-class HidingClassifier(BaseEstimator, ClassifierMixin):
-    def __init__(self, train_variables=None, base_estimator=None):
-        """This is a dumb meta-classifier, which uses only subset of variables to train
-        base classifier and to estimate result.
-        It is intended to wrap classifier sklearn classifiers, because they use all features by default"""
-        self.train_variables = train_variables
-        self.base_estimator = base_estimator
-
-    def fit(self, X, y, **kwargs):
-        assert self.base_estimator is not None, "base estimator was not set"
-        self._trained_estimator = clone(self.base_estimator)
-        self._trained_estimator.fit(X[self.train_variables], y, **kwargs)
-        return self
-
-    def predict(self, X):
-        return self._trained_estimator.predict(X[self.train_variables])
-
-    def predict_proba(self, X):
-        return self._trained_estimator.predict_proba(X[self.train_variables])
-
-    def staged_predict_proba(self, X):
-        return self._trained_estimator.staged_predict_proba(X[self.train_variables])
+__author__ = 'Alex Rogozhnikov'
 
 
 class FeatureSplitter(BaseEstimator, ClassifierMixin):
@@ -235,6 +208,5 @@ def test_feature_splitter(size=2000):
 
 
 test_feature_splitter()
-
 
 
