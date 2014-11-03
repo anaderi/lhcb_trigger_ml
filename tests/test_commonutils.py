@@ -4,7 +4,8 @@ import numpy
 import pandas
 from numpy.random.mtrand import RandomState
 from sklearn.metrics.pairwise import pairwise_distances
-from hep_ml.commonutils import train_test_split, weighted_percentile, build_normalizer, \
+from hep_ml import commonutils
+from hep_ml.commonutils import weighted_percentile, build_normalizer, \
     compute_cut_for_efficiency, generate_sample, computeSignalKnnIndices, computeKnnIndicesOfSameClass
 
 
@@ -15,7 +16,7 @@ def test_splitting():
     common_X = pandas.concat([signal_df, bg_df], ignore_index=True)
     common_y = numpy.concatenate([numpy.ones(len(signal_df)), numpy.zeros(len(bg_df))])
 
-    trainX, testX, trainY, testY = train_test_split(common_X, common_y)
+    trainX, testX, trainY, testY = commonutils.train_test_split(common_X, common_y)
 
     for (index, row), label in zip(trainX.iterrows(), trainY):
         assert numpy.all(row == label), 'wrong data partition'
