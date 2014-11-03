@@ -1,8 +1,9 @@
 """
-Writing fast DecisionTreeRegressor for only one target function.
+This is fast version of DecisionTreeRegressor for only one target function.
 (This is the most simple case, but even multi-class boosting doesn't need more complicated things)
 
 I need numpy implementation mostly for further experiments, rather than for real speedup.
+This tree shouldn't be used by itself, only in boosting techniques
 """
 from __future__ import division, print_function, absolute_import
 import numpy
@@ -41,18 +42,20 @@ class MseCriterion(object):
         """
         bin_sums = numpy.bincount(bin_indices, weights=values)
         left = numpy.cumsum(bin_sums[:-1])
-        right = numpy.cumsum(bin_sums[:1:-1])
+        right = bin_sums[-1] - left
         return left, right
 
     @staticmethod
     def compute_split(feature_values, y, sample_weight):
         """computes optimal split for selected feature """
+        # TODO greedy search here
         feature_values, y, sample_weight = reorder_by_first(feature_values, y, sample_weight)
         left_means = numpy.cumsum(y * sample_weight)
-        right_means = left_means[-1] - left_means[::-1]
+        right_means = left_means[-1] - left_means
         left_weights = numpy.cumsum(sample_weight) + 1e-10
-        right_weights = left_weights[-1] - left_weights[::-1] + 1e-10
-        optimal_position = numpy.argmax(left_means ** 2 / left_weights + right_means ** 2 / right_weights)
+        right_weights = left_weights[-1] - left_weights + 1e-10
+        sde_values = left_means ** 2 / left_weights + right_means ** 2 / right_weights
+        optimal_position = numpy.argmax(sde_values)
         optimal_cut = feature_values[optimal_position]
         return optimal_cut
 
@@ -97,7 +100,7 @@ class FastTreeRegressor(BaseEstimator, RegressorMixin):
     def _fit_tree_node(self, X, y, w, node_index, depth, passed_indices):
         """Recursive function to fit tree, rather simple implementation"""
         # indices of events used in pre-estimation
-        if len(passed_indices) < self.min_samples_split or depth >= self.max_depth:
+        if len(passed_indices) <= self.min_samples_split or depth >= self.max_depth:
             self.nodes_data[node_index] = (numpy.average(y[passed_indices], weights=w[passed_indices]), )
             return
 
@@ -108,22 +111,26 @@ class FastTreeRegressor(BaseEstimator, RegressorMixin):
         estimated_costs = numpy.zeros(self.n_features) + 1e20
         for feature_index in self.random_state.choice(self.n_features, size=self._n_used_features, replace=False):
             cut_events = self.random_state.choice(passed_indices, size=self.steps)
-            cuts = numpy.sorted(X[cut_events, feature_index])
+            cuts = numpy.sort(X[cut_events, feature_index])
             bin_indices = numpy.searchsorted(cuts, X[pre_events, feature_index])
             estimated_costs[feature_index] = \
                 self._criterion.pre_estimate(bin_indices=bin_indices, y=y[pre_events], sample_weight=w[pre_events])
 
         # feature that showed best pre-estimated cost
-        feature_index = numpy.argmax(estimated_costs)
+        feature_index = numpy.argmin(estimated_costs)
         split = self._criterion.compute_split(X[pre_events, feature_index], y[pre_events], w[pre_events])
-        # writing results in the tree
-        self.nodes_data[node_index] = (feature_index, split)
-        # recurrent calls
+        # computing information for (possible) children
         passed_left_subtree = passed_indices[X[passed_indices, feature_index] <= split]
         passed_right_subtree = passed_indices[X[passed_indices, feature_index] > split]
         left, right = self._children(node_index)
-        self._fit_tree_node(X, y, w, left, depth + 1, passed_left_subtree)
-        self._fit_tree_node(X, y, w, right, depth + 1, passed_right_subtree)
+        if len(passed_left_subtree) == 0 or len(passed_right_subtree) == 0:
+            # this will be leaf
+            self.nodes_data[node_index] = (numpy.average(y[passed_indices], weights=w[passed_indices]), )
+        else:
+            # non-leaf, recurrent calls
+            self.nodes_data[node_index] = (feature_index, split)
+            self._fit_tree_node(X, y, w, left, depth + 1, passed_left_subtree)
+            self._fit_tree_node(X, y, w, right, depth + 1, passed_right_subtree)
 
     def _apply_node(self, X, leaf_indices, predictions, node_index, passed_indices):
         """Recursive function to compute the index """
@@ -131,6 +138,7 @@ class FastTreeRegressor(BaseEstimator, RegressorMixin):
         if len(node_data) == 1:
             # leaf node
             leaf_indices[passed_indices] = node_index
+            predictions[passed_indices] = node_data[0]
         else:
             # non-leaf
             feature_index, split = node_data
@@ -149,8 +157,8 @@ class FastTreeRegressor(BaseEstimator, RegressorMixin):
         self._apply_node(X, leaf_indices, predictions, node_index=1, passed_indices=numpy.arange(len(X)))
         return leaf_indices, predictions
 
-    def fit(self, X, y, sample_weight, make_checks=True):
-        if make_checks:
+    def fit(self, X, y, sample_weight, check_input=True):
+        if check_input:
             assert isinstance(X, numpy.ndarray), "X should be numpy.array"
             assert isinstance(y, numpy.ndarray), "y should be numpy.array"
             assert isinstance(sample_weight, numpy.ndarray), "sample_weight should be numpy.array"
@@ -166,6 +174,7 @@ class FastTreeRegressor(BaseEstimator, RegressorMixin):
         root_node_index = 1
         self._fit_tree_node(X=X, y=y, w=sample_weight, node_index=root_node_index, depth=0,
                             passed_indices=numpy.arange(len(X)))
+        return self
 
     def predict(self, X):
         leaf_indices, predictions = self.apply(X)
