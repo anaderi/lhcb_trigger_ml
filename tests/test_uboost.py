@@ -1,18 +1,17 @@
-#!/usr/bin/env python
+from __future__ import print_function, division, absolute_import
 
 import pylab as pl
 import numpy as np
 from itertools import izip
-import argparse
 from sklearn.metrics.metrics import roc_auc_score, accuracy_score
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble.weight_boosting import AdaBoostClassifier
 
-from commonutils import generate_sample
-from supplementaryclassifiers import HidingClassifier
-from uboost import uBoostBDT, uBoostClassifier
-from reports import Predictions, ClassifiersDict
+from hep_ml.commonutils import generate_sample
+from hep_ml.supplementaryclassifiers import HidingClassifier
+from hep_ml.uboost import uBoostBDT, uBoostClassifier
+from hep_ml.reports import Predictions, ClassifiersDict
 
 
 def test_cuts(n_samples=1000):
@@ -101,7 +100,10 @@ def test_quality(n_samples=3000):
             print("Accuracy = %.3f" % accuracy_score(testY, predict))
 
 
-def test_classifiers(n_samples=10000, output_name_pattern=None):
+def check_classifiers(n_samples=10000, output_name_pattern=None):
+    """
+    This function is not tested by default, it should be called manually
+    """
     testX, testY = generate_sample(n_samples, 10, 0.6)
     trainX, trainY = generate_sample(n_samples, 10, 0.6)
     uniform_variables = ['column0']
@@ -122,11 +124,6 @@ def test_classifiers(n_samples=10000, output_name_pattern=None):
         efficiency_steps=5,
         n_estimators=50,
         algorithm="SAMME.R")
-    # # TODO delete
-    # from neighadaboost import NeighAdaBoostClassifier
-    # clf_nada = NeighAdaBoostClassifier(uniform_variables=uniform_variables,
-    #                                    n_neighbours=50,
-    #                                    n_estimators=50)
 
     clf_dict = ClassifiersDict({
         "Ada": clf_Ada,
@@ -141,9 +138,6 @@ def test_classifiers(n_samples=10000, output_name_pattern=None):
     # predictions.print_mse(uniform_variables, in_html=False)
     print(predictions.compute_metrics())
 
-    # TODO(kazeevn)
-    # Make reports save the plots.
-
     predictions.sde_curves(uniform_variables)
     if output_name_pattern is not None:
         pl.savefig(output_name_pattern % "mse_curves", bbox="tight")
@@ -155,30 +149,3 @@ def test_classifiers(n_samples=10000, output_name_pattern=None):
     if output_name_pattern is not None:
         pl.savefig(output_name_pattern % "efficiency_curves", bbox="tight")
 
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Run some assert-based tests, "
-        "calculate MSE and plot local efficiencies for"
-        " AdaBoost, GaussianNB, uBoost.SAMME and uBoost.SAMME.R")
-    parser.add_argument('-o', '--output-file', type=str,
-                        help=r"Filename pattern with one %%s to save "
-                        "the plots to. Example: classifiers_%%s.pdf")
-    parser.add_argument('-s', '--random-seed', type=int,
-                        help="Random generator seed to use.")
-    args = parser.parse_args()
-    if args.random_seed:
-        np.random.seed(args.random_seed)
-    else:
-        np.random.seed(42)
-
-    test_cuts()
-    test_probas()
-    test_quality()
-    test_classifiers(10000, args.output_file)
-
-    if args.output_file is None:
-        pl.show()
-
-if __name__ == '__main__':
-    main()
