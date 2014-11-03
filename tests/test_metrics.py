@@ -7,8 +7,9 @@ from scipy.stats import ks_2samp
 import sklearn.metrics
 from sklearn.metrics import auc
 
-from hep_ml.metrics import roc_curve, bin_to_group_indices, compute_bin_indices, compute_sde_on_bins, compute_sde_on_groups, \
-    compute_theil_on_bins, compute_theil_on_groups, _prepare_data, _ks_2samp_fast, ks_2samp_weighted, bin_based_ks, \
+from hep_ml.metrics import roc_curve, bin_to_group_indices, compute_bin_indices, compute_sde_on_bins, \
+    compute_sde_on_groups, compute_theil_on_bins, compute_theil_on_groups, \
+    _prepare_data, _ks_2samp_fast, ks_2samp_weighted, bin_based_ks, \
     groups_based_ks, cvm_2samp, _cvm_2samp_fast, bin_based_cvm, group_based_cvm
 
 __author__ = 'Alex Rogozhnikov'
@@ -35,7 +36,7 @@ def test_roc_curve(size=100):
     fpr2, tpr2, thr2 = roc_curve(y, pred)
     # this is insufficient test really
     # TODO some trash with weights here:
-    # after you add weights to sklearn roc, sklearns's auc cannot compute auc over result.
+    # after you add weights to sklearn roc, sklearn's auc cannot compute auc over result.
     assert numpy.allclose(auc(fpr1, tpr1), auc(fpr2, tpr2))
 
 

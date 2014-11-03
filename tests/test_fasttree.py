@@ -5,6 +5,8 @@ from sklearn.metrics import roc_auc_score
 from hep_ml.commonutils import generate_sample
 from hep_ml.experiments.fasttree import FastTreeRegressor
 from sklearn.tree import DecisionTreeRegressor
+# for super-puper hack
+from six.moves import builtins
 __author__ = 'Alex Rogozhnikov'
 
 
@@ -32,8 +34,7 @@ def test_tree_speed(n_samples=100000, n_features=10):
     timer1 = timeit.Timer('tree_regressor.fit(X, y, sample_weight=w)')
     timer2 = timeit.Timer('tree_fast_regressor.fit(X, y, sample_weight=w)')
     # super-puper-hack!
-    import __builtin__
-    __builtin__.__dict__.update(locals())
+    builtins.__dict__.update(locals())
 
     time1 = timer1.timeit(1)
     time2 = timer2.timeit(1)

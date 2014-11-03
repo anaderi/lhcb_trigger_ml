@@ -9,13 +9,13 @@ from hep_ml.reports import ClassifiersDict
 from hep_ml.commonutils import generate_sample
 
 
-# TODO show plots when needed, at this moment ignored completely
 class MyNull(Null):
     def ylim(self, *args):
         return [0, 1]
 
 if __name__ != '__main__':
     reports.pylab = MyNull()
+
 
 def test_reports():
     print(reports.pylab.ylim)
@@ -39,4 +39,3 @@ def test_reports():
             .roc(stages=[10, 15]).show() \
             .hist(['column0']).show() \
             .compute_metrics(stages=[5, 10], metrics=roc_auc_score)
-        # .print_sde(['column0'], in_html=False)\

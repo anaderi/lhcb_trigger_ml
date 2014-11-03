@@ -12,7 +12,7 @@ __author__ = 'Alex Rogozhnikov'
 def test_gb_quality(n_samples=1000):
     X, y = generate_sample(n_samples=n_samples, n_features=5)
     X = numpy.array(X)
-    w = numpy.ones(n_samples)
+
     gb = FastGradientBoostingClassifier(loss=AdaLossFunction(), n_estimators=100, min_samples_split=50, max_depth=5)
     gb = gb.fit(X, y)
 
