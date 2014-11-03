@@ -1,4 +1,4 @@
-# lhcb_trigger_ml
+# hep_ml
 Friendly machine learning for LHCb experiment. 
 Project should enable one to train and compare classifiers on some training dataset.
 

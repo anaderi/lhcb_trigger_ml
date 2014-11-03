@@ -1,4 +1,4 @@
-# HEP_ML
+# hep_ml
 
 Library for machine learning in high energy physics.
 
