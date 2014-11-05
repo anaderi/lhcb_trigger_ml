@@ -28,7 +28,8 @@ which is good for development, analysis and presenting results (plots, histogram
   and special notebook 'ToyMonteCarlo' to demonstrate and analyze its results. 
 * parallelism <br />
   ClassifiersDict from `reports` can train classifiers on IPython cluster, <br />
-  __uBoost__ is quite slow, and it has built-in parallelism option: different BDTs inside uBoost can be trained parallelly in cluster.
+  __uBoost__ is quite slow, and it has built-in parallelism option: 
+  different BDTs inside uBoost can be trained parallelly in cluster.
 
 ###Getting started
 To run most the notebooks, only IPython and some python libraries are needed.
@@ -44,7 +45,7 @@ The libraries you need are `numpy`, `scipy`, `pandas`, `scikit-learn`, `matplotl
 and maybe something else, basically the packages are installed via command-line:
 <pre>sudo pip install numpy scipy pandas scikit-learn matplotlib rootpy root-numpy</pre>
 IPython can be installed via pip as well
-<pre>sudo pip install "ipython[notebook]" </pre>
+<pre>sudo pip install "ipython[all]" </pre>
 
 To use the repository, clone it with git
 <pre>git clone https://github.com/anaderi/lhcb_trigger_ml.git

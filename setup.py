@@ -40,7 +40,7 @@ setup(
 
     # List run-time dependencies here. These will be installed by pip when your project is installed.
     install_requires = [
-        'ipython >= 2.1.0',
+        'ipython[all] >= 2.1.0',
         'pyzmq >= 14.3.0',
         'matplotlib >= 1.4',
         'rootpy >= 0.7.1',
