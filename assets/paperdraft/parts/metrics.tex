@@ -149,16 +149,13 @@ average values for several global efficiencies:
 %Let's start from reformulation of what is uniform predictions in signal. First we split all signal events into some bins in uniform variables. There is some empirical distribution $F_\bin$ of predictions in each bin. 
 \begin{figure}[h]
 		\centering
-		\begin{subfigure}[b]{0.8\textwidth}
+		\begin{subfigure}[b]{0.48\textwidth}
 			\includegraphics[width=\textwidth]{graphs/bins_uniform_distribution.pdf}
-			\caption{Predictions are uniform in mass, the distribution of predictions in the bin (yellow) is close to the global (blue).
-			Yellow rectangle shows the events in the bin over mass.}
 		\end{subfigure}
-		\begin{subfigure}[b]{0.8\textwidth}
+		\begin{subfigure}[b]{0.48\textwidth}
 			\includegraphics[width=\textwidth]{graphs/bins_nonuniform_distribution.pdf}
-			\caption{Distribution with peak in the middle, the distribution in the bin is quite different from global.}
 		\end{subfigure}
-		\caption{Demonstration of distribution similarity approach. \label{fig:dsavisualization}}
+		\caption{Demonstration of the distribution similarity approach. (left) Predictions are uniform in mass, the distribution of predictions in the bin (yellow) is close to the global (blue). (right) Distribution with peak in the middle, the distribution in the bin is quite different from the global distribution. In both cases the yellow rectangle shows the events in the bin over mass.\label{fig:dsavisualization}}
 \end{figure}
 Instead of measuring uniformity in terms of binned efficiencies, it is possible to consider the distribution of
 the binned classifier predictions, $F_\bin$, directly.
@@ -246,11 +243,11 @@ Let us compare two metrics that have proven most appropriate for our problem, SD
 The predictions are correlated with mass via beta distribution.
 First distribution with a peak is obtained by generating a prediction for each event according to its mass:
 \[
-	p_{\rm peak} \thicksim \text{Beta}(\alpha \mean{m}, \abs{m - \mean{m}})
+	p_{\rm peak} \thicksim \text{Beta}(1 + \alpha f(m), 1), \qquad  f(m) = 5 \times e^{- 100  \abs{m - \overline{m}}^2}
 \]
 The second distribution is obtained by flipping:
 \[
-	p_{\rm pit} \thicksim 1 - \text{Beta}(\alpha \mean{m}, \abs{m - \mean{m}})
+	p_{\rm pit} \thicksim 1 - \text{Beta}(1 + \alpha f(m), 1)
 \]
 SDE should show no changes if we flip the distribution, while the Theil should make difference between pit and peak. 
 
@@ -263,7 +260,7 @@ and classifier efficiency as a function of mass for the peak and pit distributio
 			\caption{Mass vs prediction.}
 		\end{subfigure}
 		\begin{subfigure}[b]{0.95\textwidth}
-			\includegraphics[width=\textwidth]{graphs/PeakEffs.png}
+			\includegraphics[width=\textwidth]{graphs/PeakEffs.pdf}
 			\caption{Mass vs efficiency. The different coloured lines correspond to
 				different global classifier efficiencies, as explained in the legend on the leftmost subplot.}
 		\end{subfigure}
@@ -278,7 +275,7 @@ and classifier efficiency as a function of mass for the peak and pit distributio
 			\caption{Mass vs prediction.}
 		\end{subfigure}
 		\begin{subfigure}[b]{0.95\textwidth}
-			\includegraphics[width=\textwidth]{graphs/PitEffs.png}
+			\includegraphics[width=\textwidth]{graphs/PitEffs.pdf}
 			\caption{Mass vs efficiency. The different coloured lines correspond to
 				different global classifier efficiencies, as explained in the legend on the leftmost subplot.}
 		\end{subfigure}
@@ -287,29 +284,29 @@ and classifier efficiency as a function of mass for the peak and pit distributio
 
 \begin{figure}[h]
 \centering
-	\includegraphics[width=0.5\textwidth]{graphs/TheilVsMSE.png}
+	\includegraphics[width=0.9\textwidth]{graphs/TheilVsMSE.pdf}
 	\caption{Comparison of SDE and Theil uniformity measures for different values of the constant $\alpha$ for the peak and pit distributions.
-The Theil can clearly distinguish between these two while the SDE measure cannot.}
+The Theil can clearly distinguish between these two while the SDE measure cannot.\label{fig:pitvspeak}}
 \end{figure}
 
-From these figures we can see that SDE doesn't make any difference between these distributions, while Theil has lower value in the second case 
+From figure~\ref{fig:pitvspeak} we can see that SDE doesn't make any difference between these distributions, while Theil has lower value in the second case 
 which indicates that distribution is flatter. This example demonstrates that Theil has larger penalty for distributions with narrow peaks rather than with narrow pits in the distribution of efficiecies.
 
 \subsubsection*{$D \to hhh$}
-When our classifiers where applied to data set $D \to hhh$ we got uniformity measures for the SDE and Theil
-metrics shown in Fig.~\ref{fig:d2hhhsdetheil}.
+Finally, we compare the SDE and Theil uniformity measures for the classifiers applied to the $D \to hhh$ data set, as shown in Fig.~\ref{fig:d2hhhsdetheil}.
+Both measures show similar results, so there is no significant difference between them, nor the CvM metric, on this dataset.
+
 \begin{figure}[h]
 \centering
 		% TODO use metrics on signal for signal, use metrics on bck for bck.
-		\begin{subfigure}[b]{0.95\textwidth}
-			\includegraphics[width=\textwidth]{graphs/D23hSignalEffs.png}
+		\begin{subfigure}[b]{0.48\textwidth}
+			\includegraphics[width=\textwidth]{graphs/D23hSignalEffs.pdf}
 			\caption{Metrics for $D \to hhh$ signal.}
 		\end{subfigure}
-		\begin{subfigure}[b]{0.95\textwidth}
-			\includegraphics[width=\textwidth]{graphs/D23hBgEffs.png}
+		\begin{subfigure}[b]{0.48\textwidth}
+			\includegraphics[width=\textwidth]{graphs/D23hBgEffs.pdf}
 			\caption{Metrics for $D \to hhh$ background.}
 		\end{subfigure}
-		\caption{Uniformity metrics for the $D \to hhh$ data set. The (top) signal and (bottom) background uniformities are plotted as a function of the training stage of a given classifier, listed in the legends on the leftmost plots. \label{fig:d2hhhsdetheil}}
+		\caption{Uniformity metrics for the $D \to hhh$ data set. The (top) signal and (bottom) background uniformities are plotted as a function of the training stage of a given classifier, listed in the legends on the leftmost plots. Within each figure the leftmost plot is the SDE and the rightmost plot is the Theil uniformity metric. \label{fig:d2hhhsdetheil}}
 \end{figure}
 
-Both metrics shown similar results, and that there is no significant difference on real data sets (as well as CvM).

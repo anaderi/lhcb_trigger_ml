@@ -34,6 +34,7 @@ E-mail: \email{alex.rogozhnikov@yandex.ru}}
 \usepackage{caption}
 \usepackage{subcaption}
 \usepackage{float}	
+% \usepackage{hyperref}
 
 % Theorems
 %-----------------------------------------------------------------
@@ -69,12 +70,11 @@ E-mail: \email{alex.rogozhnikov@yandex.ru}}
 \input{parts/introduction}
 
 \section{Uniformity Boosting Methods}
-\input{ugb}
+\input{parts/ugb}
 
 \section{Example Analysis}
 
 \input{parts/dataset}
-\input{parts/plots}
 
 \section{CPU Resources}
 
@@ -86,7 +86,8 @@ E-mail: \email{alex.rogozhnikov@yandex.ru}}
 
 \section{Source code}
 
-UPDATE THIS WITH CODE LOCATION.
+The code for classifiers proposed in this article as well as for metrics of uniformity is publicly available at repository 
+{\tt \href{https://github.com/anaderi/lhcb_trigger_ml}{https://github.com/anaderi/lhcb\_trigger\_ml}}.
 %The link on the repository ans links to final notebooks with results in the article.
 
 \acknowledgments
@@ -104,7 +105,7 @@ JINST {\bf 8}, P04022 (2013).
 [arXiv:1211.3055]
 
 \bibitem{ref:bbdt}  
-V. Gligorov and M. Williams, 
+V. V. Gligorov and M. Williams, 
 {\em Efficient, reliable and fast high-level triggering using a bonsai boosted decision tree}, 
 JINST {\bf 8}, P02013 (2013). 
 [arXiv:1210.6861]

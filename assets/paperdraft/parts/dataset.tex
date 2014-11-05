@@ -29,30 +29,36 @@ in the $c\bar{c}$ and $b\bar{b}$ simulated samples.
 
 \begin{figure}[] 
   \centering 
-  \includegraphics[width=0.49\textwidth]{DP_sig.pdf}
-  \includegraphics[width=0.49\textwidth]{DP_bkgd.pdf}
+  \includegraphics[width=0.49\textwidth]{graphs2/DP_sig.pdf}
+  \includegraphics[width=0.49\textwidth]{graphs2/DP_bkgd.pdf}
   \caption{\label{fig:dalitz} Dalitz-plot distributions for (left) signal and (right) background for the $D_s^\pm\to\pi^+\pi^-\pi^\pm$.  The three pions are labeled here as 1, 2 and 3 and ordered according to increases momentum.}
 \end{figure}
 
 Figure~\ref{fig:dalitz} shows the Dalitz-plot distributions for signal and background events.  These samples are split into training and testing samples and then various BDTs are trained.  For the BDTs designed to produce uniform selections, the $\vec{y}$ variates are the Dalitz masses with the choice of uniform selection efficiency on signal candidates in the Dalitz-plot.  
-Figure~\ref{fig:dalitz_rocs} shows the ROC curves obtained for the various classifiers studied in this paper.  For the uGBFL algorithms, there is a choice to be made for the value $\alpha$ which defines the relative weight of the flatness loss {\em vs} AdaLoss.  As expected, increasing $\alpha$, which increases the weight of AdaLoss, drives the ROC curve to be similar to AdaBoost.  Analysts will need to choose how much ROC performance to sacrifice to gain uniformity in the selection efficiency.  In general, the ROC curves for the uniform-driven BDTs are not too different from AdaBoost.  
+Figure~\ref{fig:dalitz_rocs} shows the ROC curves obtained for the various classifiers studied in this paper.  For the uGBFL algorithms, there is a choice to be made for the value $\alpha$ which defines the relative weight of the flatness loss {\em vs} AdaLoss.  As expected, increasing $\alpha$, which increases the weight of AdaLoss, drives the ROC curve to be similar to AdaBoost.  Analysts will need to choose how much ROC performance to sacrifice to gain uniformity in the selection efficiency.  In general, the ROC curves for the uniform-driven BDTs are not too different from AdaBoost.  Figure~\ref{fig:dalitz_sde_v_alpha} shows how the uniformity of the selection efficiency depends on $\alpha$.  As expected, as $\alpha$ is decreased the selection becomes more uniform.
 
 
 
 \begin{figure}[] 
   \centering 
-  \includegraphics[width=0.49\textwidth]{ROC_DP.pdf}
-  \includegraphics[width=0.49\textwidth]{ROC_DP_Alpha.pdf}
+  \includegraphics[width=0.49\textwidth]{graphs2/ROC_DP.pdf}
+  \includegraphics[width=0.49\textwidth]{graphs2/ROC_DP_Alpha.pdf}\\
   \caption{\label{fig:dalitz_rocs} (left) ROC curves for classifier algorithms studied in this paper.  For the uGBFL algorithms $\alpha=0.02$ is shown.  (right) ROC curves for uGBFL(bin) for differnet values of $\alpha$.}
 \end{figure}
 
-Figure~\ref{fig:dalitz_results} shows the efficiency obtained for each classifier {\em vs} distance from the a corner of the Dalitz-plot\footnote{The Dalitz-plot is essentially a triangle with three corners. Our defnition of this distance is ${\rm MIN}\left[(m(D_s)-m(\pi))^2 - m_{ij}^2\right]$, where $ij$ is 12, 13 and 23.}.  The AdaBoost algorithm, as expected, produces a much lower efficiency in the interesting corner regions.  The kNNAdaBoost algorithm does not improve upon the AdaBoost result much.  This is likely due to the fact that while kNNAdaBoost uses non-local kNN information, it does not utilize global information.  The uGBkNN algorithm overcompensates and drives the efficiency higher at the corners.  This suggests that if this algorithm is to be used some stopping criteria or {\em throttle} of the event-weighting updating should be implemented.  
+\begin{figure}[] 
+  \centering 
+  \includegraphics[width=0.49\textwidth]{graphs2/sde_v_alpha.pdf}
+  \caption{\label{fig:dalitz_sde_v_alpha} Uniformity of the selection efficiency across the Dalitz plot, as measured using the so-called SDE metric described in detail in the appendix, {\em vs} $\alpha$ for uGBFL(bin).  The dashed line indicates the SDE value for AdaBoost.  Lower values of $\alpha$ produce more uniform selection efficiencies.}
+\end{figure}
+
+Figure~\ref{fig:dalitz_results} shows the efficiency obtained for each classifier {\em vs} distance from the a corner of the Dalitz-plot\footnote{The Dalitz-plot is essentially a triangle with three corners. Our definition of this distance is ${\rm MIN}\left[(m(D_s)-m(\pi))^2 - m_{ij}^2\right]$, where $ij$ is 12, 13 and 23.}.  The AdaBoost algorithm, as expected, produces a much lower efficiency in the interesting corner regions.  The kNNAdaBoost algorithm does not improve upon the AdaBoost result much.  This is likely due to the fact that while kNNAdaBoost uses non-local kNN information, it does not utilize global information.  The uGBkNN algorithm overcompensates and drives the efficiency higher at the corners.  This suggests that if this algorithm is to be used some stopping criteria or {\em throttle} of the event-weighting updating should be implemented.  
 The uGBFL (binned and unbinned kNN) and uBoost algorithms each produce an efficiency which is statistically consistent with uniform across the Dalitz plot.  
 As stated above, the analyst is free to optimize the choice of $\alpha$ for uGBFL by defining a metric that involves signal efficiency, background rejection and uniformity, {\em e.g.}, using uniformity metrics discussed in detail in Appendix~A.  
 
 \begin{figure}[] 
   \centering 
-  \includegraphics[width=0.49\textwidth]{DP_compare.pdf}
+  \includegraphics[width=0.49\textwidth]{graphs2/DP_compare.pdf}
   \caption{\label{fig:dalitz_results} Efficiency {\em vs} distance to a corner of the Dalitz-plot.  An arbitrary working point of 50\% integrated efficiency is displayed. For the uGBFL algorithms $\alpha=0.02$ is shown.}
 \end{figure}
 
@@ -62,8 +68,8 @@ As a separate study using the same data samples, consider the case where one has
 
 \begin{figure}[] 
   \centering 
-  \includegraphics[width=0.49\textwidth]{mD_train.pdf}
-  \includegraphics[width=0.49\textwidth]{MD_eff.pdf}
+  \includegraphics[width=0.49\textwidth]{graphs2/mD_train.pdf}
+  \includegraphics[width=0.49\textwidth]{graphs2/MD_eff.pdf}
   \caption{\label{fig:md_results} (left) Signal and (filled) background samples used in training.  (right) Background mis-identification {\em vs} $D$ candidate mass for an arbitrary working point of 10\% background mis-identification in the training region $1.75 < m(D) < 1.85$~GeV is displayed.}
 \end{figure}
 
