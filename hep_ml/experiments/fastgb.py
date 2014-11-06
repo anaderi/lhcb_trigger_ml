@@ -1,18 +1,22 @@
 from __future__ import division, print_function, absolute_import
 import copy
+import numpy
 import pandas
 from sklearn.tree.tree import DTYPE
 from sklearn.utils.validation import check_random_state, column_or_1d, check_arrays
+from sklearn.base import BaseEstimator, ClassifierMixin
 
 from hep_ml.commonutils import check_sample_weight, sigmoid_function
-from hep_ml.ugradientboosting import AbstractLossFunction
+from hep_ml.losses import AbstractLossFunction
 
 from hep_ml.experiments.fasttree import FastTreeRegressor
 
-import numpy
-from sklearn.base import BaseEstimator, ClassifierMixin
 
 __author__ = 'Alex Rogozhnikov'
+
+# TODO abstract boosting algorithm
+# TODO tree post-updates
+# TODO where to include sample_weight - in the loss, or in the tree.fit
 
 
 class FastGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
@@ -98,7 +102,8 @@ class FastGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
         else:
             return numpy.array(X.loc[:, self.train_variables])
 
-    def score_to_proba(self, score):
+    @staticmethod
+    def score_to_proba(score):
         result = numpy.zeros([len(score), 2], dtype=float)
         result[:, 1] = sigmoid_function(score, width=1.)
         result[:, 0] = 1. - result[:, 1]

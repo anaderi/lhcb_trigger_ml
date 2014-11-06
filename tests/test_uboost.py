@@ -108,17 +108,17 @@ def check_classifiers(n_samples=10000, output_name_pattern=None):
     trainX, trainY = generate_sample(n_samples, 10, 0.6)
     uniform_variables = ['column0']
 
-    clf_Ada = AdaBoostClassifier(n_estimators=50)
-    clf_NB = HidingClassifier(train_variables=trainX.columns[1:],
+    ada = AdaBoostClassifier(n_estimators=50)
+    ideal_bayes = HidingClassifier(train_variables=trainX.columns[1:],
                               base_estimator=GaussianNB())
 
-    clf_uBoost_SAMME = uBoostClassifier(
+    uBoost_SAMME = uBoostClassifier(
         uniform_variables=uniform_variables,
         n_neighbors=50,
         efficiency_steps=5,
         n_estimators=50,
         algorithm="SAMME")
-    clf_uBoost_SAMME_R = uBoostClassifier(
+    uBoost_SAMME_R = uBoostClassifier(
         uniform_variables=uniform_variables,
         n_neighbors=50,
         efficiency_steps=5,
@@ -126,10 +126,10 @@ def check_classifiers(n_samples=10000, output_name_pattern=None):
         algorithm="SAMME.R")
 
     clf_dict = ClassifiersDict({
-        "Ada": clf_Ada,
-        "Ideal": clf_NB,
-        "uBOOST": clf_uBoost_SAMME,
-        "uBOOST.R": clf_uBoost_SAMME_R
+        "Ada": ada,
+        "Ideal": ideal_bayes,
+        "uBOOST": uBoost_SAMME,
+        "uBOOST.R": uBoost_SAMME_R
         })
 
     clf_dict.fit(trainX, trainY)
@@ -141,7 +141,7 @@ def check_classifiers(n_samples=10000, output_name_pattern=None):
     predictions.sde_curves(uniform_variables)
     if output_name_pattern is not None:
         pl.savefig(output_name_pattern % "mse_curves", bbox="tight")
-    figure1 = pl.figure()
+    _ = pl.figure()
     predictions.learning_curves()
     if output_name_pattern is not None:
         pl.savefig(output_name_pattern % "learning_curves", bbox="tight")
