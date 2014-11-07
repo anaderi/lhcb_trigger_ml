@@ -1,5 +1,5 @@
 """
-commonutils contains some helpful functions and classes
+`commonutils` contains some helpful functions and classes
 which are often used (by other modules)
 """
 
@@ -8,6 +8,7 @@ from __future__ import print_function, division, absolute_import
 from collections import OrderedDict
 import math
 import io
+import numbers
 import numpy
 import pandas
 from numpy.random.mtrand import RandomState
@@ -143,10 +144,10 @@ def weighted_percentile(array, percentiles, sample_weight=None, array_sorted=Fal
 def build_normalizer(signal, sample_weight=None):
     """Prepares normalization function for some set of values
     transforms it to uniform distribution from [0, 1]. Example of usage:
-        normalizer = build_normalizer(signal)
-        hist(normalizer(background))
-        # this one should be uniform in [0,1]
-        hist(normalizer(signal))
+    >>>normalizer = build_normalizer(signal)
+    >>>pylab.hist(normalizer(background))
+    >>># this one should be uniform in [0,1]
+    >>>pylab.hist(normalizer(signal))
     Parameters:
     :param numpy.array signal: shape = [n_samples] with floats
     :param numpy.array sample_weight: shape = [n_samples], non-negative weights associated to events.
@@ -269,8 +270,8 @@ def subdict(start_dict, keys=None):
 
 def indices_of_values(array):
     """For each value in array returns indices with this value
-    :param array:
-    :return:
+    :param array: numpy.array with 1-dimensional initial data
+    :return: sequence of tuples (value, indices_with_this_value), sequence is ordered by value
     """
     indices = numpy.argsort(array)
     sorted_array = array[indices]
@@ -279,3 +280,13 @@ def indices_of_values(array):
     for i in range(len(limits) - 1):
         yield sorted_array[limits[i]], indices[limits[i]: limits[i + 1]]
 
+
+def check_uniform_label(uniform_label):
+    """ Convert to numpy.array
+    :param uniform_label: label or list of labels (examples: 0, 1, [0], [1], [0, 1])
+    :return: numpy.array
+    """
+    if isinstance(uniform_label, numbers.Number):
+        return [uniform_label]
+    else:
+        return uniform_label

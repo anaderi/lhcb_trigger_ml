@@ -1,1 +1,2 @@
 from supplementaryclassifiers import HidingClassifier
+from reports import ClassifiersDict

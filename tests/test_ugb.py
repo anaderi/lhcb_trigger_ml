@@ -1,8 +1,9 @@
 from __future__ import division, print_function, absolute_import
 import numpy
 from hep_ml.commonutils import generate_sample
-from hep_ml.ugradientboosting import compute_positions, AdaLossFunction, SimpleKnnLossFunction, \
-    BinFlatnessLossFunction, KnnFlatnessLossFunction, uGradientBoostingClassifier
+from hep_ml.losses import compute_positions, AdaLossFunction, SimpleKnnLossFunction, \
+    BinFlatnessLossFunction, KnnFlatnessLossFunction
+from hep_ml.ugradientboosting import uGradientBoostingClassifier
 
 
 def check_orders(size=40):
@@ -46,16 +47,16 @@ def test_gradient_boosting(samples=1000):
     loss3 = AdaLossFunction()
     # loss4 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
     # loss5 = DistanceBasedKnnFunction(uniform_variables, knn=10, distance_dependence=lambda r: numpy.exp(-0.1 * r))
-    loss6 = BinFlatnessLossFunction(uniform_variables, ada_coefficient=0.5)
-    loss7 = BinFlatnessLossFunction(uniform_variables, ada_coefficient=0.5, uniform_label=[0,1])
-    loss6 = KnnFlatnessLossFunction(uniform_variables, ada_coefficient=0.5)
-    loss7 = KnnFlatnessLossFunction(uniform_variables, ada_coefficient=0.5, uniform_label=[0,1])
+    loss6bin = BinFlatnessLossFunction(uniform_variables, ada_coefficient=0.5)
+    loss7bin = BinFlatnessLossFunction(uniform_variables, ada_coefficient=0.5, uniform_label=[0, 1])
+    loss6knn = KnnFlatnessLossFunction(uniform_variables, ada_coefficient=0.5)
+    loss7knn = KnnFlatnessLossFunction(uniform_variables, ada_coefficient=0.5, uniform_label=[0, 1])
     # loss8 = NewFlatnessLossFunction(uniform_variables, ada_coefficient=0.5, uniform_label=1)
     # loss9 = NewFlatnessLossFunction(uniform_variables, ada_coefficient=0.5, uniform_label=[0, 1])
 
-    for loss in [loss1, loss3, loss6, loss7]:
+    for loss in [loss1, loss3, loss6bin, loss7bin, loss6knn, loss7knn]:
         result = uGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2,
-                                              subsample=0.7, n_estimators=n_estimators, train_variables=None)\
+                                             subsample=0.7, n_estimators=n_estimators, train_variables=None) \
             .fit(trainX[:samples], trainY[:samples]).score(testX, testY)
         assert result >= 0.7, "The quality is too poor: %.3f" % result
 

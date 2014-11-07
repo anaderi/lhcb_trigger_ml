@@ -1,38 +1,53 @@
 """
-In this module some very simple modifications of AdaBoost is implemented.
-In weights boosting it uses mean of neighbours scores,
+In this module some very simple modification of AdaBoost is implemented.
+In weights boosting it uses mean of neighbours scores
+instead of having only score of event itself
 """
 from __future__ import division, print_function, absolute_import
 
-import numbers
 import numpy
-import pandas
-from scipy.special import expit
 import sklearn
 from sklearn.tree.tree import DecisionTreeClassifier
-from sklearn.utils.validation import column_or_1d, check_arrays
-from sklearn.base import BaseEstimator, ClassifierMixin
 
-from .commonutils import check_sample_weight, computeKnnIndicesOfSameClass, indices_of_values
+from .commonutils import computeKnnIndicesOfSameClass, check_uniform_label
+from .supplementaryclassifiers import AbstractBoostingClassifier
 
 
 __author__ = 'Alex Rogozhnikov'
 
-# TODO add some tests and assertions here
-# TODO algorithm based on predict (SAMME)?
-# TODO multi-class classification?
+# TODO add multi-class classification
+# TODO think on the role of weights
 
 
-class MeanAdaBoostClassifier(BaseEstimator, ClassifierMixin):
+class MeanAdaBoostClassifier(AbstractBoostingClassifier):
     def __init__(self,
                  uniform_variables=None,
                  base_estimator=DecisionTreeClassifier(max_depth=1),
                  n_estimators=10,
-                 learning_rate=1.,
+                 learning_rate=0.1,
                  n_neighbours=10,
                  uniform_label=1,
                  train_variables=None,
                  voting='mean'):
+        """
+        Modification of AdaBoostClassifier, has modified reweighting procedure
+        (as described in article 'New Approaches for Boosting to Uniformity').
+        In the simplest case (voting='mean') we use the mean of neighbours'
+        predictions.
+        :param uniform_variables: list of variables along which uniformity is desired (i.e. ['mass'])
+        :param base_estimator: any sklearn classifier which support weights (i.e. DecisionTreeClassifier())
+        :param n_estimators: number of base classifiers to be trained
+        :param learning_rate: float, the 'size of step'
+        :param n_neighbours: number of neighbours to use
+        :param uniform_label:
+        :param train_variables: variables to use in training
+            (usually these should not include ones from uniform_variables)
+        :param (str|callable) voting: string, describes how we use
+            predictions of neighbour classifiers. Possible values are:
+            'mean', 'median', 'random-percentile', 'random-mean', 'matrix'
+            (in the 'matrix' case one should also provide a matrix to fit method.
+            Matrix is generalization of )
+        """
         self.uniform_variables = uniform_variables
         self.base_estimator = base_estimator
         self.n_estimators = n_estimators
@@ -43,19 +58,14 @@ class MeanAdaBoostClassifier(BaseEstimator, ClassifierMixin):
         self.voting = voting
 
     def fit(self, X, y, sample_weight=None, A=None):
-        # TODO add checks here
         if self.voting == 'matrix':
             assert A is not None, 'A matrix should be passed'
-            assert A.shape[0] == len(X) and A.shape[1] == len(X), 'wrong shape of passed matrix'
-        label = self.uniform_label
-        self.uniform_label = numpy.array([label]) if isinstance(label, numbers.Number) else numpy.array(label)
+            assert A.shape == (len(X), len(X)), 'wrong shape of passed matrix'
 
-        sample_weight = check_sample_weight(y, sample_weight=sample_weight).copy()
-        assert numpy.all(numpy.in1d(y, [0, 1])), 'only two-class classification is supported by now'
-        y = column_or_1d(y)
+        self.uniform_label = check_uniform_label(self.uniform_label)
+        X, y, sample_weight = self.check_input(X, y, sample_weight)
         y_signed = 2 * y - 1
 
-        X = pandas.DataFrame(X)
         knn_indices = computeKnnIndicesOfSameClass(self.uniform_variables, X, y, self.n_neighbours)
 
         # for those events with non-uniform label we repeat it's own index several times
@@ -73,14 +83,16 @@ class MeanAdaBoostClassifier(BaseEstimator, ClassifierMixin):
                 voted_score = numpy.mean(knn_scores, axis=1)
             elif self.voting == 'median':
                 voted_score = numpy.median(knn_scores, axis=1)
-            elif self.voting == 'percentile':
+            elif self.voting == 'random-percentile':
                 voted_score = numpy.percentile(knn_scores, numpy.random.random(), axis=1)
             elif self.voting == 'random-mean':
                 n_feats = numpy.random.randint(self.n_neighbours//2, self.n_neighbours)
                 voted_score = numpy.mean(knn_scores[:, :n_feats], axis=1)
             elif self.voting == 'matrix':
                 voted_score = A.dot(cumulative_score)
-            else: # self.voting is callable
+            else:  # self.voting is callable
+                assert not isinstance(self.voting, str), \
+                    'unknown value for voting: {}'.format(self.voting)
                 voted_score = self.voting(cumulative_score, knn_scores)
 
             weight = sample_weight * numpy.exp(- y_signed * voted_score)
@@ -91,66 +103,14 @@ class MeanAdaBoostClassifier(BaseEstimator, ClassifierMixin):
             cumulative_score += self.learning_rate * self.compute_score(classifier, X=X)
             self.estimators.append(classifier)
 
+        return self
+
     @staticmethod
     def normalize_weights(y, sample_weight):
         sample_weight[y == 0] /= numpy.sum(sample_weight[y == 0])
         sample_weight[y == 1] /= numpy.sum(sample_weight[y == 1])
         return sample_weight
 
-    def predict_score(self, X):
-        X = self.get_train_vars(X)
-        return self.learning_rate * sum(self.compute_score(clf, X) for clf in self.estimators)
 
-    def staged_predict_score(self, X):
-        X = self.get_train_vars(X)
-        score = numpy.zeros(len(X))
-        for clf in self.estimators:
-            score += self.learning_rate * self.compute_score(clf, X)
-            yield score
-
-    def score_to_proba(self, score):
-        """Compute class probability estimates from decision scores."""
-        proba = numpy.zeros((score.shape[0], 2), dtype=numpy.float64)
-        proba[:, 1] = expit(numpy.clip(score / self.n_estimators, -500, 500))
-        proba[:, 0] = 1.0 - proba[:, 1]
-        return proba
-
-    @staticmethod
-    def compute_score(clf, X):
-        """X should include only train vars"""
-        p = clf.predict_proba(X)
-        p[p <= 1e-5] = 1e-5
-        return numpy.log(p[:, 1] / p[:, 0])
-
-    def get_train_vars(self, X):
-        """Gets the DataFrame and returns only columns
-           that should be used in fitting / predictions"""
-        if self.train_variables is None:
-            return X
-        else:
-            return X[self.train_variables]
-
-    def predict_proba(self, X):
-        return self.score_to_proba(self.predict_score(X))
-
-    def staged_predict_proba(self, X):
-        for score in self.staged_predict_score(X):
-            yield self.score_to_proba(score=score)
-
-
-def generate_max_voter(event_indices):
-    """
-    This voter is prepared specially for using in triggers.
-    Voting returns max(svr predictions),
-    :param event_indices: array, each element is
-    """
-    groups = indices_of_values(event_indices)
-
-    def voter(cumulative_score, knn_scores):
-        result = numpy.zeros(len(cumulative_score))
-        for key, group in groups:
-            result[group] = numpy.max(cumulative_score[group])
-        return result
-    return voter
 
 

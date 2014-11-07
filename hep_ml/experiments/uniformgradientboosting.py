@@ -15,7 +15,7 @@ from sklearn.utils.validation import column_or_1d
 
 from .. import commonutils, reports, metrics
 from ..commonutils import check_sample_weight
-from ..ugradientboosting import AbstractLossFunction, KnnLossFunction, compute_positions
+from ..ugradientboosting import AbstractLossFunction, AbstractMatrixLossFunction, compute_positions
 
 
 __author__ = 'Alex Rogozhnikov'
@@ -27,7 +27,7 @@ __author__ = 'Alex Rogozhnikov'
 # algorithm of generating A and w
 
 
-class SimpleKnnLossFunction(KnnLossFunction):
+class SimpleKnnLossFunction(AbstractMatrixLossFunction):
     def __init__(self, uniform_variables, knn=10, uniform_label=1, distinguish_classes=True, row_norm=1.):
         """A matrix is square, each row corresponds to a single event in train dataset, in each row we put ones
         to the closest neighbours of that event if this event from class along which we want to have uniform prediction.
@@ -40,7 +40,7 @@ class SimpleKnnLossFunction(KnnLossFunction):
         self.distinguish_classes = distinguish_classes
         self.row_norm = row_norm
         self.uniform_label = [uniform_label] if isinstance(uniform_label, numbers.Number) else uniform_label
-        KnnLossFunction.__init__(self, uniform_variables)
+        AbstractMatrixLossFunction.__init__(self, uniform_variables)
 
     def compute_parameters(self, trainX, trainY):
         sample_weight = numpy.ones(len(trainX))
@@ -81,7 +81,7 @@ class SimpleKnnLossFunction(KnnLossFunction):
         return A, w
 
 
-class SimpleKnnLossFunctionEyeBg(KnnLossFunction):
+class SimpleKnnLossFunctionEyeBg(AbstractMatrixLossFunction):
     def __init__(self, uniform_variables, knn=5, distinguish_classes=True, diagonal=0.):
         """A matrix is square, each row corresponds to a single event in train dataset,
         in each row we put ones to the closest neighbours of that event for signal.
@@ -92,7 +92,7 @@ class SimpleKnnLossFunctionEyeBg(KnnLossFunction):
         self.knn = knn
         self.distinguish_classes = distinguish_classes
         self.diagonal = diagonal
-        KnnLossFunction.__init__(self, uniform_variables)
+        AbstractMatrixLossFunction.__init__(self, uniform_variables)
 
     def compute_parameters(self, trainX, trainY):
         is_signal = trainY > 0.5
@@ -130,7 +130,7 @@ class SimpleKnnLossFunctionEyeBg(KnnLossFunction):
         return A, w
 
 
-class SimpleKnnLossFunctionKnnOnDiagonalSignal(KnnLossFunction):
+class SimpleKnnLossFunctionKnnOnDiagonalSignal(AbstractMatrixLossFunction):
     def __init__(self, uniform_variables, knn=5, distinguish_classes=True, diagonal=0.):
         """A matrix is square, each row corresponds to a single event in train dataset,
         in each row we put ones to the closest neighbours of that event for signal. For background we
@@ -141,7 +141,7 @@ class SimpleKnnLossFunctionKnnOnDiagonalSignal(KnnLossFunction):
         self.knn = knn
         self.distinguish_classes = distinguish_classes
         self.diagonal = diagonal
-        KnnLossFunction.__init__(self, uniform_variables)
+        AbstractMatrixLossFunction.__init__(self, uniform_variables)
 
     def compute_parameters(self, trainX, trainY):
         is_signal = trainY > 0.5
@@ -180,7 +180,7 @@ class SimpleKnnLossFunctionKnnOnDiagonalSignal(KnnLossFunction):
         return A, w
 
 
-class SimpleKnnLossFunctionKnnOnDiagonalBg(KnnLossFunction):
+class SimpleKnnLossFunctionKnnOnDiagonalBg(AbstractMatrixLossFunction):
     def __init__(self, uniform_variables, knn=5, distinguish_classes=True, diagonal=0.):
         """A matrix is square, each row corresponds to a single event in train dataset,
         in each row we put ones to the closest neighbours of that event for signal. For background we
@@ -191,7 +191,7 @@ class SimpleKnnLossFunctionKnnOnDiagonalBg(KnnLossFunction):
         self.knn = knn
         self.distinguish_classes = distinguish_classes
         self.diagonal = diagonal
-        KnnLossFunction.__init__(self, uniform_variables)
+        AbstractMatrixLossFunction.__init__(self, uniform_variables)
 
     def compute_parameters(self, trainX, trainY):
         is_signal = trainY > 0.5
@@ -231,7 +231,7 @@ class SimpleKnnLossFunctionKnnOnDiagonalBg(KnnLossFunction):
         return A, w
 
 
-class SimpleKnnLossFunctionEyeSignal(KnnLossFunction):
+class SimpleKnnLossFunctionEyeSignal(AbstractMatrixLossFunction):
     def __init__(self, uniform_variables, knn=5, distinguish_classes=True, diagonal=0.):
         """A matrix is square, each row corresponds to a single event in train dataset,
         in each row we put ones to the closest neighbours of that event for background.
@@ -242,7 +242,7 @@ class SimpleKnnLossFunctionEyeSignal(KnnLossFunction):
         self.knn = knn
         self.distinguish_classes = distinguish_classes
         self.diagonal = diagonal
-        KnnLossFunction.__init__(self, uniform_variables)
+        AbstractMatrixLossFunction.__init__(self, uniform_variables)
 
     def compute_parameters(self, trainX, trainY):
         is_signal = trainY > 0.5
@@ -280,7 +280,7 @@ class SimpleKnnLossFunctionEyeSignal(KnnLossFunction):
         return A, w
 
 
-class PairwiseKnnLossFunction(KnnLossFunction):
+class PairwiseKnnLossFunction(AbstractMatrixLossFunction):
     def __init__(self, uniform_variables, knn, exclude_self=True, penalize_large_preds=True):
         """ A is rectangular matrix, in each row we have only two '1's,
         all other elements are zeros, these two '1's are placed in the columns, corresponding to neighbours
@@ -289,7 +289,7 @@ class PairwiseKnnLossFunction(KnnLossFunction):
         self.knn = knn
         self.exclude_self = exclude_self
         self.penalize_large_preds = penalize_large_preds
-        KnnLossFunction.__init__(self, uniform_variables)
+        AbstractMatrixLossFunction.__init__(self, uniform_variables)
 
     def compute_parameters(self, trainX, trainY):
         is_signal = trainY > 0.5
@@ -316,7 +316,7 @@ class PairwiseKnnLossFunction(KnnLossFunction):
         return A, w
 
 
-class RandomKnnLossFunction(KnnLossFunction):
+class RandomKnnLossFunction(AbstractMatrixLossFunction):
     def __init__(self, uniform_variables, n_rows, knn=5, knn_factor=3, large_preds_penalty=1.):
         """A general loss,
         at each iteration it takes some random event from train dataset,
@@ -325,7 +325,7 @@ class RandomKnnLossFunction(KnnLossFunction):
         self.knn = knn
         self.knn_factor = knn_factor
         self.large_preds_penalty = large_preds_penalty
-        KnnLossFunction.__init__(self, uniform_variables)
+        AbstractMatrixLossFunction.__init__(self, uniform_variables)
 
     def compute_parameters(self, trainX, trainY):
         is_signal = trainY > 0.5
@@ -352,7 +352,7 @@ class RandomKnnLossFunction(KnnLossFunction):
         return A, w
 
 
-class DistanceBasedKnnFunction(KnnLossFunction):
+class DistanceBasedKnnFunction(AbstractMatrixLossFunction):
     def __init__(self, uniform_variables, knn=None, distance_dependence=None, large_preds_penalty=0.,
                  row_normalize=False):
         """If knn is None, the matrix will be filled, otherwise it will be sparse
@@ -364,7 +364,7 @@ class DistanceBasedKnnFunction(KnnLossFunction):
         self.distance_dependence = distance_dependence
         self.large_pred_penalty = large_preds_penalty
         self.row_normalize = row_normalize
-        KnnLossFunction.__init__(self, uniform_variables)
+        AbstractMatrixLossFunction.__init__(self, uniform_variables)
 
     def compute_parameters(self, trainX, trainY):
         for variable in self.uniform_variables:
