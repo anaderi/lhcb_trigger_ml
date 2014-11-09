@@ -214,7 +214,7 @@ def compare_toymc(data, clustering_features=None, integer_features=None):
     for i, column in enumerate(data.columns, 1):
         pylab.subplot(n_rows, n_cols, i)
         pylab.title(column)
-        pylab.hist([data[column], toy_data[column]], histtype='step', bins=20)
+        pylab.hist([data[column].values, toy_data[column].values], histtype='step', bins=20)
     pylab.show()
 
     print_title("Means and std")
