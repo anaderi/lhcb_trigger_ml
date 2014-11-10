@@ -1,0 +1,550 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Beamer Presentation
+% LaTeX Template
+% Version 1.0 (10/11/12)
+%
+% This template has been downloaded from:
+% http://www.LaTeXTemplates.com
+%
+% License:
+% CC BY-NC-SA 3.0 (http://creativecommons.org/licenses/by-nc-sa/3.0/)
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%----------------------------------------------------------------------------------------
+%   PACKAGES AND THEMES
+%----------------------------------------------------------------------------------------
+\batchmode
+\documentclass{beamer}
+
+\mode<presentation> {
+
+% The Beamer class comes with a number of default slide themes
+% which change the colors and layouts of slides. Below this is a list
+% of all the themes, uncomment each in turn to see what they look like.
+
+%\usetheme{default}
+%\usetheme{AnnArbor}
+%\usetheme{Antibes}
+%\usetheme{Bergen}
+%\usetheme{Berkeley}
+%\usetheme{Berlin}
+%\usetheme{Boadilla}
+%\usetheme{CambridgeUS}
+%\usetheme{Copenhagen}
+%\usetheme{Darmstadt}
+%\usetheme{Dresden}
+%\usetheme{Frankfurt}
+%\usetheme{Goettingen}
+%\usetheme{Hannover}
+%\usetheme{Ilmenau}
+%\usetheme{JuanLesPins}
+%\usetheme{Luebeck}
+\usetheme{Madrid}
+%\usetheme{Malmoe}
+%\usetheme{Marburg} 
+%\usetheme{Montpellier}
+%\usetheme{PaloAlto}
+%\usetheme{Pittsburgh}
+%\usetheme{Rochester}
+%\usetheme{Singapore}
+%\usetheme{Szeged}
+%\usetheme{Warsaw}
+
+% As well as themes, the Beamer class has a number of color themes
+% for any slide theme. Uncomment each of these in turn to see how it
+% changes the colors of your current slide theme.
+
+%\usecolortheme{albatross}
+\usecolortheme{beaver}
+%\usecolortheme{beetle}
+%\usecolortheme{crane}
+%\usecolortheme{dolphin}
+%\usecolortheme{dove}
+%\usecolortheme{fly}
+%\usecolortheme{lily}
+%\usecolortheme{orchid}
+%\usecolortheme{rose}
+%\usecolortheme{seagull}
+%\usecolortheme{seahorse}
+%\usecolortheme{whale}
+%\usecolortheme{wolverine}
+
+%\setbeamertemplate{footline} % To remove the footer line in all slides uncomment this line
+%\setbeamertemplate{footline}[page number] % To replace the footer line in all slides with a simple slide count uncomment this line
+
+\setbeamertemplate{navigation symbols}{} % To remove the navigation symbols from the bottom of all slides uncomment this line
+}
+
+\usepackage{graphicx} % Allows including images
+\usepackage{booktabs} % Allows the use of \toprule, \midrule and \bottomrule in tables
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{epsf}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+
+
+
+% \newcounter{eqn}
+% \renewcommand*{\theeqn}{\alph{eqn})}
+% \newcommand{\num}{\refstepcounter{eqn}\text{\theeqn}\;}
+
+
+
+%----------------------------------------------------------------------------------------
+%   TITLE PAGE
+%----------------------------------------------------------------------------------------
+
+\title[Uniformity: metrics and classifiers]{New approaches for boosting to uniformity} % The short title appears at the bottom of every slide, the full title is only on the title page
+\author[Alex Rogozhnikov]{
+\underline{Alex Rogozhnikov}$^{a,b}$,
+Aleksandar Bukva$^c$, 
+Vladimir Gligorov$^d$,
+Andrey Ustyuzhanin$^{b,e,f}$ and
+Mike Williams$^g$
+}
+
+%\institute[SINP MSU] % Your institution as it will appear on the bottom of every slide, may be shorthand to save space
+
+\institute[]{
+$^a$  Lomonosov Moscow State University, Moscow\\
+$^b$  Yandex School of Data Analysis, Moscow\\
+$^c$  Faculty of Physics, Belgrade \\
+$^d$  Organisation Europ\'eenne pour la Recherche Nucl\'eaire (CERN), Geneva  \\
+$^e$  Moscow Institute of Physics and Technology, Moscow\\
+$^f$  Imperial College, London\\
+$^g$  Massachusetts Institute of Technology, Cambridge 
+\medskip
+\\
+\textit{alex.rogozhnikov@yandex.ru} % Your email address
+}
+\date{11 November, 2014}
+
+\begin{document}
+\begin{frame}
+\titlepage % Print the title page as the first slide
+\end{frame}
+
+
+%\begin{frame}
+%\frametitle{Overview} % Table of contents slide, comment this block out to remove it
+%\tableofcontents % Throughout your presentation, if you choose to use \section{} and \subsection{} commands, these will automatically be printed on this slide as an overview of your presentation
+%\end{frame}
+
+%   PRESENTATION SLIDES
+
+
+
+
+
+\def\knn{\text{knn}}
+\def\knni{\text{knn}(i)}
+\newcommand{\abs}[1]{\left\vert#1\right\vert}
+\newcommand{\sgn}{\operatorname{sgn}}
+
+\def\bineff{\text{eff}_\text{bin}}
+\def\binweight{\text{weight}_\text{bin}}
+\def\globaleff{\text{eff}}
+\def\SDE{\text{SDE}}
+\def\bin{\text{bin}}
+\def\theil{\text{Theil}}
+\def\score{\text{score}}
+\def\knn{\text{knn}}
+\def\FL{\text{FL}}
+\def\AdaLoss{L_\text{ada}}
+\def\knnAdaLoss{L_\text{knn-ada}}
+\def\generalAda{L_\text{general}}
+
+
+\begin{frame}
+    \frametitle{Outline}
+    \begin{itemize}
+    \item What is uniformity (of predictions)? 
+    \item How to measure it? (metric functions)
+    \item How to achieve it? (classifiers proposed)
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Uniformity}
+    In particle physics, apart from optimizing some FOM of classifier (BDT, ANN), 
+    there are cases when we need to have uniformity of predictions
+    \begin{itemize}
+    \item Dalitz-plot analysis (or any angular or amplitude analysis)
+
+    \item search for a new particle (not to get fake peak)
+
+    \item sensitivity for new signal 
+        in wide range of vars (mass, lifetime ...)
+
+    \end{itemize}
+
+    \textbf{Uniform variables} --- variables, along which uniformity of selection is desired (Dalitz variables, mass variable).
+
+    Typical solution: choose such features which don't give an ability to reconstruct 'mass' (or other selected 'uniform variables').
+\end{frame}
+
+\begin{frame}
+    \frametitle{What is uniformity?}
+    Predictions of some classifier are called \textit{uniform} in variables $var_1, \dots, var_n$ if prediction and set of this variables is \textit{statistically independent}. 
+
+    This (and only this) guarantees that any cut of prediction of classifier will produce the same efficiency in every region over $var_1, \dots, var_n$
+
+    % definition of uncorrelated variables
+    \pause
+    % picture with absolutely uniform predictions
+    % left bottom right top
+	% picture with skew
+
+    \begin{figure}
+        \centering
+        \begin{subfigure}[b]{0.48\textwidth}
+            \includegraphics[width=\textwidth, height=4cm]{img/uniform.pdf}
+            \caption{Uniform predictions}
+        \end{subfigure}
+        \begin{subfigure}[b]{0.48\textwidth}
+            \includegraphics[width=\textwidth, height=4cm]{img/nonuniform.pdf}
+            \caption{Non-uniform}
+        \end{subfigure}
+    \end{figure}
+
+\end{frame}
+
+\begin{frame}
+    \frametitle{Desirable properties of metrics}
+    The metric should ...
+    \begin{itemize}
+    \item not depend strongly on the number of events used to test uniformity
+
+    \item not depend on the total weight 
+
+    \item depend on order of predictions, not the exact values of predictions \\
+        (example: Pearson correlation does not satisfy this property)
+
+    \item be stable against free parameters (number of bins, $k$ in knn)
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Similarity-based approach}
+    Idea: uniformity means that distribution of predictions in every bin is equal. 
+    \bigskip \\ 
+    {\small
+  	Let's compare the global distribution (blue hist) 
+  	with distibution in one bin (yellow hist).
+  	Yellow rectangle shows the events in selected bin over mass.
+  	}
+
+    \includegraphics[width=0.5\textwidth, height=4cm]{img/uniform_hist.pdf}
+    \includegraphics[width=0.5\textwidth, height=4cm]{img/nonuniform_hist.pdf}    
+
+\end{frame}
+
+\begin{frame}[t]
+    \frametitle{Similarity-based approach}
+
+    Let $F(x)$ -- cdf of all predictions, $F_{\bin}(x)$ --- cdf of predictions in bin over mass. Hereinfter $\binweight = \frac{\text{weight of events in bin}}{\text{weight of all events}}$ 
+    \bigskip \\
+
+    % $\binweight$ --- weights of bins.
+
+    Kolmogorov-Smirnov measure (uninformative)
+    \[
+    	\sum_{\bin} \binweight \max_x \abs{F_{\bin}(x) - F(x)},
+    \]
+    Cram\'er--von Mises similarity 
+    \[
+    	 \sum_{\bin} \binweight \int \abs{F_{\bin}(x) - F(x)}^p dF(x)
+    \]
+\end{frame}
+
+\begin{frame}
+    \frametitle{Cut-based approach (1/2)}
+    Select some set of efficiencies (in examples: 0.1, 0.3, 0.5, 0.7, 0.9), 
+    for each one can compute global cut and look at efficincies in each bin:
+
+    \includegraphics[width=0.5\textwidth, height=3.8cm]{img/uniform.pdf}
+    \includegraphics[width=0.5\textwidth, height=3.8cm]{img/uniform_effs.pdf}
+
+    \includegraphics[width=0.5\textwidth, height=3.8cm]{img/nonuniform.pdf}
+    \includegraphics[width=0.5\textwidth, height=3.8cm]{img/nonuniform_effs.pdf}
+
+\end{frame}
+
+\begin{frame}
+    \frametitle{Cut-based approach (2/2)}
+    Standard deviation of efficiency
+    \[
+	\SDE^2(\globaleff) = 
+		\sum_{\bin} \binweight \times \left(\bineff - \globaleff \right)^2 
+	\]
+	\[
+	\SDE^2  =  \frac{1}{k} 
+	\sum_{\globaleff \in [\globaleff_1 \dots \globaleff_k] }  
+		\text{SDE}^2(\globaleff)
+	\] 
+	Theil index of $x_1, \dots, x_n$
+	\[
+		\theil = \frac{1}{N} \sum_i \frac{x_i}{<x>} \ln{\frac{x_i}{<x>}}, 
+	\]
+    Theil index of efficiency
+	\[
+	\theil(\globaleff) = \sum_\bin \binweight \; \frac{\bineff}{\globaleff} \; \ln{\frac{\bineff}{\globaleff}}
+	\]
+    \[
+    \theil  =  \frac{1}{k} 
+    \sum_{\globaleff \in [\globaleff_1 \dots \globaleff_k] }  
+        \theil(\globaleff).
+    \]
+\end{frame}
+
+\begin{frame}
+    \frametitle{Example}
+
+    {
+    \centering
+
+    \includegraphics[width=0.9\textwidth]{img/metrics_comp1.png}
+
+    
+    \begin{figure}
+    \centering
+
+    \includegraphics[width=0.5\textwidth]{img/metrics_comp2.png}
+    \end{figure}
+    }
+
+
+\end{frame}
+% TODO demonstration of metrics
+
+\begin{frame}
+    \frametitle{Summary on metrics}
+    \begin{enumerate}
+        \item two basic approaches were introduced (distribution-based and cut-based)
+        \item despite their difference, the results obtained with metrics proposed are \textbf{similar}.
+        \item for higher dimensions: $k$nn modifications of metrics are available 
+        {\small (instead of binning over uniform variables, we can compute nearest neighbours in the space of uniform variables).}
+    \end{enumerate}
+\end{frame}
+
+
+\begin{frame}
+    \frametitle{Boosting to uniformity}
+    % TODO link
+    Previuos work: uBoost \\
+    {\small J. Stevens and M. Williams,
+        {\em uBoost: A boosting method for producing uniform selection efficiencies from multivariate classifiers}, 
+        JINST {\bf 8}, P12013 (2013). [arXiv:1305.7248]
+    }
+    \bigskip \\
+    The classifiers we propose alter the \textbf{boosting} procedure as well
+\end{frame}
+
+
+\begin{frame}[t]
+    \frametitle{Boosting: \textit{knn}AdaBoost}
+    Usual AdaBoost reweighting procedure ($p_i$ is prediction of last classifier):
+    \[
+        w_i' = w_i \times \exp[-y_i \, p_i],
+    \]
+
+    \textit{knn}AdaBoost uses mean of predictions of neighbours 
+    \[
+        w_i = w_i \times \exp[-y_i \, \dfrac{1}{k} \sum_{j \in \knni} p_j]
+    \]
+    (neighbours are of the same class).
+
+    Thus boosting focuses not on the events that were poorly classified, but on the regions with poor classification.
+\end{frame}
+
+\begin{frame}[t]
+    \frametitle{Boosting: Gradient Boosting with \textit{knn}AdaLoss (1/2) }
+    Gradient boosting on trees is widely used algorithm, 
+    it's built upon decision tree regressors with usage of some loss function. 
+
+
+    Usual AdaLoss:
+    \[
+        \AdaLoss = \sum_{i \in \text{events}} w_i \times \exp [- \score_i \, y_i] 
+    \]
+    Pseudo-residual of AdaLoss:
+    \[
+        -\dfrac{\partial \, \AdaLoss}{\partial \, \score_i} = w_i \, y_i \exp[- \score_i \, y_i],
+    \]
+
+    \textit{knn}AdaLoss:
+    \[
+        \knnAdaLoss = \sum_{i \in events} \exp[-y_i \times \sum_{j \in \text{knn}(i)} \score_j],
+    \]
+
+\end{frame}
+
+\begin{frame}[t]
+    \frametitle{Boosting: Gradient Boosting with \textit{knn}AdaLoss (2/2)}
+    \textit{knn}AdaLoss:
+    \[
+        \knnAdaLoss = \sum_{i \in events} \exp[-y_i \times \sum_{j \in \text{knn}(i)} \score_j],
+    \]
+    It can be written as particular case of:
+    \[
+        \generalAda = \sum_i \exp [- y_i \sum_j a_{ij} \, \score_j ],
+    \]
+    \[
+        a_{ij} = 
+        \begin{cases} 
+            1, & j \in \knn(i), \text{ events $i$ and $j$ belong to the same class} \\
+            0, & \text{otherwise},
+        \end{cases}
+    \]
+
+    This is one particular choice of $a_{ij}$; \\
+    in general case matrix $a_{ij}$ even may be non-square.
+
+\end{frame}
+
+\begin{frame}[t]
+    \frametitle{Boosting: Gradient Boosting with FlatnessLoss (uGBFL)}
+    CvM measure of non-uniformity:
+    \[
+        \sum_{\bin} \binweight \int \abs{F_{\bin}(x) - F(x)}^p dF(x),
+    \]
+    Let's modify this function:
+    \[
+        \FL = \sum_{\bin} \binweight \int \abs{F_{\bin}(x) - F(x)}^p {\textcolor{red}{dx}}
+    \]
+    so that it becomes differentiable
+    \[
+        \dfrac{\partial} {\partial \, \score_i} \FL
+        \cong 
+        w_i \, p \,  \abs{F_{\bin(i)}(x) - F(x)}^{p-1}
+        \sgn[F_{\bin(i)}(x) - F(x)]
+        \Bigg|_{x=\score_i}
+    \]
+\end{frame}
+
+\begin{frame}
+    \frametitle{Boosting: Gradient Boosting with FlatnessLoss (uGBFL)}
+
+    FL doesn't take into account the quality of predictions, only uniformity. 
+
+    So what we use in practice is linear combination of FlatnessLoss and AdaLoss:
+    \[
+        \text{loss} = \FL + \alpha \, \AdaLoss
+    \]
+
+    First one penalizes non-uniformity, second one --- poor predictions, 
+    $\alpha$ is usually taken small.
+
+\end{frame}
+
+% \begin{frame}[t]
+%     \frametitle{Crash test}
+
+
+% \end{frame}
+
+\begin{frame}[t]
+    \frametitle{Tests on Dalitz data}
+    Testing on dataset from paper about uBoost
+
+    \center
+    \includegraphics[width=0.6\textwidth, height=3cm]{img/dalitz_distr.png}
+
+    \begin{figure}
+        \centering
+        \begin{subfigure}[b]{0.48\textwidth}
+            \includegraphics[width=\textwidth, height=4cm]{img/dalitz_roc_stage.png}
+            \caption{ROC vs \#trees \\ 
+             \; (greater is better)}
+        \end{subfigure}
+        \begin{subfigure}[b]{0.48\textwidth}
+            \includegraphics[width=\textwidth, height=4cm]{img/dalitz_sde.png}
+            \caption{SDE vs \#trees \\ 
+             \; (less is better)}
+        \end{subfigure}
+
+    \end{figure}
+ 
+
+
+\end{frame}
+
+\begin{frame}[t]
+    \frametitle{Tradeoff uniformity vs quality}
+    In uGBFL we can choose different values of $alpha$ thus adjusting quality/uniformity.
+
+    \begin{figure}
+        \centering
+        \begin{subfigure}[b]{0.32\textwidth}
+            \includegraphics[width=\textwidth, height=4cm]{img/trade_roc.png}
+            \caption{ROC curves \\  
+            \; $ \;$
+            }
+        \end{subfigure}
+        \begin{subfigure}[b]{0.32\textwidth}
+            \includegraphics[width=\textwidth, height=4cm]{img/trade_roc_stage.png}
+            \caption{ROC vs \#trees \\ 
+             \; (greater is better)}
+        \end{subfigure}
+        \begin{subfigure}[b]{0.32\textwidth}
+            \includegraphics[width=\textwidth, height=4cm]{img/trade_sde.png}
+            \caption{SDE vs \#trees \\ 
+              \;  (less is better)
+            }
+        \end{subfigure}
+    \end{figure}
+
+
+
+\end{frame}
+
+\begin{frame}[t]
+    \frametitle{Summary on classifiers}
+    New classifiers
+    \begin{itemize}
+        \item Faster (than uBoost)
+        \item Introduces classifiers can target at uniformity in \textit{both} signal and bck
+        \item $knn$AdaBoost and uGB + knnAdaLoss can be easily implemented, but don't seem to produce good uniformity
+        \item uGBFL is highly tunable and proved to be able to fight severe correlation
+    \end{itemize}
+
+\end{frame}
+
+\begin{frame}
+
+    Read: \\
+    \url{http://arxiv.org/abs/1410.4140} 
+    \bigskip
+    \\
+
+    Try out (python implementation): \\
+    \url{https://github.com/anaderi/lhcb_trigger_ml}
+
+\end{frame}
+
+
+
+\begin{frame}
+\Huge{\centerline{Q\&A}}
+\end{frame}
+
+
+\begin{frame}
+    \Huge{\centerline{Backup}}
+\end{frame}
+
+\begin{frame}[t]
+    \frametitle{title}
+    
+
+
+\end{frame}
+
+
+% \input{backup.tex}
+%------------------------------------------------
+
+\end{document}
