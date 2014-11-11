@@ -11,8 +11,7 @@ which is good for development, analysis and presenting results (plots, histogram
 * [Dalitz Demo](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/notebooks/Demo_DalitzData.ipynb) (several uniforming classifiers on dataset from uBoost paper)
 * [Decay of tau into three muons](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/notebooks/TauIntoMuons.ipynb)
 * [Generation of toy Monte-Carlo](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/notebooks/Demo_ToyMonteCarlo.ipynb)
-* Any other notebook from repository can be viewed: find it in  
-  [notebook-viewer](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/tree/master/notebooks/)
+* Any other notebook from repository can be viewed: find it in [notebook-viewer](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/tree/master/notebooks/)
 
  
 
