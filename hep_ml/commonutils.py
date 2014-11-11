@@ -183,7 +183,7 @@ def compute_bdt_cut(target_efficiency, y_true, y_pred, sample_weight=None):
     """Computes cut which gives fixed efficiency.
     :type target_efficiency: float from 0 to 1 or numpy.array with floats in [0,1]
     :type y_true: numpy.array, of zeros and ones, shape = [n_samples]
-    :type y_pred: numpy.array, prediction probabilities returned by classifier, shape = [n_samples, 2]
+    :type y_pred: numpy.array, prediction probabilities returned by classifier, shape = [n_samples]
     """
     assert len(y_true) == len(y_pred), "different size"
     signal_proba = y_pred[y_true > 0.5]
