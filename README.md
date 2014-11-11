@@ -8,16 +8,19 @@ which is good for development, analysis and presenting results (plots, histogram
 
 
 # Brief demos:
-* [Dalitz Demo](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/IPythonWorkflow/DalitzDemo.ipynb) (several uniforming classifiers on dataset from uBoost paper)
-* [Decay of tau into three muons](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/IPythonWorkflow/TauIntoMuons.ipynb)
-* [Generation of toy Monte-Carlo](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/IPythonWorkflow/Demo_ToyMonteCarlo.ipynb)
-* Any other notebook from repository can be viewed: just paste its link to [nbviewer](http://nbviewer.ipython.org)  
+* [Dalitz Demo](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/notebooks/Demo_DalitzData.ipynb) (several uniforming classifiers on dataset from uBoost paper)
+* [Decay of tau into three muons](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/notebooks/TauIntoMuons.ipynb)
+* [Generation of toy Monte-Carlo](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/blob/master/notebooks/Demo_ToyMonteCarlo.ipynb)
+* Any other notebook from repository can be viewed: find it in  
+  [notebook-viewer](http://nbviewer.ipython.org/github/anaderi/lhcb_trigger_ml/tree/master/notebooks/)
+
+ 
 
 # Main points
 * working on uniform classifiers - the classifiers with low correlation of predictions and mass (or some other variable(s))
-  * measures of uniformity (`MSE`, `Theil`, `CvM`, `KS`)
+  * measures of uniformity (`SDE`, `Theil`, `CvM`, `KS`)
   * __uBoost__ optimized implementation inside
-  * __uniformGradientBoosting__ (with different losses, specially __FlatnessLoss__ is very interesting)
+  * __uGradientBoosting__ (with different losses, specially __FlatnessLoss__ is very interesting)
 * parameter optimization  <br />
   See `grid_search` module, there is a simulated annealing-like optimization of parameters on dataset, 
   this optimization can be performed on cluster.
@@ -32,7 +35,7 @@ which is good for development, analysis and presenting results (plots, histogram
   different BDTs inside uBoost can be trained parallelly in cluster.
 
 ###Getting started
-To run most the notebooks, only IPython and some python libraries are needed.
+To run most of the notebooks, only IPython and some python libraries are needed.
 
 To run example notebooks on some machine, one should have
 * [IPython](http://ipython.org/install.html)

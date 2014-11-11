@@ -44,5 +44,5 @@ notebook.log~
 .idea/
 
 # local condiguration file
-configlocal.py
+config.py
 
