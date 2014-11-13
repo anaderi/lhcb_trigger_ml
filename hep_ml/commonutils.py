@@ -76,7 +76,10 @@ def generate_sample(n_samples, n_features, distance=2.0):
 
 
 def check_sample_weight(y_true, sample_weight):
-    """Checks the weights, returns normalized version """
+    """Checks the weights, returns normalized version
+    :param y_true: numpy.array of shape [n_samples]
+    :param sample_weight: array-like of shape [n_samples] or None
+    :returns: numpy.array with weights of shape [n_samples]"""
     if sample_weight is None:
         return numpy.ones(len(y_true), dtype=numpy.float)
     else:
@@ -84,6 +87,17 @@ def check_sample_weight(y_true, sample_weight):
         assert len(y_true) == len(sample_weight), \
             "The length of weights is different: not {0}, but {1}".format(len(y_true), len(sample_weight))
         return sample_weight
+
+
+def check_uniform_label(uniform_label):
+    """ Convert to numpy.array
+    :param uniform_label: label or list of labels (examples: 0, 1, [0], [1], [0, 1])
+    :return: numpy.array (with [0], [1] or [0, 1])
+    """
+    if isinstance(uniform_label, numbers.Number):
+        return numpy.array([uniform_label])
+    else:
+        return numpy.array(uniform_label)
 
 
 def reorder_by_first(*arrays):
@@ -123,6 +137,15 @@ def train_test_split(*arrays, **kw_args):
 
 
 def weighted_percentile(array, percentiles, sample_weight=None, array_sorted=False, old_style=False):
+    """ Very close to numpy.precentile, but supports weights.
+    NB: percentiles should be in [0, 1]
+    :param array: numpy.array with data
+    :param percentiles: array-like with many percentiles
+    :param sample_weight: array-like of the same length as `array`
+    :param array_sorted: bool, if True, then will avoid sorting
+    :param old_style: if True, will correct output to be consistent with numpy.percentile.
+    :return: numpy.array with computed percentiles.
+    """
     array = numpy.array(array)
     percentiles = numpy.array(percentiles)
     sample_weight = check_sample_weight(array, sample_weight)
@@ -258,16 +281,6 @@ def memory_usage():
     return result
 
 
-def subdict(start_dict, keys=None):
-    """Returns the ordered dictionary from initial one which contains only listed keys """
-    if keys is None:
-        return OrderedDict(start_dict)
-    result = OrderedDict()
-    for key in keys:
-        result[key] = start_dict[key]
-    return result
-
-
 def indices_of_values(array):
     """For each value in array returns indices with this value
     :param array: numpy.array with 1-dimensional initial data
@@ -281,12 +294,7 @@ def indices_of_values(array):
         yield sorted_array[limits[i]], indices[limits[i]: limits[i + 1]]
 
 
-def check_uniform_label(uniform_label):
-    """ Convert to numpy.array
-    :param uniform_label: label or list of labels (examples: 0, 1, [0], [1], [0, 1])
-    :return: numpy.array
-    """
-    if isinstance(uniform_label, numbers.Number):
-        return [uniform_label]
-    else:
-        return uniform_label
+def print_header(header, level=3):
+    from IPython.display import display_html
+    display_html("<h{level}>{header}</h{level}>".format(header=header, level=level))
+
