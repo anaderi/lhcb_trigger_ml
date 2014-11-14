@@ -1,21 +1,16 @@
 from __future__ import print_function, division, absolute_import
 
 import numpy
-import numbers
-from collections import defaultdict
-
 import scipy.sparse as sparse
-from sklearn.base import BaseEstimator
 from sklearn.ensemble.forest import RandomForestRegressor
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.neighbors.unsupervised import NearestNeighbors
-from sklearn.utils.validation import column_or_1d
 
 from .. import commonutils
 from ..commonutils import check_sample_weight
 from hep_ml.commonutils import check_uniform_label
-from hep_ml.losses import AbstractFlatnessLossFunction, KnnFlatnessLossFunction
-from ..ugradientboosting import AbstractLossFunction, AbstractMatrixLossFunction
+from hep_ml.losses import SimpleKnnLossFunction, KnnFlatnessLossFunction
+from hep_ml.ugradientboosting import AbstractMatrixLossFunction
 
 
 __author__ = 'Alex Rogozhnikov'
@@ -27,25 +22,24 @@ __author__ = 'Alex Rogozhnikov'
 # algorithm of generating A and w
 
 
-class SimpleKnnLossFunction(AbstractMatrixLossFunction):
-    def __init__(self, uniform_variables, knn=10, uniform_label=1, distinguish_classes=True, row_norm=1.):
+class ExperimentalSimpleKnnLossFunction(SimpleKnnLossFunction):
+    def __init__(self, uniform_variables, knn=10, uniform_label=1, row_norm=1., diagonal=0.):
         """A matrix is square, each row corresponds to a single event in train dataset, in each row we put ones
         to the closest neighbours of that event if this event from class along which we want to have uniform prediction.
         :param list[str] uniform_variables: the features, along which uniformity is desired
         :param int knn: the number of nonzero elements in the row, corresponding to event in 'uniform class'
         :param int|list[int] uniform_label: the label (labels) of 'uniform classes'
-        :param bool distinguish_classes: if True, 1's will be placed only for
+        :param int diagonal: float, A + diagonal * Identity is used.
         """
         self.knn = knn
-        self.distinguish_classes = distinguish_classes
         self.row_norm = row_norm
-        self.uniform_label = [uniform_label] if isinstance(uniform_label, numbers.Number) else uniform_label
-        AbstractMatrixLossFunction.__init__(self, uniform_variables)
+        self.diagonal = diagonal
+        self.uniform_label = check_uniform_label(uniform_label)
+        AbstractMatrixLossFunction.__init__(self, uniform_variables,)
 
     def compute_parameters(self, trainX, trainY):
-        sample_weight = numpy.ones(len(trainX))
+        n_samples = len(trainX)
         A_parts = []
-        w_parts = []
         for label in self.uniform_label:
             label_mask = trainY == label
             n_label = numpy.sum(label_mask)
@@ -60,10 +54,7 @@ class SimpleKnnLossFunction(AbstractMatrixLossFunction):
             column_indices = knn_indices.flatten()
             data = numpy.ones(n_label * self.knn, dtype=float) * self.row_norm / self.knn
             A_part = sparse.csr_matrix((data, column_indices, ind_ptr), shape=[n_label, len(trainX)])
-            w_part = numpy.mean(numpy.take(sample_weight, knn_indices), axis=1)
-            assert A_part.shape[0] == len(w_part)
             A_parts.append(A_part)
-            w_parts.append(w_part)
 
         for label in set(trainY).difference(self.uniform_label):
             label_mask = trainY == label
@@ -72,13 +63,10 @@ class SimpleKnnLossFunction(AbstractMatrixLossFunction):
             column_indices = numpy.where(label_mask)[0].flatten()
             data = numpy.ones(n_label, dtype=float) * self.row_norm
             A_part = sparse.csr_matrix((data, column_indices, ind_ptr), shape=[n_label, len(trainX)])
-            w_part = sample_weight[label_mask]
             A_parts.append(A_part)
-            w_parts.append(w_part)
 
-        A = sparse.vstack(A_parts, format='csr', dtype=float)
-        w = numpy.concatenate(w_parts)
-        return A, w
+        A = sparse.vstack(A_parts, format='csr', dtype=float) + sparse.eye(n_samples) * self.diagonal
+        return A, numpy.ones(len(trainX))
 
 
 class SimpleKnnLossFunctionEyeBg(AbstractMatrixLossFunction):
