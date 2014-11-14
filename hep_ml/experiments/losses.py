@@ -1,21 +1,21 @@
-from __future__ import print_function
-from __future__ import division
+from __future__ import print_function, division, absolute_import
 
-from collections import defaultdict
+import numpy
 import numbers
+from collections import defaultdict
 
 import scipy.sparse as sparse
 from sklearn.base import BaseEstimator
 from sklearn.ensemble.forest import RandomForestRegressor
-from sklearn.ensemble.gradient_boosting import LogOddsEstimator
-import numpy
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.neighbors.unsupervised import NearestNeighbors
 from sklearn.utils.validation import column_or_1d
 
-from .. import commonutils, reports, metrics
+from .. import commonutils
 from ..commonutils import check_sample_weight
-from ..ugradientboosting import AbstractLossFunction, AbstractMatrixLossFunction, compute_positions
+from hep_ml.commonutils import check_uniform_label
+from hep_ml.losses import AbstractFlatnessLossFunction, KnnFlatnessLossFunction
+from ..ugradientboosting import AbstractLossFunction, AbstractMatrixLossFunction
 
 
 __author__ = 'Alex Rogozhnikov'
@@ -296,7 +296,7 @@ class PairwiseKnnLossFunction(AbstractMatrixLossFunction):
         knn = self.knn
         if self.exclude_self:
             knn_indices = \
-                commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, knn+1)[:, 1:]
+                commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, knn + 1)[:, 1:]
         else:
             knn_indices = commonutils.computeKnnIndicesOfSameClass(self.uniform_variables, trainX, is_signal, knn)
 
@@ -405,10 +405,10 @@ class DistanceBasedKnnFunction(AbstractMatrixLossFunction):
 
         if self.row_normalize:
             from sklearn.preprocessing import normalize
+
             A = normalize(A, norm='l1', axis=1)
 
         return A, numpy.ones(A.shape[0])
-
 
 
 def exp_margin(margin):
@@ -416,226 +416,49 @@ def exp_margin(margin):
     return numpy.exp(numpy.clip(margin, -1e5, 2))
 
 
-class FlatnessLossFunction(AbstractLossFunction, BaseEstimator):
-    def __init__(self, uniform_variables, bins=10, uniform_label=1, power=2., ada_coefficient=1.,
-                 allow_wrong_signs=True, median=False, keep_debug_info=False):
-        """
-        This loss function contains separately penalty for non-flatness and ada_coefficient.
-        The penalty for non-flatness is using bins.
-
-        :type uniform_variables: the vars, along which we want to obtain uniformity
-        :type bins: the number of bins along each axis
-        :type uniform_label: int | list(int), the labels for which we want to obtain uniformity
-        :type power: the loss contains the difference | F - F_bin |^p, where p is power
-        :type ada_coefficient: coefficient of ada_loss added to this one. The greater the coefficient,
-            the less we tend to uniformity.
-        :type allow_wrong_signs: defines whether gradient may different sign from the "sign of class"
-            (i.e. may have negative gradient on signal)
-        """
-        self.uniform_variables = uniform_variables
-        self.bins = bins
-        self.uniform_label = numpy.array([uniform_label]) if isinstance(uniform_label, numbers.Number)  \
-            else numpy.array(uniform_label)
-        self.power = power
-        self.ada_coefficient = ada_coefficient
-        self.allow_wrong_signs = allow_wrong_signs
-        self.keep_debug_info = keep_debug_info
-        self.median = median
-        AbstractLossFunction.__init__(self, 1)
-
-    def fit(self, X, y, sample_weight=None):
-        assert len(X) == len(y), 'The lengths are different'
-        sample_weight = check_sample_weight(y,  sample_weight=sample_weight)
-
-        self.group_indices = defaultdict(list)
-        # The weight of bin is mean of weights inside bin
-        self.group_weights = defaultdict(list)
-        occurences = numpy.zeros(len(X), dtype=int)
-
-        for label in self.uniform_label:
-            group_indices = self.compute_groups_indices(X, y, sample_weight=sample_weight, label=label)
-            # cleaning the bins - deleting tiny or empty groups, canonizing
-            for indices in group_indices:
-                if len(indices) < 5:
-                    # ignoring very small groups
-                    continue
-                assert numpy.all((y == label)[indices])
-                self.group_indices[label].append(numpy.array(indices))
-                self.group_weights[label].append(numpy.mean(sample_weight[indices]))
-                occurences[indices] += 1
-
-        y = numpy.array(y, dtype=int)
-        needed_indices = numpy.in1d(y, self.uniform_label)
-        out_of_bins = numpy.sum((occurences == 0) & needed_indices)
-        if out_of_bins > 0.01 * len(X):
-            print("warning: %i events are out of all bins" % out_of_bins)
-
-        self.sample_weight = sample_weight
-        self.event_weights = sample_weight / (occurences + 1e-10)
-        if self.keep_debug_info:
-            self.debug_dict = defaultdict(list)
-        return self
-
-    def compute_groups_indices(self, X, y, sample_weight, label):
-        """Returns a list, each element is events' indices in some group."""
-        mask = y == label
-        bin_limits = []
-        for var in self.uniform_variables:
-            bin_limits.append(numpy.linspace(numpy.min(X[var][mask]), numpy.max(X[var][mask]), 2 * self.bins + 1))
-        result = list()
-        for shift in [0, 1]:
-            bin_limits2 = []
-            for axis_limits in bin_limits:
-                bin_limits2.append(axis_limits[1 + shift:-1:2])
-            bin_indices = reports.compute_bin_indices(X, self.uniform_variables, bin_limits2)
-            result += metrics.bin_to_group_indices(bin_indices, mask=mask)
-        return result
-
-    def __call__(self, y, pred):
-        # computing the common distribution of signal
-        # taking only signal by now
-        # this is approximate computation!
-        # TODO reimplement, this is wrong implementation
-        pred = numpy.ravel(pred)
-        loss = 0
-
-        for label in self.uniform_label:
-            needed_indices = y == label
-            sorted_pred = numpy.sort(pred[needed_indices])
-
-            for bin_weight, indices_in_bin in zip(self.group_weights[label], self.group_indices[label]):
-                probs_in_bin = numpy.take(pred, indices_in_bin)
-                probs_in_bin = numpy.sort(probs_in_bin)
-                positions = numpy.searchsorted(sorted_pred, probs_in_bin)
-                global_effs = positions / float(len(sorted_pred))
-                local_effs = (numpy.arange(0, len(probs_in_bin)) + 0.5) / len(probs_in_bin)
-                bin_loss = numpy.sum((global_effs - local_effs) ** self.power)
-                loss += bin_loss * bin_weight
-
-        # Ada loss now
-        loss += self.ada_coefficient * numpy.sum(numpy.exp(-y * pred))
-        return loss
-
-    def negative_gradient(self, y, y_pred, **kw_args):
-        y_pred = numpy.ravel(y_pred)
-        neg_gradient = numpy.zeros(len(y))
-
-        for label in self.uniform_label:
-            label_mask = y == label
-            global_efficiencies = numpy.zeros(len(y_pred), dtype=float)
-            global_efficiencies[label_mask] = compute_efficiencies(label_mask, y_pred, sample_weight=self.sample_weight)
-
-            for bin_weight, indices_in_bin in zip(self.group_weights[label], self.group_indices[label]):
-                assert numpy.all(label_mask[indices_in_bin]), "TODO delete"
-                local_effs = compute_efficiencies(indices_in_bin, y_pred, sample_weight=self.sample_weight)
-                global_effs = global_efficiencies[indices_in_bin]
-                bin_gradient = self.power * numpy.sign(local_effs - global_effs) \
-                               * numpy.abs(local_effs - global_effs) ** (self.power - 1)
-
-                # TODO multiply by derivative of F_global ?
-                neg_gradient[indices_in_bin] += bin_weight * bin_gradient
-
-        assert numpy.all(neg_gradient[~numpy.in1d(y, self.uniform_label)] == 0)
-
-        y_signed = 2 * y - 1
-        if self.keep_debug_info:
-            self.debug_dict['pred'].append(numpy.copy(y_pred))
-            self.debug_dict['fl_grad'].append(numpy.copy(neg_gradient))
-            self.debug_dict['ada_grad'].append(y_signed * self.sample_weight * numpy.exp(- y_signed * y_pred))
-
-        # adding ada
-        neg_gradient += self.ada_coefficient * y_signed * self.sample_weight \
-                        * exp_margin(-self.ada_coefficient * y_signed * y_pred)
-
-        if not self.allow_wrong_signs:
-            neg_gradient = y_signed * numpy.clip(y_signed * neg_gradient, 0, 1e5)
-
-        return neg_gradient
-
-    # def update_terminal_regions(self, tree, X, y, residual, y_pred, sample_mask, learning_rate=1.0, k=0):
-        # the standard version is used
-
-    def _update_terminal_region(self, tree, terminal_regions, leaf, X, y, residual, pred):
-        # terminal_region = numpy.where(terminal_regions == leaf)[0]
-        if self.median:
-            terminal_region = numpy.where(terminal_regions == leaf)[0]
-            residual = residual.take(terminal_region, axis=0)
-            tree.value[leaf, 0, 0] = numpy.median(residual)
-        else:
-            tree.value[leaf, 0, 0] = numpy.clip(tree.value[leaf, 0, 0], -10, 10)
-
-    def init_estimator(self, X=None, y=None):
-        return LogOddsEstimator()
-
-
 class NewRF(RandomForestRegressor):
     """Just a random forest regressor, that returns a two-dimensional array"""
+
     def predict(self, X):
         return RandomForestRegressor.predict(self, X)[:, numpy.newaxis]
 
 
-class NewFlatnessLossFunction(FlatnessLossFunction, BaseEstimator):
-    def __init__(self, uniform_variables, n_neighbours=100, uniform_label=1,  ada_coefficient=1.,
-                 allow_wrong_signs=True, keep_debug_info=False, uniforming_factor=1., update_tree=True):
-        """
-        :param int|list[int] uniform_label: labels of classes for which the uniformity of predictions is desired
-        """
-        self.uniform_variables = uniform_variables
-        self.n_neighbours = n_neighbours
-        self.uniform_label = numpy.array([uniform_label]) if isinstance(uniform_label, numbers.Number)  \
-            else numpy.array(uniform_label)
-        self.ada_coefficient = ada_coefficient
-        self.allow_wrong_signs = allow_wrong_signs
-        self.keep_debug_info = keep_debug_info
+class NewFlatnessLossFunction(KnnFlatnessLossFunction):
+    def __init__(self, uniform_variables, n_neighbours=100, uniform_label=1, ada_coefficient=1.,
+                 allow_wrong_signs=True, power=2.,
+                 keep_debug_info=False, uniforming_factor=1.):
+        KnnFlatnessLossFunction.__init__(uniform_variables=uniform_variables,
+                                         uniform_label=uniform_label,
+                                         power=power,
+                                         ada_coefficient=ada_coefficient,
+                                         allow_wrong_signs=allow_wrong_signs,
+                                         n_neighbours=n_neighbours,
+                                         use_median=False,
+                                         keep_debug_info=keep_debug_info,
+        )
         self.uniforming_factor = uniforming_factor
-        self.update_tree = update_tree
-        AbstractLossFunction.__init__(self, 1)
 
-    def fit(self, X, y, sample_weight=None):
-        assert len(X) == len(y), 'The lengths are different'
-        # sample_weight = check_sample_weight(y,  sample_weight=sample_weight)
-        y = column_or_1d(y)
-        assert set(y) == {0,1}, "Only two classes are supported, their labels should be 0 and 1"
-        self.knn_indices = defaultdict(list)
-        for label in self.uniform_label:
-            label_mask = y == label
-            knn_indices = commonutils.computeSignalKnnIndices(self.uniform_variables, X, label_mask, n_neighbors=self.n_neighbours)
-            # taking only rows, corresponding to this class
-            self.knn_indices[label] = knn_indices[label_mask, :]
-
-        if self.keep_debug_info:
-            self.debug_dict = defaultdict(list)
-        return self
-
-    def __call__(self, y, pred):
-        return 1
-
-    def init_estimator(self, X=None, y=None):
-        return NewRF()
-
-    def negative_gradient(self, y, y_pred, sample_weight=None, **kw_args):
-        sample_weight = check_sample_weight(y, sample_weight=sample_weight)
+    def negative_gradient(self, y_pred):
+        sample_weight = check_sample_weight(self.y, sample_weight=self.sample_weight)
         y_pred = numpy.ravel(y_pred)
-        neg_gradient = numpy.zeros(len(y))
+        neg_gradient = numpy.zeros(len(self.y))
 
         for label in self.uniform_label:
-            label_mask = y == label
+            label_mask = self.y == label
             assert sum(label_mask) == len(self.knn_indices[label])
-            # global_efficiencies = numpy.zeros(len(y_pred), dtype=float)
-            # global_efficiencies[label_mask] = compute_efficiencies(label_mask, y_pred, sample_weight=self.sample_weight)
             values = y_pred[label_mask]
             knn_values = numpy.take(y_pred, self.knn_indices[label])
             knn_weights = numpy.take(sample_weight, self.knn_indices[label])
-            # TODO use heaviside here?
+            # TODO use smoothing here?
             local_efficiencies = numpy.average(knn_values > values[:, numpy.newaxis], axis=1, weights=knn_weights)
             global_targets = commonutils.weighted_percentile(values, local_efficiencies,
                                                              sample_weight=sample_weight[label_mask])
 
-            neg_gradient[label_mask] += self.uniforming_factor * (global_targets - values)
+            neg_gradient[label_mask] += self.uniforming_factor * (global_targets - values) ** (self.power - 1)
 
-        assert numpy.all(neg_gradient[~numpy.in1d(y, self.uniform_label)] == 0)
+        assert numpy.all(neg_gradient[~numpy.in1d(self.y, self.uniform_label)] == 0)
 
-        y_signed = 2 * y - 1
+        y_signed = self.y_signed
         if self.keep_debug_info:
             self.debug_dict['pred'].append(numpy.copy(y_pred))
             self.debug_dict['fl_grad'].append(numpy.copy(neg_gradient))
@@ -649,10 +472,3 @@ class NewFlatnessLossFunction(FlatnessLossFunction, BaseEstimator):
             neg_gradient = y_signed * numpy.clip(y_signed * neg_gradient, 0, 1e5)
 
         return neg_gradient
-
-    def _update_terminal_region(self, tree, terminal_regions, leaf, X, y, residual, pred):
-        if not self.update_tree:
-            return
-        terminal_region = numpy.where(terminal_regions == leaf)[0]
-        residual = residual.take(terminal_region, axis=0)
-        tree.value[leaf, 0, 0] = numpy.median(residual)
