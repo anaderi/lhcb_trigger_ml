@@ -23,7 +23,7 @@ __author__ = 'Alex Rogozhnikov'
 
 
 class ExperimentalSimpleKnnLossFunction(SimpleKnnLossFunction):
-    def __init__(self, uniform_variables, knn=10, uniform_label=1, row_norm=1., diagonal=0.):
+    def __init__(self, uniform_variables, knn=10, uniform_label=1, row_norm=1., diagonal=0., distinguish_classes=True):
         """A matrix is square, each row corresponds to a single event in train dataset, in each row we put ones
         to the closest neighbours of that event if this event from class along which we want to have uniform prediction.
         :param list[str] uniform_variables: the features, along which uniformity is desired
@@ -35,7 +35,8 @@ class ExperimentalSimpleKnnLossFunction(SimpleKnnLossFunction):
         self.row_norm = row_norm
         self.diagonal = diagonal
         self.uniform_label = check_uniform_label(uniform_label)
-        AbstractMatrixLossFunction.__init__(self, uniform_variables,)
+        self.distinguish_classes = distinguish_classes
+        AbstractMatrixLossFunction.__init__(self, uniform_variables)
 
     def compute_parameters(self, trainX, trainY):
         n_samples = len(trainX)
