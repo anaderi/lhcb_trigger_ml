@@ -1,26 +1,21 @@
-from __future__ import division
-from __future__ import print_function
-from collections import OrderedDict
+from __future__ import division, print_function
 
 import copy
-from itertools import islice
 import numbers
 import numpy
 import pandas
 import sklearn
 from scipy.special import expit, logit
-from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
-from sklearn.cross_validation import train_test_split, StratifiedKFold
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble._gradient_boosting import _random_sample_mask
-from sklearn.ensemble.forest import RandomForestClassifier
 from sklearn.ensemble.gradient_boosting import LossFunction
-from sklearn.ensemble.weight_boosting import AdaBoostClassifier
 from sklearn.tree.tree import DecisionTreeRegressor, DTYPE
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays, column_or_1d, array2d
-from hep_ml.commonutils import check_sample_weight, generate_sample, map_on_cluster
-import hep_ml.commonutils
-from transformations import enhance_data, Shuffler, indices_of_values
+
+from hep_ml.commonutils import check_sample_weight, generate_sample, map_on_cluster, indices_of_values
+from hep_ml.losses import AbstractLossFunction
+from transformations import enhance_data, Shuffler
 
 real_s = 691.988607712
 real_b = 410999.847322
@@ -433,121 +428,6 @@ test_gradient_boosting()
 #endregion
 
 
-#region Voting classifier
-
-def _vote_train_classifier(clf, X, y, sample_weight, train_ind, test_ind):
-    try:
-        X = pandas.DataFrame(X)
-        trainX = X.iloc[train_ind, :]
-        testX = X.iloc[test_ind, :]
-        clf = sklearn.clone(clf)
-        clf.fit(trainX, y[train_ind], sample_weight[train_ind])
-        # computing optimal AMS
-        ams_values = []
-        for stage in islice(clf.staged_predict_proba(testX), None, None, 5):
-            ams_values.append(optimal_AMS(y[test_ind], stage[:, 1], sample_weight[test_ind]))
-
-        return clf, ams_values
-    except Exception as e:
-        return e, []
-
-
-class VoteClassifier(BaseEstimator, ClassifierMixin):
-    def __init__(self, base_estimator=None, n_folds=3, random_state=13,
-                 use_stages=True, ipc_profile=None):
-        self.base_estimator = base_estimator
-        self.n_folds = n_folds
-        self.random_state = random_state
-        self.use_stages = use_stages
-        self.ipc_profile = ipc_profile
-
-    def fit(self, X, y, sample_weight):
-        import pylab
-        self.random_state = check_random_state(self.random_state)
-        self.base_estimator.set_params(random_state=13)
-        X, y, sample_weight = check_arrays(X, y, sample_weight)
-        X = pandas.DataFrame(X)
-        n = self.n_folds
-
-        train_indices = []
-        test_indices = []
-
-        kFolder = StratifiedKFold(y, n_folds=self.n_folds, shuffle=True, random_state=13)
-
-        for train_ind, test_ind in kFolder:
-            train_indices.append(train_ind)
-            test_indices.append(test_ind)
-
-        self.result = commonutils.map_on_cluster(self.ipc_profile, _vote_train_classifier,
-                                       [self.base_estimator] * n,
-                                       [X] * n,
-                                       [y] * n,
-                                       [sample_weight] * n,
-                                       train_indices,
-                                       test_indices)
-
-        self.kfold_proba = numpy.zeros([len(X), 2])
-
-        for (clf, ams_values), test_ind in zip(self.result, test_indices):
-            if isinstance(clf, Exception):
-                print('Exception\n', clf)
-                continue
-            pylab.plot(ams_values)
-            assert numpy.all(self.kfold_proba[test_ind] == 0), 'something wrong'
-            proba = clf.predict_proba(X.ix[test_ind, :])
-            self.kfold_proba[test_ind, :] = proba
-            print(optimal_AMS(y[test_ind], proba[:, 1], sample_weight=sample_weight[test_ind]))
-            plot_AMS_on_cuts(y[test_ind], proba[:, 1], sample_weight=sample_weight[test_ind])
-
-        assert numpy.all(self.kfold_proba.sum(axis=1) > 0.5)
-        self.X = X
-        self.y = y
-        self.sample_weight = sample_weight
-
-        return self
-
-    def iterate_predict_proba(self, X, y, sample_weight):
-        X, y, sample_weight = check_arrays(X, y, sample_weight)
-        results = numpy.zeros([len(X), len(self.result)])
-        for i, (clf, staged_ams) in enumerate(self.result):
-            best_stage = numpy.argmax(staged_ams)
-            if not self.use_stages:
-                best_stage = len(staged_ams) - 1
-            for j, stage_pred in enumerate(clf.staged_predict_proba(X)):
-                if j == best_stage:
-                    results[:, i] = stage_pred[:, 1]
-
-        print('quantiles')
-        for q in [10, 20, 30, 40, 50, 60, 70, 80, 90]:
-            print('quantile', q)
-            print(optimal_AMS(y, numpy.percentile(results, q, axis=1), sample_weight=sample_weight))
-
-        print('holder means')
-        for p in [0.5, 1., 2., 3.]:
-            print('p', p)
-            print(optimal_AMS(y, numpy.mean(results ** p, axis=1), sample_weight=sample_weight))
-
-        return results
-
-    def pred_quality(self, threshold=0.5):
-        print('thresh', AMS(self.y, self.kfold_proba[:, 1] > threshold, self.sample_weight))
-        print('optimal', optimal_AMS(self.y, self.kfold_proba[:, 1], self.sample_weight))
-        cuts, rads = compute_ams_on_cuts(self.y, self.kfold_proba[:, 1], self.sample_weight)
-        ind = numpy.argmax(rads)
-        print('opt cut and val', cuts[ind], numpy.sqrt(rads[ind]), ind / len(self.y))
-
-    def predict_proba(self, X, q=50,):
-        results = numpy.zeros([len(X), len(self.result)], dtype=float)
-        X, = check_arrays(X, dtype=DTYPE, sparse_format="dense", check_ccontiguous=True)
-
-        for i, (clf, ams_values) in enumerate(self.result):
-            results[:, i] = clf.predict_proba(X)[:, 1]
-
-        return numpy.percentile(results, q, axis=1)
-
-#endregion
-
-
 #region Reweighters
 
 def normalize_weight(y, weights, sig_weight=1., pow_sig=1., pow_bg=1.):
@@ -588,23 +468,6 @@ class ReweightingGB(GradientBoosting):
         return GradientBoosting.fit(self, X, y, sample_weight=sample_weight)
 
 
-class ReweightingAda(AdaBoostClassifier):
-    def __init__(self, base_estimator=None,
-                 sig_weight=1., pow_sig=1., pow_bg=1.,
-                 n_estimators=10, learning_rate=1., random_state=None):
-        AdaBoostClassifier.__init__(self, base_estimator=base_estimator, n_estimators=n_estimators,
-                                    learning_rate=learning_rate, random_state=random_state)
-        # Everything should be set via set_params
-        self.base_estimator = base_estimator
-        self.sig_weight = sig_weight
-        self.pow_bg = pow_bg
-        self.pow_sig = pow_sig
-
-    def fit(self, X, y, sample_weight=None):
-        sample_weight = normalize_weight(y, sample_weight, sig_weight=self.sig_weight, pow_sig=self.pow_sig,
-                                         pow_bg=self.pow_bg)
-        return AdaBoostClassifier.fit(self, X, y, sample_weight=sample_weight)
-
 
 
 
@@ -632,52 +495,17 @@ base_gb_test.set_params(loss__signal_curvature=0.7, learning_rate=0.03, min_samp
                         smearing=0.01, max_features=15, update_tree=True, max_depth=16, subsample=0.5,
                         sig_weight=0.1, weights_in_loss=False, update_on='all')
 
-base_rada = ReweightingAda(base_estimator=RandomForestClassifier(n_estimators=10, min_samples_leaf=400, max_depth=15),
-                           sig_weight=0.3, n_estimators=10, learning_rate=0.5)
-
 
 
 #endregion
 
 
-def train_on_columns(name, clf, x, y, w, columns):
-    clf.fit(x[columns], y, sample_weight=w)
-    return name, clf
-
-
-class FeaturesAdder(BaseEstimator, TransformerMixin):
-    def __init__(self, feats, base_estimator):
-        self.feats = OrderedDict(feats)
-        self.base_estimator = base_estimator
-
-    def fit(self, X, y, sample_weight, ipc_profile):
-        n = len(self.feats)
-        self.result = map_on_cluster(ipc_profile, train_on_columns,
-                                     self.feats.keys(),
-                                     [self.base_estimator] * n,
-                                     [X] * n,
-                                     [y] * n,
-                                     [sample_weight] * n,
-                                     self.feats.values())
-        self.classifiers = OrderedDict()
-        for key, val in self.result:
-            self.classifiers[key] = val
-
-    def transform(self, X):
-        X = pandas.DataFrame.copy(X)
-        for name, columns in self.feats.iteritems():
-            X[name] = self.classifiers[name].predict_proba(X[columns])[:, 1]
-        return X
-
 
 """
 import gradient_boosting as gb
-voter = gb.VoteClassifier(base_estimator=gb.base_gb)
-voter = gb.VoteClassifier(base_estimator=gb.base_gb_short)
-# voter = gb.VoteClassifier(base_estimator=gb.base_gb_no_shuffle)
-voter = gb.VoteClassifier(base_estimator=gb.base_gb_test)
 data, y, w = gb.get_higgs_data()
+voter = gb.base_gb
+voter.set_params(n_estimators=10)
 voter.fit(gb.enhance_data(data), y, w)
-voter.pred_quality()
 
 """
