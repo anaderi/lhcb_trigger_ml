@@ -123,8 +123,6 @@ class DumbSplitter(BaseEstimator, ClassifierMixin):
 
     def fit(self, X, y, sample_weight=None):
         assert len(X) == len(y), 'the lengths are different'
-        if sample_weight is None:
-            sample_weight = numpy.ones(len(y))
         assert len(y) == len(sample_weight), 'the lengths are different'
         assert self.feature_name in X.columns, 'no such feature in index'
         self.values = set(X.loc[:, self.feature_name])
@@ -132,7 +130,10 @@ class DumbSplitter(BaseEstimator, ClassifierMixin):
         for value in self.values:
             rows = numpy.array(X[self.feature_name] == value)
             new_classifier = sklearn.clone(self.base_estimator)
-            new_classifier.fit(X.loc[rows], y[rows], sample_weight=sample_weight[rows])
+            if sample_weight is None:
+                new_classifier.fit(X.loc[rows], y[rows], sample_weight=sample_weight[rows])
+            else:
+                new_classifier.fit(X.loc[rows], y[rows])
             self.classifiers[value] = new_classifier
         return self
 
