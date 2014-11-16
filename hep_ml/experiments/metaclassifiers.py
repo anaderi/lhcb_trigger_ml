@@ -131,7 +131,8 @@ class DumbSplitter(BaseEstimator, ClassifierMixin):
         self.classifiers = dict()
         for value in self.values:
             rows = numpy.array(X[self.feature_name] == value)
-            new_classifier = sklearn.clone(self.base_estimator).fit(X.loc[rows], y[rows], sample_weight[rows])
+            new_classifier = sklearn.clone(self.base_estimator)
+            new_classifier.fit(X.loc[rows], y[rows], sample_weight=sample_weight[rows])
             self.classifiers[value] = new_classifier
         return self
 
