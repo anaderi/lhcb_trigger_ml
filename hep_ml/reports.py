@@ -191,10 +191,11 @@ class Predictions(object):
 
     #region Quality-related methods
 
-    def roc(self, stages=None):
+    def roc(self, stages=None, new_figure=True):
         proba_on_stages = pandas.DataFrame(self._get_stages(stages))
         n_stages = len(proba_on_stages)
-        self._strip_figure(n_stages)
+        if new_figure:
+            self._strip_figure(n_stages)
         for i, (stage_name, proba_on_stage) in enumerate(proba_on_stages.iterrows()):
             pylab.subplot(1, n_stages, i + 1), pylab.title("stage " + str(stage_name))
             pylab.title('ROC at stage ' + str(stage_name))
@@ -206,11 +207,6 @@ class Predictions(object):
                          classifier_name=classifier_name)
             pylab.legend(loc="lower left")
         return self
-
-    def root_roc(self):
-        # TODO implement
-        pass
-        # proba_on_stages = pandas.DataFrame(self._get_stages())
 
     def prediction_pdf(self, stages=None, histtype='step', bins=30, show_legend=False):
         proba_on_stages = pandas.DataFrame(self._get_stages(stages))
@@ -444,11 +440,12 @@ class Predictions(object):
 
     #endregion
 
-    def hist(self, var_names):
+    def hist(self, var_names, n_bins=20):
         """ Plots 1 and 2-dimensional distributions
         :param var_names: array-like of length 1 or 2 with name of variables to plot
+        :param int n_bins: number of bins for histogram()
         :return: self """
-        plot_classes_distribution(self.X, self.y, var_names)
+        plot_classes_distribution(self.X, self.y, var_names, n_bins=n_bins)
         return self
 
     @staticmethod
@@ -492,24 +489,25 @@ def plot_roc(y_true, y_pred, sample_weight=None, classifier_name=""):
     pylab.plot(tpr, bg_rejection, label='%s (area = %0.3f)' % (classifier_name, roc_auc))
 
 
-def plot_classes_distribution(X, y, var_names):
-        y = column_or_1d(y)
-        labels = numpy.unique(y)
-        if len(var_names) == 1:
-            pylab.figure(figsize=(14, 7))
-            pylab.title('Distribution of classes')
-            for label in labels:
-                pylab.hist(numpy.ravel(X.ix[y == label, var_names]), label='class=%i' % label, histtype='step')
-                pylab.xlabel(var_names[0])
+def plot_classes_distribution(X, y, var_names, n_bins=20):
+    y = column_or_1d(y)
+    labels = numpy.unique(y)
+    if len(var_names) == 1:
+        pylab.figure(figsize=(14, 7))
+        pylab.title('Distribution of classes')
+        for label in labels:
+            pylab.hist(numpy.ravel(X.ix[y == label, var_names]), label='class=%i' % label, alpha=0.3, bins=n_bins)
+            pylab.xlabel(var_names[0])
+        pylab.legend()
 
-        elif len(var_names) == 2:
-            pylab.figure(figsize=(12, 10))
-            pylab.title('Distribution of classes')
-            x_var, y_var = var_names
-            for label in labels:
-                alpha = numpy.clip(2000. / numpy.sum(y == label), 0.02, 1)
-                pylab.plot(X.loc[y == label, x_var], X.loc[y == label, y_var], '.',
-                           alpha=alpha, label='class=' + str(label))
-        else:
-            raise ValueError("More than two variables are not implemented")
+    elif len(var_names) == 2:
+        pylab.figure(figsize=(12, 10))
+        pylab.title('Distribution of classes')
+        x_var, y_var = var_names
+        for label in labels:
+            alpha = numpy.clip(2000. / numpy.sum(y == label), 0.02, 1)
+            pylab.plot(X.loc[y == label, x_var], X.loc[y == label, y_var], '.',
+                       alpha=alpha, label='class=' + str(label))
+    else:
+        raise ValueError("More than two variables are not implemented")
 
