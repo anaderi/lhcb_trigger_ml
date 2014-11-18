@@ -58,3 +58,4 @@ def list_flat_branches(filename, treename):
             matrix = numpy.array(list(data[branch]))
             for index in range(matrix.shape[1]):
                 result.append("{}[{}]".format(branch, index))
+    return result
