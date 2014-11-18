@@ -296,5 +296,5 @@ def indices_of_values(array):
 
 def print_header(header, level=3):
     from IPython.display import display_html
-    display_html("<h{level}>{header}</h{level}>".format(header=header, level=level))
+    display_html("<h{level}>{header}</h{level}>".format(header=header, level=level), raw=True)
 
