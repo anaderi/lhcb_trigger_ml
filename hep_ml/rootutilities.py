@@ -40,7 +40,7 @@ def root2pandas(file_name):
     raise RuntimeError("Nothing found in the file {}".format(file_name))
 
 
-def list_flat_branches(filename, treename):
+def list_flat_branches(filename, treename, use_dtype=True):
     """ Lists branches in the file, vector branches, say D_p, turns into D_p[0], D_p[1], D_p[2], D_p[3].
     First event is used to count number of components
     :param filename: filename
@@ -52,10 +52,17 @@ def list_flat_branches(filename, treename):
     result = []
     data = root_numpy.root2array(filename, treename=treename, stop=1)
     for branch, value in data.dtype.fields.items():
-        if value[0].name != 'object':
-            result.append(branch)
+        if use_dtype:
+            if value[0].name != 'object':
+                result.append(branch)
+            else:
+                matrix = numpy.array(list(data[branch]))
+                for index in range(matrix.shape[1]):
+                    result.append("{}[{}]".format(branch, index))
         else:
-            matrix = numpy.array(list(data[branch]))
-            for index in range(matrix.shape[1]):
-                result.append("{}[{}]".format(branch, index))
+            try:
+                for index in range(len(data[branch][0])):
+                    result.append("{column}[{index}]".format(column=branch, index=index))
+            except TypeError:
+                result.append(branch)
     return result
