@@ -10,7 +10,6 @@ from ..metrics import compute_group_efficiencies
 
 __author__ = "Alex Rogozhnikov"
 
-
 """
 About
 
@@ -24,6 +23,7 @@ each time we just train new classifier with new weights.
 This approach turned out to be very inefficient.
 
 """
+
 
 class ReweightClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, uniform_variables, knn=50, iterations=10,
@@ -122,7 +122,7 @@ def test_reweighting():
     reweighting.predict(testX)
     reweighting.predict_proba(testX)
     reweighting.staged_predict_proba(testX)
-    print "reweighting is ok"
+    print("reweighting is ok")
 
 
 test_reweighting()

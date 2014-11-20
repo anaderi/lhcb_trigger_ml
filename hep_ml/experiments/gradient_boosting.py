@@ -4,7 +4,7 @@ import copy
 import numbers
 import numpy
 import pandas
-import sklearn
+
 from scipy.special import expit, logit
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble._gradient_boosting import _random_sample_mask
@@ -258,8 +258,6 @@ class GradientBoosting(BaseEstimator, ClassifierMixin):
                  update_tree=True,
                  update_on='all',
                  smearing=0.0,
-                 init_estimator=None,
-                 init_smearing=0.05,
                  recount_step=1000,
                  random_state=None):
         """
@@ -294,9 +292,7 @@ class GradientBoosting(BaseEstimator, ClassifierMixin):
         self.update_tree = update_tree
         self.update_on = update_on
         self.smearing = smearing
-        self.init_estimator = init_estimator
-        self.init_smearing = init_smearing
-        self.recount_step = recount_step  # at these iterations additionally penalized bg events with decision > 0
+        self.recount_step = recount_step
 
     def fit(self, X, y, sample_weight=None):
         shuffler = Shuffler(X, random_state=self.random_state)
@@ -310,11 +306,6 @@ class GradientBoosting(BaseEstimator, ClassifierMixin):
         # skipping all checks
         assert self.update_on in ['all', 'same', 'other', 'random']
         y_pred = numpy.zeros(len(y), dtype=float)
-        if self.init_estimator is not None:
-            self.init_estimator = sklearn.clone(self.init_estimator)
-            self.init_estimator.fit(shuffler.generate(self.init_smearing), y,
-                                    sample_weight=sample_weight)
-            y_pred += self._proba_to_score(self.init_estimator.predict_proba(X))
 
         self.classifiers = []
         self.learning_rates = []
@@ -375,8 +366,6 @@ class GradientBoosting(BaseEstimator, ClassifierMixin):
     def decision_function(self, X):
         X = array2d(X, dtype=DTYPE)
         result = numpy.zeros(len(X))
-        if self.init_estimator is not None:
-            result += self._proba_to_score(self.init_estimator.predict_proba(X))
         for rate, estimator in zip(self.learning_rates, self.classifiers):
             result += rate * estimator.predict(X)
         return result
@@ -384,9 +373,6 @@ class GradientBoosting(BaseEstimator, ClassifierMixin):
     def staged_decision_function(self, X):
         X = array2d(X, dtype=DTYPE)
         result = numpy.zeros(len(X))
-        if self.init_estimator is not None:
-            result += self._proba_to_score(self.init_estimator.predict_proba(X))
-        yield result
         for rate, classifier in zip(self.learning_rates, self.classifiers):
             result += rate * classifier.predict(X)
             yield result
@@ -420,8 +406,8 @@ def test_gradient_boosting(size=100, n_features=10):
         for update in ['all', 'same', 'other', 'random']:
             gb = GradientBoosting(loss=loss, update_on=update, smearing=[0.1, -0.1])
             score = gb.fit(trainX, trainY).score(testX, testY)
-            if __name__ == "__main__":
-                print(update, score)
+
+            print(update, score)
 
 test_gradient_boosting()
 
@@ -454,7 +440,6 @@ class ReweightingGB(GradientBoosting):
                                   min_samples_split=min_samples_split, max_features=max_features, criterion=criterion,
                                   subsample=subsample, splitter=splitter, weights_in_loss=weights_in_loss,
                                   update_on=update_on, update_tree=update_tree,  random_state=random_state,
-                                  init_estimator=init_estimator, init_smearing=init_smearing,
                                   recount_step=recount_step,
                                   smearing=smearing)
         # Everything should be set via set_params

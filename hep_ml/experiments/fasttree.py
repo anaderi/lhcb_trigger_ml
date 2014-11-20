@@ -57,6 +57,7 @@ class MseCriterion(object):
         sde_values = left_means ** 2 / left_weights + right_means ** 2 / right_weights
         optimal_position = numpy.argmax(sde_values)
         optimal_cut = feature_values[optimal_position]
+        # TODO return optimal SDE
         return optimal_cut
 
 
@@ -87,7 +88,7 @@ class FastTreeRegressor(BaseEstimator, RegressorMixin):
 
     def print_tree_stats(self):
         print(len(self.nodes_data), ' nodes in tree')
-        leaves = [k for k, v in self.nodes_data.iteritems() if len(v) == 1]
+        leaves = [k for k, v in self.nodes_data.items() if len(v) == 1]
         print(len(leaves), ' leaf nodes in tree')
 
 

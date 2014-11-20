@@ -47,16 +47,16 @@ class FeatureSplitter(BaseEstimator, ClassifierMixin):
             cols = pandas.notnull(x_part).all()
             self.stayed_columns[value] = cols[cols==True].keys()
 
-        for value_to, rows_to in rows_dict.iteritems():
+        for value_to, rows_to in rows_dict.items():
             columns_to = self.stayed_columns[value_to]
             new_features = pandas.DataFrame()
-            for value_from, rows_from in rows_dict.iteritems():
+            for value_from, rows_from in rows_dict.items():
                 if value_from == value_to:
                     continue
                 common_columns = list(set(self.stayed_columns[value_from]).union(set(self.stayed_columns[value_to])))
                 common_columns.remove(self.feature_name)
                 self.common_features[value_from, value_to] = common_columns
-                for name, estimator in self.base_estimators.iteritems():
+                for name, estimator in self.base_estimators.items():
                     rows_from = rows_dict[value_from]
                     new_classifier = sklearn.clone(estimator)\
                         .fit(X.loc[rows_from, common_columns], y[rows_from], sample_weight=sample_weight[rows_from])
@@ -85,7 +85,7 @@ class FeatureSplitter(BaseEstimator, ClassifierMixin):
         for value in self.column_values:
             rows_dict[value] = numpy.array(X[self.feature_name] == value)
 
-        for value_to, rows_to in rows_dict.iteritems():
+        for value_to, rows_to in rows_dict.items():
             columns_to = self.stayed_columns[value_to]
             new_features = pandas.DataFrame()
             for value_from in rows_dict:
@@ -158,7 +158,7 @@ class ChainClassifiers(BaseEstimator, ClassifierMixin):
         X = pandas.DataFrame(X).copy()
         assert len(X) == len(y), 'lengths are different'
         self.trained_estimators = OrderedDict()
-        for name, classifier in self.base_estimators.iteritems():
+        for name, classifier in self.base_estimators.items():
             new_classifier = sklearn.clone(classifier)
             new_classifier.fit(X, y, sample_weight)
             X['new_'+name] = new_classifier.predict_proba(X)[:, 1]
@@ -171,7 +171,7 @@ class ChainClassifiers(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X):
         X = pandas.DataFrame(X).copy()
         result = None
-        for name, classifier in self.trained_estimators.iteritems():
+        for name, classifier in self.trained_estimators.items():
             result = classifier.predict_proba(X)
             X['new_'+name] = result[:, 1]
         return result
