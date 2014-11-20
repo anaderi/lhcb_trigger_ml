@@ -2,7 +2,7 @@ from __future__ import print_function, division, absolute_import
 
 import pylab as pl
 import numpy as np
-from itertools import izip
+from six.moves import zip
 from sklearn.metrics.metrics import roc_auc_score, accuracy_score
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
@@ -34,7 +34,7 @@ def test_cuts(n_samples=1000):
             assert uBDT.score_cut == uBDT.score_cuts_[-1],\
                 'something wrong with computed cuts'
 
-            for score, cut in izip(uBDT.staged_predict_score(trainX[trainY > 0.5]),
+            for score, cut in zip(uBDT.staged_predict_score(trainX[trainY > 0.5]),
                                    uBDT.score_cuts_):
                 passed_upper = np.sum(score > cut - 1e-7)
                 passed_lower = np.sum(score > cut + 1e-7)

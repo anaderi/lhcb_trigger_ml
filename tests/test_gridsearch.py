@@ -35,7 +35,11 @@ class FunctionOptimizer(object):
 
 def test_simple_optimizer(n_evaluations=60):
     optimizer = FunctionOptimizer(lambda x, y, z, w: x * y * z * w,
-                                  param_grid={'x': range(11), 'y': range(11), 'z': range(11), 'w': range(11)},
+                                  param_grid={'x': list(range(11)),
+                                              'y': list(range(11)),
+                                              'z': list(range(11)),
+                                              'w': list(range(11))
+                                             },
                                   n_evaluations=n_evaluations)
     optimizer.optimize()
     assert len(optimizer.generator.grid_scores_) == n_evaluations

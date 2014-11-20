@@ -66,4 +66,5 @@ def test_gradient_boosting(samples=1000):
     print('uniform gradient boosting is ok')
 
 
+# TODO test that in the bins/groups we have only events of the needed class
 
