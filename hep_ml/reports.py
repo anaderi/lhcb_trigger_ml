@@ -558,6 +558,7 @@ def plot_roc(y_true, y_pred, sample_weight=None, classifier_name="", is_cut=Fals
             sample_weight = sample_weight[mask]
 
     fpr, tpr, thresholds = check_arrays(*roc_curve(y_true, y_pred, sample_weight=sample_weight))
+    roc_auc = auc(fpr, tpr)
     # tpr = recall = isSasS / isS = signal efficiency
     # fpr = isBasS / isB = 1 - specificity = 1 - backgroundRejection
     bg_rejection = 1. - fpr
@@ -572,7 +573,7 @@ def plot_roc(y_true, y_pred, sample_weight=None, classifier_name="", is_cut=Fals
         tpr = tpr[indices]
         bg_rejection = bg_rejection[indices]
     if not is_cut:
-        roc_auc = auc(fpr, tpr)
+
         pylab.plot(tpr, bg_rejection, label='%s (area = %0.3f)' % (classifier_name, roc_auc))
     else:
         pylab.plot(tpr[1:2], bg_rejection[1:2], 'o', label='%s' % classifier_name)
