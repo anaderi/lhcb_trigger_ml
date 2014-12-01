@@ -40,4 +40,7 @@ def test_reports(null_pylab=True):
             .compute_metrics(stages=[5, 10], metrics=roc_auc_score)
 
         pred.rcp('column0', n_bins=7)
+        pred.show()
+
+    reports.plot_features_pdf(trainX, trainY)
 

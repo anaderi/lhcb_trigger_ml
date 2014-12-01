@@ -587,3 +587,24 @@ def plot_classes_distribution(X, y, var_names, n_bins=20):
     else:
         raise ValueError("More than two variables are not implemented")
 
+
+def plot_features_pdf(X, y, n_bins=20, n_columns=3, ignored_sideband=0.001, mask=None,
+                      sig_label='sig', bck_label='bck', adjust_n_bins=True, normed=True):
+    """
+    Plots in concise form distributions of all features
+    """
+    columns = sorted(X.columns)
+    mask = numpy.ones(len(X), dtype=bool) if mask is None else mask
+    for i, column in enumerate(columns, 1):
+        pylab.subplot((len(columns) + n_columns - 1) // n_columns, n_columns, i)
+        feature_bins = n_bins
+        if adjust_n_bins:
+            feature_bins = min(n_bins, len(numpy.unique(X.ix[:, column])))
+
+        limits = numpy.percentile(X.loc[mask, column], [100 * ignored_sideband, 100 * (1. - ignored_sideband)])
+        pylab.hist(X.ix[(y == 1) & mask, column].values, bins=feature_bins, normed=normed,
+                   range=limits, alpha=0.3, label=sig_label, color='b')
+        pylab.hist(X.ix[(y == 0) & mask, column].values, bins=feature_bins, normed=normed,
+                   range=limits, alpha=0.3, label=bck_label, color='r')
+        pylab.legend(loc='best')
+        pylab.title(column)
