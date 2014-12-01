@@ -8,12 +8,11 @@ from __future__ import print_function, division, absolute_import
 from itertools import islice
 
 from collections import OrderedDict
-import numbers
 import time
 import warnings
 import numpy
 import pandas
-import pylab
+import matplotlib.pyplot as pylab
 from sklearn.metrics import auc
 from sklearn.utils.validation import check_arrays, column_or_1d
 from matplotlib import cm
@@ -113,7 +112,7 @@ class Predictions(object):
         assert numpy.result_type(mask) == numpy.bool, 'the mask should be boolean'
         return mask
 
-    #endregion
+    # endregion
 
     # region Mappers - function that apply functions to predictions
     def _get_staged_proba(self):
@@ -537,20 +536,31 @@ class Predictions(object):
 
 # Helpful functions that can be used separately
 
-def plot_roc(y_true, y_pred, sample_weight=None, classifier_name=""):
+def plot_roc(y_true, y_pred, sample_weight=None, classifier_name="", is_cut=False, mask=None):
     """Plots ROC curve in the way physicists like it
     :param y_true: numpy.array, shape=[n_samples]
     :param y_pred: numpy.array, shape=[n_samples]
     :param sample_weight: numpy.array | None, shape = [n_samples]
     :param classifier_name: str, the name of classifier for label
+    :param is_cut: predictions are binary
+    :param mask: plot ROC curve only for events that have mask=True
     """
+    if is_cut:
+        assert len(numpy.unique(y_pred)) == 2, 'Cut assumes that prediction are 0 and 1 (or True/False)'
+
     MAX_STEPS = 500
     y_true, y_pred = check_arrays(y_true, y_pred)
+    if mask is not None:
+        mask = mask > 0.5  # converting to bool, just in case
+        y_true = y_true[mask]
+        y_pred = y_pred[mask]
+        if sample_weight is not None:
+            sample_weight = sample_weight[mask]
+
     fpr, tpr, thresholds = check_arrays(*roc_curve(y_true, y_pred, sample_weight=sample_weight))
     # tpr = recall = isSasS / isS = signal efficiency
     # fpr = isBasS / isB = 1 - specificity = 1 - backgroundRejection
     bg_rejection = 1. - fpr
-    roc_auc = auc(fpr, tpr)
 
     if len(fpr) > MAX_STEPS:
         # decreasing the number of points in plot
@@ -561,8 +571,11 @@ def plot_roc(y_true, y_pred, sample_weight=None, classifier_name=""):
         indices = numpy.unique(indices)
         tpr = tpr[indices]
         bg_rejection = bg_rejection[indices]
-
-    pylab.plot(tpr, bg_rejection, label='%s (area = %0.3f)' % (classifier_name, roc_auc))
+    if not is_cut:
+        roc_auc = auc(fpr, tpr)
+        pylab.plot(tpr, bg_rejection, label='%s (area = %0.3f)' % (classifier_name, roc_auc))
+    else:
+        pylab.plot(tpr[1:2], bg_rejection[1:2], 'o', label='%s' % classifier_name)
 
 
 def plot_classes_distribution(X, y, var_names, n_bins=20):
