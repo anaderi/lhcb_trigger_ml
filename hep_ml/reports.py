@@ -20,6 +20,7 @@ from scipy.stats import pearsonr
 
 from .commonutils import compute_bdt_cut, \
     check_sample_weight, build_normalizer, computeSignalKnnIndices, map_on_cluster
+from hep_ml.metrics import bin_to_group_indices
 from .metrics import roc_curve, roc_auc_score, compute_bin_indices, \
     compute_sde_on_bins, compute_sde_on_groups, compute_theil_on_bins, \
     bin_based_cvm, compute_bin_efficiencies, compute_bin_weights, bin_based_ks
@@ -262,6 +263,14 @@ class Predictions(object):
             bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
         return compute_bin_indices(self.X, var_names, bin_limits)
 
+    def _compute_bin_masscenters(self, var_names, n_bins=20, mask=None):
+        bin_indices = self._compute_bin_indices(var_names, n_bins=n_bins, mask=mask)
+        group_indices = bin_to_group_indices(bin_indices, mask=mask)
+        result = []
+        for feature in var_names:
+            result.append(numpy.array([numpy.mean(self.X.ix[group, feature]) for group in group_indices]))
+        return result
+
     def _compute_bin_centers(self, var_names, n_bins=20, mask=None):
         """Mask is used to show events that will be binned after"""
         bin_centers = []
@@ -359,8 +368,8 @@ class Predictions(object):
             return result
 
     def rcp(self, variable, global_rcp=None, n_bins=20, label=1,
-            new_plot=True, ignored_sidebands=0., range=None,
-            show_legend=True, multiclassification=False, adjust_n_bins=True):
+            new_plot=True, ignored_sidebands=0., range=None, marker='.',
+            show_legend=True, multiclassification=False, adjust_n_bins=True, mask=None):
         """
         Right-classified part. This is efficiency for signal events, background rejection for background ones.
         In case of more than two classes this is the part of events of that class that was correctly classified.
@@ -380,9 +389,12 @@ class Predictions(object):
         """
         if not multiclassification:
             assert label in {0, 1}, 'for binary classification label should be in [0, 1]'
-
-        mask = self.y == label
+        if mask is None:
+            mask = self.y == label
+        else:
+            mask = (mask > 0.5) & (self.y == label)
         signal_masses = self.X.loc[mask, variable].values
+
         left, right = numpy.percentile(signal_masses, [100 * ignored_sidebands, 100 * (1. - ignored_sidebands)])
         if range is not None:
             left = max(left, range[0])
@@ -394,12 +406,23 @@ class Predictions(object):
 
         bin_indices = self._compute_bin_indices([variable], n_bins=n_bins, mask=mask)
         bin_centers, = self._compute_bin_centers([variable], n_bins=n_bins, mask=mask)
+        bin_centers, = self._compute_bin_masscenters([variable], n_bins=n_bins, mask=mask)
 
         global_rcp = self._check_efficiencies(global_rcp)
 
         n_classifiers = len(self.predictions)
         if new_plot:
             fig = self._strip_figure(n_classifiers)
+
+        if multiclassification:
+            ylabel = 'right-classified part'
+            legend_label = 'rcp={rcp:.2f}'
+        elif label == 1:
+            ylabel = 'signal efficiency'
+            legend_label = 'eff={rcp:.2f}'
+        else:
+            ylabel = 'background rejection'
+            legend_label = 'rej={rcp:.2f}'
 
         for i, (name, proba) in enumerate(self.predictions.items(), start=1):
             ax = pylab.subplot(1, n_classifiers, i)
@@ -408,18 +431,12 @@ class Predictions(object):
                                       sample_weight=self.checked_sample_weight)
                 bin_effs = compute_bin_efficiencies(proba[mask, label], bin_indices=bin_indices[mask], cut=cut,
                                                     sample_weight=self.checked_sample_weight[mask], minlength=n_bins)
-                ax.plot(bin_centers, bin_effs, label='rcp=%.2f' % eff)
+                ax.plot(bin_centers, bin_effs, label=legend_label.format(eff=eff), marker=marker)
 
             ax.set_ylim(0, 1)
             ax.set_title(name)
             ax.set_xlabel(variable)
-            if multiclassification:
-                ax.set_ylabel('right-classified part')
-            elif label == 1:
-                ax.set_ylabel('signal efficiency')
-            else:
-                ax.set_ylabel('background rejection')
-
+            ax.set_ylabel(ylabel)
             if show_legend:
                 ax.legend(loc='best')
 
