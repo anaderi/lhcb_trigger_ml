@@ -268,7 +268,7 @@ class Predictions(object):
         result = []
         for bin in range(numpy.max(bin_indices) + 1):
             result.append(numpy.median(self.X.ix[(bin_indices == bin) & mask, var_name]))
-        return result
+        return numpy.array(result)
 
     def _compute_bin_centers(self, var_names, n_bins=20, mask=None):
         """Mask is used to show events that will be binned after"""
@@ -407,10 +407,8 @@ class Predictions(object):
         bin_indices = self._compute_bin_indices([variable], n_bins=n_bins, mask=mask)
         bin_centers, = self._compute_bin_centers([variable], n_bins=n_bins, mask=mask)
         bin_centers2 = self._compute_bin_masscenters(variable, n_bins=n_bins, mask=mask)
-
-        assert len(bin_centers) == len(bin_centers2)
-        assert numpy.all(numpy.diff(bin_centers) >= 0)
-        assert numpy.all(numpy.diff(bin_centers2) >= 0)
+        # Leave only non-empty
+        bin_mask = numpy.isfinite(bin_centers2)
 
         global_rcp = self._check_efficiencies(global_rcp)
 
@@ -435,7 +433,7 @@ class Predictions(object):
                                       sample_weight=self.checked_sample_weight)
                 bin_effs = compute_bin_efficiencies(proba[mask, label], bin_indices=bin_indices[mask], cut=cut,
                                                     sample_weight=self.checked_sample_weight[mask], minlength=n_bins)
-                ax.plot(bin_centers2, bin_effs, label=legend_label.format(rcp=eff), marker=marker)
+                ax.plot(bin_centers2[bin_mask], bin_effs[bin_mask], label=legend_label.format(rcp=eff), marker=marker)
 
             ax.set_ylim(0, 1)
             ax.set_title(name)
