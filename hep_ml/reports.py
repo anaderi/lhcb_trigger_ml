@@ -265,10 +265,9 @@ class Predictions(object):
 
     def _compute_bin_masscenters(self, var_name, n_bins=20, mask=None):
         bin_indices = self._compute_bin_indices([var_name], n_bins=n_bins, mask=mask)
-        # group_indices = bin_to_group_indices(bin_indices, mask=mask)
         result = []
         for bin in range(numpy.max(bin_indices) + 1):
-            result.append(numpy.mean(self.X.ix[bin_indices == bin, var_name]))
+            result.append(numpy.median(self.X.ix[bin_indices == bin, var_name]))
         return result
 
     def _compute_bin_centers(self, var_names, n_bins=20, mask=None):
@@ -390,14 +389,14 @@ class Predictions(object):
         if not multiclassification:
             assert label in {0, 1}, 'for binary classification label should be in [0, 1]'
         if mask is None:
-            mask = self.y == label
-        else:
-            mask = (mask > 0.5) & (self.y == label)
-        signal_masses = self.X.loc[mask, variable].values
+            mask = numpy.ones(len(self.y), dtype=bool)
+        mask = (mask > 0.5) & (self.y == label)
 
+        signal_masses = self.X.loc[mask, variable].values
         left, right = numpy.percentile(signal_masses, [100 * ignored_sidebands, 100 * (1. - ignored_sidebands)])
         left -= 0.5
         right += 0.5
+
         if range is not None:
             left, right = range
         masses = self.X.loc[:, variable].values
@@ -409,9 +408,9 @@ class Predictions(object):
         bin_centers, = self._compute_bin_centers([variable], n_bins=n_bins, mask=mask)
         bin_centers2 = self._compute_bin_masscenters(variable, n_bins=n_bins, mask=mask)
 
-        assert numpy.all(numpy.diff(bin_centers) > 0)
-        assert numpy.all(numpy.diff(bin_centers2) > 0)
         assert len(bin_centers) == len(bin_centers2)
+        assert numpy.all(numpy.diff(bin_centers) >= 0)
+        assert numpy.all(numpy.diff(bin_centers2) >= 0)
 
         global_rcp = self._check_efficiencies(global_rcp)
 
