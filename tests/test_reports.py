@@ -43,6 +43,6 @@ def test_reports(null_pylab=True):
         pred.show()
 
     reports.plot_features_pdf(trainX, trainY)
-    reports.show()
+    reports.pylab.show()
     reports.plot_roc(trainY, trainY, is_cut=True)
 
