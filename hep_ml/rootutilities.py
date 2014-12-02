@@ -45,9 +45,10 @@ def tree2pandas(filename, treename, branches=None, start=None, stop=None, select
     import root_numpy
     data = root_numpy.root2array(filenames=filename, treename=treename, branches=branches,
                                  selection=selection, start=start, stop=stop)
+    data = pandas.DataFrame(data)
     if clip is not None:
         data = numpy.clip(data, -clip, clip)
-    return pandas.DataFrame(data)
+    return data
 
 
 def list_flat_branches(filename, treename, use_dtype=True):
