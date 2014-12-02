@@ -263,19 +263,13 @@ class Predictions(object):
             bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
         return compute_bin_indices(self.X, var_names, bin_limits)
 
-    # def _compute_bin_masscenters(self, var_name, n_bins=20, mask=None):
-    #     bin_indices = self._compute_bin_indices([var_name], n_bins=n_bins, mask=mask)
-    #     group_indices = bin_to_group_indices(bin_indices, mask=mask)
-    #
-    #     if mask is None:
-    #         mask = numpy.ones(len(self.y))
-    #     result = []
-    #     for feature in var_names:
-    #         axis = []
-    #         for bin in :
-    #             result.append(numpy.array([numpy.mean(self.X.ix[group, feature]) for group in group_indices]))
-    #
-    #     return result
+    def _compute_bin_masscenters(self, var_name, n_bins=20, mask=None):
+        bin_indices = self._compute_bin_indices([var_name], n_bins=n_bins, mask=mask)
+        # group_indices = bin_to_group_indices(bin_indices, mask=mask)
+        result = []
+        for bin in range(numpy.max(bin_indices) + 1):
+            result.append(numpy.mean(self.X.ix[bin_indices == bin, var_name]))
+        return result
 
     def _compute_bin_centers(self, var_names, n_bins=20, mask=None):
         """Mask is used to show events that will be binned after"""
@@ -402,9 +396,10 @@ class Predictions(object):
         signal_masses = self.X.loc[mask, variable].values
 
         left, right = numpy.percentile(signal_masses, [100 * ignored_sidebands, 100 * (1. - ignored_sidebands)])
+        left -= 0.5
+        right += 0.5
         if range is not None:
-            left = max(left, range[0])
-            right = min(right, range[1])
+            left, right = range
         masses = self.X.loc[:, variable].values
         mask = mask & (masses >= left) & (masses <= right)
         if adjust_n_bins:
@@ -412,7 +407,11 @@ class Predictions(object):
 
         bin_indices = self._compute_bin_indices([variable], n_bins=n_bins, mask=mask)
         bin_centers, = self._compute_bin_centers([variable], n_bins=n_bins, mask=mask)
-        # bin_centers, = self._compute_bin_masscenters([variable], n_bins=n_bins, mask=mask)
+        bin_centers2 = self._compute_bin_masscenters(variable, n_bins=n_bins, mask=mask)
+
+        assert numpy.all(numpy.diff(bin_centers) > 0)
+        assert numpy.all(numpy.diff(bin_centers2) > 0)
+        assert len(bin_centers) == len(bin_centers2)
 
         global_rcp = self._check_efficiencies(global_rcp)
 
@@ -437,7 +436,7 @@ class Predictions(object):
                                       sample_weight=self.checked_sample_weight)
                 bin_effs = compute_bin_efficiencies(proba[mask, label], bin_indices=bin_indices[mask], cut=cut,
                                                     sample_weight=self.checked_sample_weight[mask], minlength=n_bins)
-                ax.plot(bin_centers, bin_effs, label=legend_label.format(rcp=eff), marker=marker)
+                ax.plot(bin_centers2, bin_effs, label=legend_label.format(rcp=eff), marker=marker)
 
             ax.set_ylim(0, 1)
             ax.set_title(name)
