@@ -263,13 +263,19 @@ class Predictions(object):
             bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
         return compute_bin_indices(self.X, var_names, bin_limits)
 
-    def _compute_bin_masscenters(self, var_names, n_bins=20, mask=None):
-        bin_indices = self._compute_bin_indices(var_names, n_bins=n_bins, mask=mask)
-        group_indices = bin_to_group_indices(bin_indices, mask=mask)
-        result = []
-        for feature in var_names:
-            result.append(numpy.array([numpy.mean(self.X.ix[group, feature]) for group in group_indices]))
-        return result
+    # def _compute_bin_masscenters(self, var_name, n_bins=20, mask=None):
+    #     bin_indices = self._compute_bin_indices([var_name], n_bins=n_bins, mask=mask)
+    #     group_indices = bin_to_group_indices(bin_indices, mask=mask)
+    #
+    #     if mask is None:
+    #         mask = numpy.ones(len(self.y))
+    #     result = []
+    #     for feature in var_names:
+    #         axis = []
+    #         for bin in :
+    #             result.append(numpy.array([numpy.mean(self.X.ix[group, feature]) for group in group_indices]))
+    #
+    #     return result
 
     def _compute_bin_centers(self, var_names, n_bins=20, mask=None):
         """Mask is used to show events that will be binned after"""
@@ -400,19 +406,19 @@ class Predictions(object):
             left = max(left, range[0])
             right = min(right, range[1])
         masses = self.X.loc[:, variable].values
-        mask = mask & (masses > left) & (masses < right)
+        mask = mask & (masses >= left) & (masses <= right)
         if adjust_n_bins:
             n_bins = min(n_bins, len(numpy.unique(masses[mask])))
 
         bin_indices = self._compute_bin_indices([variable], n_bins=n_bins, mask=mask)
         bin_centers, = self._compute_bin_centers([variable], n_bins=n_bins, mask=mask)
-        bin_centers, = self._compute_bin_masscenters([variable], n_bins=n_bins, mask=mask)
+        # bin_centers, = self._compute_bin_masscenters([variable], n_bins=n_bins, mask=mask)
 
         global_rcp = self._check_efficiencies(global_rcp)
 
         n_classifiers = len(self.predictions)
         if new_plot:
-            fig = self._strip_figure(n_classifiers)
+            self._strip_figure(n_classifiers)
 
         if multiclassification:
             ylabel = 'right-classified part'
