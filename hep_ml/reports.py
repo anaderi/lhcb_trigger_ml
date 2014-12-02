@@ -359,7 +359,7 @@ class Predictions(object):
             return result
 
     def rcp(self, variable, global_rcp=None, n_bins=20, label=1,
-            new_plot=True, ignored_sidebands=0.001, range=None,
+            new_plot=True, ignored_sidebands=0., range=None,
             show_legend=True, multiclassification=False, adjust_n_bins=True):
         """
         Right-classified part. This is efficiency for signal events, background rejection for background ones.
@@ -390,7 +390,7 @@ class Predictions(object):
         masses = self.X.loc[:, variable].values
         mask = mask & (masses > left) & (masses < right)
         if adjust_n_bins:
-            n_bins = min(n_bins, len(numpy.unique(masses)))
+            n_bins = min(n_bins, len(numpy.unique(masses[mask])))
 
         bin_indices = self._compute_bin_indices([variable], n_bins=n_bins, mask=mask)
         bin_centers, = self._compute_bin_centers([variable], n_bins=n_bins, mask=mask)
@@ -399,7 +399,7 @@ class Predictions(object):
 
         n_classifiers = len(self.predictions)
         if new_plot:
-            self._strip_figure(n_classifiers)
+            fig = self._strip_figure(n_classifiers)
 
         for i, (name, proba) in enumerate(self.predictions.items(), start=1):
             ax = pylab.subplot(1, n_classifiers, i)
@@ -551,7 +551,7 @@ def plot_roc(y_true, y_pred, sample_weight=None, classifier_name="", is_cut=Fals
     MAX_STEPS = 500
     y_true, y_pred = check_arrays(y_true, y_pred)
     if mask is not None:
-        mask = mask > 0.5  # converting to bool, just in case
+        mask = numpy.array(mask, dtype=bool)  # converting to bool, just in case
         y_true = y_true[mask]
         y_pred = y_pred[mask]
         if sample_weight is not None:
@@ -573,7 +573,6 @@ def plot_roc(y_true, y_pred, sample_weight=None, classifier_name="", is_cut=Fals
         tpr = tpr[indices]
         bg_rejection = bg_rejection[indices]
     if not is_cut:
-
         pylab.plot(tpr, bg_rejection, label='%s (area = %0.3f)' % (classifier_name, roc_auc))
     else:
         pylab.plot(tpr[1:2], bg_rejection[1:2], 'o', label='%s' % classifier_name)

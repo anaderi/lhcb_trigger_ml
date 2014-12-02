@@ -7,20 +7,20 @@ from __future__ import division, print_function
 
 import numpy
 import pandas
-from sklearn.metrics import auc
+from sklearn.metrics import auc, roc_curve
 from sklearn.utils.validation import column_or_1d, check_arrays
 
-from commonutils import check_sample_weight, compute_cut_for_efficiency, computeSignalKnnIndices, sigmoid_function
+from .commonutils import check_sample_weight, compute_cut_for_efficiency, computeSignalKnnIndices, sigmoid_function
 
 
 __author__ = 'Alex Rogozhnikov'
 
 __all__ = ['sde', 'cvm_flatness', 'cvm_2samp', 'theil']
 
-#TODO simpler interfaces
-#TODO uniformity in usage of masks
+# TODO simpler interfaces
+# TODO uniformity in usage of masks
 
-#region Utilities
+# region Utilities
 
 
 def compute_cdf(ordered_weights):
@@ -46,7 +46,7 @@ fpr = b = isBasS / isB
 
 signal efficiency = tpr = s
 background efficiency = isBasB / isB = 1 - fpr
-background rejection = background efficiency
+background rejection = background efficiency (physicists don't agree with the last line)
 
 """
 
@@ -68,23 +68,18 @@ def check_metrics_arguments(y_true, y_pred, sample_weight, two_class=True, binar
     return y_true, y_pred, sample_weight
 
 
-def roc_curve(y_true, y_score, sample_weight=None):
-    """ The same as sklearn.metrics.roc_curve, but this one supports weights,
-    function will be removed when move to sklearn 0.15"""
-    y_true, y_score, sample_weight = \
-        check_metrics_arguments(y_true, y_score, sample_weight=sample_weight,
-                                two_class=True, binary_pred=False)
-    order = numpy.argsort(-y_score)
-    thresholds = y_score[order]
-    y_true = y_true[order]
-    sample_weight = sample_weight[order]
-    tpr = numpy.insert(numpy.cumsum(sample_weight * y_true), 0, 0.)
-    tpr /= tpr[-1]
-    fpr = numpy.insert(numpy.cumsum(sample_weight * (1 - y_true)), 0, 0.)
-    fpr /= fpr[-1]
-    thresholds = numpy.insert(thresholds, 0, thresholds[0] + 1.)
-    # For physicists: fpr = b, tpr = s
-    return fpr, tpr, thresholds
+def roc_curve_splitted(data1, data2, sample_weight1=None, sample_weight2=None):
+    """Does exactly the same as sklearn.metrics.roc_curve,
+    but for signal/background predictions kept in different arrays.
+
+    Returns: tpr, fpr, thresholds, these are parallel arrays with equal lengths.
+    """
+    sample_weight1 = check_sample_weight(data1, sample_weight=sample_weight1)
+    sample_weight2 = check_sample_weight(data1, sample_weight=sample_weight2)
+    data = numpy.concatenate([data1, data2])
+    sample_weight = numpy.concatenate([sample_weight1, sample_weight2])
+    labels = numpy.concatenate([numpy.zeros(len(data1)), numpy.ones(len(data2))])
+    return roc_curve(labels, data, sample_weight=sample_weight)
 
 
 def compute_sb(y_true, y_pred, sample_weight):
@@ -129,7 +124,9 @@ def as_signal_score(y_true, y_pred, sample_weight=None):
 
 
 def sensitivity(y_true, y_score, sample_weight=None):
-    """ Returns s / sqrt{s+b} """
+    """ Returns s / sqrt{s+b}
+    :param y_true: array-like of shape [n_samples] with labels of samples (0 or 1)
+    :param y_score: array-like of shape [n_samples] with predicted labels (0 or 1)"""
     y_true, y_score, sample_weight = \
         check_metrics_arguments(y_true, y_score, sample_weight=sample_weight, two_class=True, binary_pred=True)
     s, b = compute_sb(y_true, y_score, sample_weight=sample_weight)
@@ -158,7 +155,7 @@ Knn is one particular case of groups, bins can be reduced to groups either
 Bin_indices is an array, where for each event it's bin is written:
 bin_indices = [0,0,1,2,2,4]
 
-Group_indices is an list, each item is indices of events in some group
+Group_indices is list, each item is indices of events in some group
 group_indices = [[0,1], [2], [3,4], [5]]
 
 While bin indices are computed for all the events together, group indices
@@ -254,6 +251,9 @@ def compute_divided_weight(group_indices, sample_weight):
 
 
 def compute_group_weights(group_indices, sample_weight):
+    """
+    Group weight = sum of divided weights of indices inside that group.
+    """
     divided_weight = compute_divided_weight(group_indices, sample_weight=sample_weight)
     result = numpy.zeros(len(group_indices))
     for i, group in enumerate(group_indices):
@@ -308,6 +308,18 @@ def weighted_deviation(a, weights, power=2.):
 #region SDE
 
 def compute_sde_on_bins(y_pred, mask, bin_indices, target_efficiencies, power=2., sample_weight=None):
+    """
+    See article [1] for details on SDE
+
+    :param y_pred: array-like of shape [n_samples] with floats predictions
+    :param mask: array-like of shape [n_samples] with bool.
+        Needed to mark events in which uniformity is desired
+    :param bin_indices: array-like of shape [n_samples]
+    :param target_efficiencies: array-like with efficiencies used in SDE
+    :param power: float (default: 2)
+    :param sample_weight: array-like of shape [n_samples] with weights of events.
+    :return: float, computed SDE value.
+    """
     # skip check for a while
     # ignoring events from other classes
     sample_weight = check_sample_weight(y_pred, sample_weight=sample_weight)
@@ -516,8 +528,6 @@ def cvm_2samp(data1, data2, weights1=None, weights2=None, power=2.):
     weights2_new = numpy.histogram(data2, bins=bins, weights=weights2)[0]
     F1 = compute_cdf(weights1_new)
     F2 = compute_cdf(weights2_new)
-    assert numpy.all(F1 >= 0.) and numpy.all(F1 <= 1.001)
-    assert numpy.all(F2 >= 0.) and numpy.all(F2 <= 1.001)
     return numpy.average(numpy.abs(F1 - F2) ** power, weights=weights1_new)
 
 
