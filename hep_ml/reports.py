@@ -368,7 +368,7 @@ class Predictions(object):
 
     def rcp(self, variable, global_rcp=None, n_bins=20, label=1,
             new_plot=True, ignored_sidebands=0., range=None, marker='.',
-            show_legend=True, multiclassification=False, adjust_n_bins=True, mask=None):
+            show_legend=True, multiclassification=False, adjust_n_bins=True, mask=None, median_centers=True):
         """
         Right-classified part. This is efficiency for signal events, background rejection for background ones.
         In case of more than two classes this is the part of events of that class that was correctly classified.
@@ -405,10 +405,12 @@ class Predictions(object):
             n_bins = min(n_bins, len(numpy.unique(masses[mask])))
 
         bin_indices = self._compute_bin_indices([variable], n_bins=n_bins, mask=mask)
-        bin_centers, = self._compute_bin_centers([variable], n_bins=n_bins, mask=mask)
-        bin_centers2 = self._compute_bin_masscenters(variable, n_bins=n_bins, mask=mask)
+        bin_centers_simple, = self._compute_bin_centers([variable], n_bins=n_bins, mask=mask)
+        bin_centers_median = self._compute_bin_masscenters(variable, n_bins=n_bins, mask=mask)
         # Leave only non-empty
-        bin_mask = numpy.isfinite(bin_centers2)
+        bin_mask = numpy.isfinite(bin_centers_median)
+
+        bin_centers = bin_centers_median if median_centers else bin_centers_simple
 
         global_rcp = self._check_efficiencies(global_rcp)
 
@@ -433,7 +435,7 @@ class Predictions(object):
                                       sample_weight=self.checked_sample_weight)
                 bin_effs = compute_bin_efficiencies(proba[mask, label], bin_indices=bin_indices[mask], cut=cut,
                                                     sample_weight=self.checked_sample_weight[mask], minlength=n_bins)
-                ax.plot(bin_centers2[bin_mask], bin_effs[bin_mask], label=legend_label.format(rcp=eff), marker=marker)
+                ax.plot(bin_centers[bin_mask], bin_effs[bin_mask], label=legend_label.format(rcp=eff), marker=marker)
 
             ax.set_ylim(0, 1)
             ax.set_title(name)
