@@ -267,7 +267,7 @@ class Predictions(object):
         bin_indices = self._compute_bin_indices([var_name], n_bins=n_bins, mask=mask)
         result = []
         for bin in range(numpy.max(bin_indices) + 1):
-            result.append(numpy.median(self.X.ix[bin_indices == bin, var_name]))
+            result.append(numpy.median(self.X.ix[(bin_indices == bin) & mask, var_name]))
         return result
 
     def _compute_bin_centers(self, var_names, n_bins=20, mask=None):
