@@ -4,6 +4,7 @@ At this moment file contains only functions that read ROOT files into pandas
 Essential to have ROOT, rootpy, root_numpy to use this function
 """
 from __future__ import division, print_function
+import numpy
 import pandas
 import rootpy
 import rootpy.io
@@ -40,6 +41,16 @@ def root2pandas(file_name):
     raise RuntimeError("Nothing found in the file {}".format(file_name))
 
 
+def tree2pandas(filename, treename, branches=None, start=None, stop=None, selection=None, clip=1e33):
+    import root_numpy
+    data = root_numpy.root2array(filenames=filename, treename=treename, branches=branches,
+                                 selection=selection, start=start, stop=stop)
+    data = pandas.DataFrame(data)
+    if clip is not None:
+        data = numpy.clip(data, -clip, clip)
+    return data
+
+
 def list_flat_branches(filename, treename, use_dtype=True):
     """ Lists branches in the file, vector branches, say D_p, turns into D_p[0], D_p[1], D_p[2], D_p[3].
     First event is used to count number of components
@@ -66,3 +77,4 @@ def list_flat_branches(filename, treename, use_dtype=True):
             except TypeError:
                 result.append(branch)
     return result
+

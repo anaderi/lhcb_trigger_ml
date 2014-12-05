@@ -13,11 +13,11 @@ class MyNull(Null):
     def ylim(self, *args):
         return [0, 1]
 
-if __name__ != '__main__':
-    reports.pylab = MyNull()
 
+def test_reports(null_pylab=True):
+    if null_pylab and __name__ != '__main__':
+        reports.pylab = MyNull()
 
-def test_reports():
     print(reports.pylab.ylim)
 
     trainX, trainY = generate_sample(1000, 10)
@@ -29,8 +29,7 @@ def test_reports():
         classifiers['forest'] = RandomForestClassifier(n_estimators=20)
 
         pred = classifiers.fit(trainX, trainY).test_on(testX, testY, low_memory=low_memory)
-        pred.roc().show() \
-            .sde_curves(['column0'])
+        pred.roc().show().sde_curves(['column0'])
 
         pred.correlation_curves('column1', ).show() \
             .learning_curves().show() \
@@ -39,3 +38,11 @@ def test_reports():
             .roc(stages=[10, 15]).show() \
             .hist(['column0']).show() \
             .compute_metrics(stages=[5, 10], metrics=roc_auc_score)
+
+        pred.rcp('column0', n_bins=7)
+        pred.show()
+
+    reports.plot_features_pdf(trainX, trainY)
+    reports.pylab.show()
+    reports.plot_roc(trainY, trainY, is_cut=True)
+

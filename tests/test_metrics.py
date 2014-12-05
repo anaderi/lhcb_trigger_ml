@@ -7,7 +7,7 @@ from scipy.stats import ks_2samp
 import sklearn.metrics
 from sklearn.metrics import auc
 
-from hep_ml.metrics import roc_curve, bin_to_group_indices, compute_bin_indices, compute_sde_on_bins, \
+from hep_ml.metrics import bin_to_group_indices, compute_bin_indices, compute_sde_on_bins, \
     compute_sde_on_groups, compute_theil_on_bins, compute_theil_on_groups, \
     _prepare_data, _ks_2samp_fast, ks_2samp_weighted, bin_based_ks, \
     groups_based_ks, cvm_2samp, _cvm_2samp_fast, bin_based_cvm, group_based_cvm
@@ -27,17 +27,6 @@ def generate_binned_dataset(n_samples, n_bins):
     bins = random.randint(0, n_bins, n_samples)
     groups = bin_to_group_indices(bin_indices=bins, mask=(y == 1))
     return y, pred, weights, bins, groups
-
-
-def test_roc_curve(size=100):
-    y = (random.uniform(size=size) > 0.5) * 1
-    pred = random.uniform(size=size) * 10
-    fpr1, tpr1, thr1 = sklearn.metrics.roc_curve(y, pred)
-    fpr2, tpr2, thr2 = roc_curve(y, pred)
-    # this is insufficient test really
-    # TODO some trash with weights here:
-    # after you add weights to sklearn roc, sklearn's auc cannot compute auc over result.
-    assert numpy.allclose(auc(fpr1, tpr1), auc(fpr2, tpr2))
 
 
 def test_bin_to_group_indices(size=100, bins=10):
