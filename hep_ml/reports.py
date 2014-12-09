@@ -20,7 +20,7 @@ from scipy.stats import pearsonr
 
 from .commonutils import compute_bdt_cut, \
     check_sample_weight, build_normalizer, computeSignalKnnIndices, map_on_cluster
-from hep_ml.metrics import bin_to_group_indices
+
 from .metrics import roc_curve, roc_auc_score, compute_bin_indices, \
     compute_sde_on_bins, compute_sde_on_groups, compute_theil_on_bins, \
     bin_based_cvm, compute_bin_efficiencies, compute_bin_weights, bin_based_ks
@@ -51,7 +51,7 @@ class ClassifiersDict(OrderedDict):
         if ipc_profile in not None, it is used as a name of IPython cluster to use for parallel computations"""
         start_time = time.time()
         result = map_on_cluster(ipc_profile, train_classifier,
-                                self.iteritems(),
+                                self.items(),
                                 [X] * len(self),
                                 [y] * len(self),
                                 [sample_weight] * len(self))
@@ -66,36 +66,32 @@ class ClassifiersDict(OrderedDict):
             print("Totally spent %.2f seconds on parallel training" % total_train_time)
         return self
 
-    def test_on(self, X, y, sample_weight=None, low_memory=True):
-        return Predictions(self, X, y, sample_weight=sample_weight, low_memory=low_memory)
+    def test_on(self, X, y, sample_weight=None):
+        return Predictions(self, X, y, sample_weight=sample_weight)
 
 
 class Predictions(object):
-    def __init__(self, classifiers_dict, X, y, sample_weight=None, low_memory=True):
+    def __init__(self, classifiers_dict, X, y, sample_weight=None, low_memory=None):
         """The main object for different reports and plots,
         computes predictions of different classifiers on the same test data sets
         and makes it possible to compute different metrics,
         plot some quality curves and so on
         """
         assert isinstance(classifiers_dict, OrderedDict)
+        if low_memory is not None:
+            warnings.warn("Low memory argument is deprecated", DeprecationWarning)
+
         self.X = X
         self.y = column_or_1d(numpy.array(y, dtype=int))
         self.sample_weight = sample_weight
+        assert len(X) == len(y), 'Different lengths'
+        self.n_samples = len(y)
         self.checked_sample_weight = check_sample_weight(y, sample_weight=sample_weight)
-        if low_memory:
-            self.predictions = OrderedDict([(name, classifier.predict_proba(X))
-                                            for name, classifier in classifiers_dict.iteritems()])
-            self.staged_predictions = None
-            self.classifiers = classifiers_dict
-        else:
-            self.predictions = OrderedDict()
-            self.staged_predictions = OrderedDict()
-            for name, classifier in classifiers_dict.iteritems():
-                try:
-                    self.staged_predictions[name] = list([numpy.copy(x) for x in classifier.staged_predict_proba(X)])
-                    self.predictions[name] = self.staged_predictions[name][-1]
-                except AttributeError:
-                    self.predictions[name] = classifier.predict_proba(X)
+
+        self.predictions = OrderedDict([(name, classifier.predict_proba(X))
+                                        for name, classifier in classifiers_dict.items()])
+        self.staged_predictions = None
+        self.classifiers = classifiers_dict
 
     # region Checks
     @staticmethod
@@ -117,25 +113,22 @@ class Predictions(object):
 
     # region Mappers - function that apply functions to predictions
     def _get_staged_proba(self):
-        if self.staged_predictions is not None:
-            return self.staged_predictions
-        else:
-            result = OrderedDict()
-            for name, classifier in self.classifiers.iteritems():
-                try:
-                    result[name] = classifier.staged_predict_proba(self.X)
-                except AttributeError:
-                    pass
-            return result
+        result = OrderedDict()
+        for name, classifier in self.classifiers.items():
+            try:
+                result[name] = classifier.staged_predict_proba(self.X)
+            except AttributeError:
+                pass
+        return result
 
     def _get_stages(self, stages):
         result = OrderedDict()
         if stages is None:
-            for name, preds in self.predictions.iteritems():
+            for name, preds in self.predictions.items():
                 result[name] = pandas.Series(data=[preds], index=['result'])
         else:
             stages = set(stages)
-            for name, stage_preds in self._get_staged_proba().iteritems():
+            for name, stage_preds in self._get_staged_proba().items():
                 result[name] = pandas.Series()
                 for stage, pred in enumerate(stage_preds):
                     if stage not in stages:
@@ -150,7 +143,7 @@ class Predictions(object):
         :param int step: the function is applied to every step'th iteration
         """
         result = OrderedDict()
-        for name, staged_proba in self._get_staged_proba().iteritems():
+        for name, staged_proba in self._get_staged_proba().items():
             result[name] = pandas.Series()
             for stage, pred in islice(enumerate(staged_proba), step - 1, None, step):
                 result[name].loc[stage] = function(pred)
@@ -163,7 +156,7 @@ class Predictions(object):
         :rtype: dict[str, pandas.Series]"""
         selected_stages = self._get_stages(stages)
         result = OrderedDict()
-        for name, staged_proba in selected_stages.iteritems():
+        for name, staged_proba in selected_stages.items():
             result[name] = staged_proba.apply(function)
         return result
 
@@ -175,22 +168,25 @@ class Predictions(object):
         for stage_name, stage_predictions in selected_stages.iterrows():
             print('Stage ' + str(stage_name))
             self._strip_figure(len(stage_predictions))
-            for i, (name, probabilities) in enumerate(stage_predictions.iteritems()):
-                pylab.subplot(1, len(stage_predictions), i + 1)
+            for i, (name, probabilities) in enumerate(stage_predictions.items(), start=1):
+                pylab.subplot(1, len(stage_predictions), i)
                 pylab.title(name)
                 plotting_function(self.y, probabilities, sample_weight=self.sample_weight)
             pylab.show()
 
     def _plot_curves(self, function, step):
+        """
+        :param function: should take proba od shape [n_samples, n_classes]
+        """
         result = self._map_on_staged_proba(function=function, step=step)
-        for name, values in result.iteritems():
+        for name, values in result.items():
             pylab.plot(values.keys(), values, label=name)
         pylab.xlabel('stage')
         return result
 
-    #endregion
+    # endregion
 
-    #region Quality-related methods
+    # region Quality-related methods
 
     def roc(self, stages=None, new_figure=True):
         proba_on_stages = pandas.DataFrame(self._get_stages(stages))
@@ -213,7 +209,7 @@ class Predictions(object):
         proba_on_stages = pandas.DataFrame(self._get_stages(stages))
         for stage_name, proba_on_stage in proba_on_stages.iterrows():
             self._strip_figure(len(proba_on_stage))
-            for i, (clf_name, predict_proba) in enumerate(proba_on_stage.iteritems(), 1):
+            for i, (clf_name, predict_proba) in enumerate(proba_on_stage.items(), 1):
                 pylab.subplot(1, len(proba_on_stage), i)
                 for label in numpy.unique(self.y):
                     pylab.hist(predict_proba[self.y == label, label], histtype=histtype, bins=bins, label=str(label))
@@ -222,17 +218,12 @@ class Predictions(object):
                     pylab.legend()
             pylab.show()
 
-    def learning_curves(self, metrics=roc_auc_score, step=1, label=1):
+    def learning_curves(self, metrics=roc_auc_score, step=1, label=1, mask=None):
         y_true = (self.y == label) * 1
-        # TODO think of metrics without sample_weight
-        function = lambda predictions: metrics(y_true, predictions[:, label], sample_weight=self.sample_weight)
-        result = self._map_on_staged_proba(function=function, step=step)
-
-        for classifier_name, staged_roc in result.iteritems():
-            pylab.plot(staged_roc.keys(), staged_roc, label=classifier_name)
+        mask = self._check_mask(mask)
+        self._plot_curves(lambda p: metrics(y_true[mask], p[mask, label], sample_weight=self.sample_weight), step=step)
         pylab.legend(loc="lower right")
         pylab.xlabel("stage"), pylab.ylabel("ROC AUC")
-        return self
 
     def compute_metrics(self, stages=None, metrics=roc_auc_score, label=1):
         """ Computes arbitrary metrics on selected stages
@@ -241,19 +232,18 @@ class Predictions(object):
             any metrics with interface (y_true, y_pred, sample_weight=None), where y_pred of shape [n_samples] of float
         :return: pandas.DataFrame with computed values
         """
-
-        def compute_metrics(proba):
+        def _compute_metrics(proba):
             return metrics((self.y == label) * 1, proba[:, label], sample_weight=self.sample_weight)
 
-        return pandas.DataFrame(self._map_on_stages(compute_metrics, stages=stages))
+        return pandas.DataFrame(self._map_on_stages(_compute_metrics, stages=stages))
 
     #endregion
 
     #region Uniformity-related methods
 
     def _compute_bin_indices(self, var_names, n_bins=20, mask=None):
-        """Mask is used to show events that will be binned after"""
-        #TODO merge with next function
+        """Mask is used to show events that will be binned afterwards
+        (for instance if only signal events will be binned, then mask= y == 1)"""
         for var in var_names:
             assert var in self.X.columns, "the variable %i is not in dataset" % var
         mask = self._check_mask(mask)
@@ -262,6 +252,10 @@ class Predictions(object):
             var_data = self.X.loc[mask, var_name]
             bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
         return compute_bin_indices(self.X, var_names, bin_limits)
+
+    def _compute_nonempty_bins_mask(self, var_names, n_bins=20, mask=None):
+        return numpy.bincount(self._compute_bin_indices(var_names, n_bins=n_bins, mask=mask),
+                              minlength=n_bins ** len(var_names)) > 0
 
     def _compute_bin_masscenters(self, var_name, n_bins=20, mask=None):
         bin_indices = self._compute_bin_indices([var_name], n_bins=n_bins, mask=mask)
@@ -368,7 +362,8 @@ class Predictions(object):
 
     def rcp(self, variable, global_rcp=None, n_bins=20, label=1,
             new_plot=True, ignored_sidebands=0., range=None, marker='.',
-            show_legend=True, multiclassification=False, adjust_n_bins=True, mask=None, median_centers=True):
+            show_legend=True, multiclassification=False, adjust_n_bins=True, mask=None,
+            median_centers=True, compute_cuts_for_other_class=False, print_cut=False):
         """
         Right-classified part. This is efficiency for signal events, background rejection for background ones.
         In case of more than two classes this is the part of events of that class that was correctly classified.
@@ -384,33 +379,40 @@ class Predictions(object):
         :param ignored_sidebands: float, part of events from the left and right
             that will be ignored (default 0.001 = 0.1%)
         :param range: tuple or None, events with values of variable outside this range will be ignored
-        :param multiclassification: bool, if False, physical names will be used
+        :param multiclassification: bool, if False, 'physical' names will be used (efficiency, rejection)
+        :param median_centers: bool, if True, the x of point is median of masses inside bin,
+            otherwise mean of the bounds
+        :param compute_cuts_for_other_class: if True, the computed cuts will correspond to rcp of opposite class
+            (available only for binary classification)
         """
+        if multiclassification:
+            assert not compute_cuts_for_other_class, 'this option is unavailable for multiclassification'
         if not multiclassification:
             assert label in {0, 1}, 'for binary classification label should be in [0, 1]'
-        if mask is None:
-            mask = numpy.ones(len(self.y), dtype=bool)
-        mask = (mask > 0.5) & (self.y == label)
-
-        signal_masses = self.X.loc[mask, variable].values
-        left, right = numpy.percentile(signal_masses, [100 * ignored_sidebands, 100 * (1. - ignored_sidebands)])
-        left -= 0.5
-        right += 0.5
+        mask = self._check_mask(mask)
+        inner_mask = (mask > 0.5) & (self.y == label)
 
         if range is not None:
             left, right = range
+        else:
+            signal_masses = self.X.loc[mask, variable].values
+            left, right = numpy.percentile(signal_masses, [100 * ignored_sidebands, 100 * (1. - ignored_sidebands)])
+            left -= 0.5
+            right += 0.5
+
         masses = self.X.loc[:, variable].values
-        mask = mask & (masses >= left) & (masses <= right)
+        inner_mask &= (masses >= left) & (masses <= right)
         if adjust_n_bins:
             n_bins = min(n_bins, len(numpy.unique(masses[mask])))
 
-        bin_indices = self._compute_bin_indices([variable], n_bins=n_bins, mask=mask)
-        bin_centers_simple, = self._compute_bin_centers([variable], n_bins=n_bins, mask=mask)
-        bin_centers_median = self._compute_bin_masscenters(variable, n_bins=n_bins, mask=mask)
-        # Leave only non-empty
-        bin_mask = numpy.isfinite(bin_centers_median)
+        bin_indices = self._compute_bin_indices([variable], n_bins=n_bins, mask=inner_mask)
+        if median_centers:
+            bin_centers = self._compute_bin_masscenters(variable, n_bins=n_bins, mask=inner_mask)
+        else:
+            bin_centers, = self._compute_bin_centers([variable], n_bins=n_bins, mask=inner_mask)
 
-        bin_centers = bin_centers_median if median_centers else bin_centers_simple
+        # Leave only non-empty
+        bin_mask = self._compute_nonempty_bins_mask([variable], n_bins=n_bins, mask=inner_mask)
 
         global_rcp = self._check_efficiencies(global_rcp)
 
@@ -423,19 +425,27 @@ class Predictions(object):
             legend_label = 'rcp={rcp:.2f}'
         elif label == 1:
             ylabel = 'signal efficiency'
-            legend_label = 'eff={rcp:.2f}'
+            legend_label = 'avg eff={rcp:.2f}' if not compute_cuts_for_other_class else 'bck rej={rcp:.2f}'
         else:
             ylabel = 'background rejection'
-            legend_label = 'rej={rcp:.2f}'
+            legend_label = 'avg rej={rcp:.2f}' if not compute_cuts_for_other_class else 'avg eff={rcp:.2f}'
+        if print_cut:
+            legend_label += '(cut={cut:.2f})'
 
         for i, (name, proba) in enumerate(self.predictions.items(), start=1):
             ax = pylab.subplot(1, n_classifiers, i)
             for eff in global_rcp:
-                cut = compute_bdt_cut(eff, y_true=mask, y_pred=proba[:, label],
-                                      sample_weight=self.checked_sample_weight)
+                if not compute_cuts_for_other_class:
+                    cut = compute_bdt_cut(eff, y_true=mask, y_pred=proba[:, label],
+                                          sample_weight=self.checked_sample_weight)
+                else:
+                    cut = 1 - compute_bdt_cut(eff, y_true=mask, y_pred=proba[:, 1 - label],
+                                              sample_weight=self.checked_sample_weight)
+
                 bin_effs = compute_bin_efficiencies(proba[mask, label], bin_indices=bin_indices[mask], cut=cut,
                                                     sample_weight=self.checked_sample_weight[mask], minlength=n_bins)
-                ax.plot(bin_centers[bin_mask], bin_effs[bin_mask], label=legend_label.format(rcp=eff), marker=marker)
+                ax.plot(bin_centers[bin_mask], bin_effs[bin_mask], label=legend_label.format(rcp=eff, cut=cut),
+                        marker=marker)
 
             ax.set_ylim(0, 1)
             ax.set_title(name)
@@ -445,8 +455,9 @@ class Predictions(object):
                 ax.legend(loc='best')
 
     def efficiency(self, uniform_variables, stages=None, target_efficiencies=None, n_bins=20, label=1):
-        warnings.warn("This implementation of efficiency is considered outdated", DeprecationWarning)
-        # TODO rewrite completely this function
+        warnings.warn("This implementation of efficiency is considered outdated, consider using RCP",
+                      DeprecationWarning)
+
         target_efficiencies = self._check_efficiencies(target_efficiencies)
         if len(uniform_variables) not in {1, 2}:
             raise ValueError("More than two variables are not implemented, you have a 3d-monitor? :)")
@@ -528,7 +539,7 @@ class Predictions(object):
 
         correlations = self._map_on_staged_proba(compute_correlation, step=step)
 
-        for classifier_name, staged_correlation in correlations.iteritems():
+        for classifier_name, staged_correlation in correlations.items():
             pylab.plot(staged_correlation.keys(), staged_correlation, label=classifier_name)
         pylab.legend(loc="lower left")
         pylab.xlabel("stage"), pylab.ylabel("Pearson correlation")
@@ -536,12 +547,12 @@ class Predictions(object):
 
     #endregion
 
-    def hist(self, var_names, n_bins=20):
+    def hist(self, var_names, n_bins=20, new_plot=True):
         """ Plots 1 and 2-dimensional distributions
         :param var_names: array-like of length 1 or 2 with name of variables to plot
         :param int n_bins: number of bins for histogram()
         :return: self """
-        plot_classes_distribution(self.X, self.y, var_names, n_bins=n_bins)
+        plot_classes_distribution(self.X, self.y, var_names, n_bins=n_bins, new_plot=new_plot)
         return self
 
     @staticmethod
@@ -599,11 +610,12 @@ def plot_roc(y_true, y_pred, sample_weight=None, classifier_name="", is_cut=Fals
         pylab.plot(tpr[1:2], bg_rejection[1:2], 'o', label='%s' % classifier_name)
 
 
-def plot_classes_distribution(X, y, var_names, n_bins=20):
+def plot_classes_distribution(X, y, var_names, n_bins=20, new_plot=True):
     y = column_or_1d(y)
     labels = numpy.unique(y)
     if len(var_names) == 1:
-        pylab.figure(figsize=(14, 7))
+        if new_plot:
+            pylab.figure(figsize=(14, 7))
         pylab.title('Distribution of classes')
         for label in labels:
             pylab.hist(numpy.ravel(X.ix[y == label, var_names]), label='class=%i' % label, alpha=0.3, bins=n_bins)
@@ -611,7 +623,8 @@ def plot_classes_distribution(X, y, var_names, n_bins=20):
         pylab.legend()
 
     elif len(var_names) == 2:
-        pylab.figure(figsize=(12, 10))
+        if new_plot:
+            pylab.figure(figsize=(12, 10))
         pylab.title('Distribution of classes')
         x_var, y_var = var_names
         for label in labels:
@@ -642,3 +655,5 @@ def plot_features_pdf(X, y, n_bins=20, n_columns=3, ignored_sideband=0.001, mask
                    range=limits, alpha=0.3, label=bck_label, color='r')
         pylab.legend(loc='best')
         pylab.title(column)
+
+

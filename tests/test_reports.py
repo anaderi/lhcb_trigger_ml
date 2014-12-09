@@ -1,4 +1,5 @@
 from __future__ import division, print_function, absolute_import
+import pandas
 
 from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
 from matplotlib.cbook import Null
@@ -14,35 +15,55 @@ class MyNull(Null):
         return [0, 1]
 
 
+trainX, trainY = generate_sample(1000, 10)
+testX, testY = generate_sample(1000, 10)
+
+classifiers = ClassifiersDict()
+classifiers['ada'] = AdaBoostClassifier(n_estimators=20)
+classifiers['forest'] = RandomForestClassifier(n_estimators=20)
+predictions = classifiers.fit(trainX, trainY).test_on(testX, testY)
+
+
 def test_reports(null_pylab=True):
-    if null_pylab and __name__ != '__main__':
+    if null_pylab:
         reports.pylab = MyNull()
 
-    print(reports.pylab.ylim)
+    predictions.sde_curves(['column0'])
 
-    trainX, trainY = generate_sample(1000, 10)
-    testX, testY = generate_sample(1000, 10)
+    predictions.correlation_curves('column1', ).show()
+    predictions.learning_curves()
+    predictions.show()
+    predictions.hist(['column0']).show()
 
-    for low_memory in [True]:
-        classifiers = ClassifiersDict()
-        classifiers['ada'] = AdaBoostClassifier(n_estimators=20)
-        classifiers['forest'] = RandomForestClassifier(n_estimators=20)
+    rocs = predictions.compute_metrics(stages=[5, 10], metrics=roc_auc_score)
+    assert isinstance(rocs, pandas.DataFrame)
 
-        pred = classifiers.fit(trainX, trainY).test_on(testX, testY, low_memory=low_memory)
-        pred.roc().show().sde_curves(['column0'])
+    reports.pylab.figure(figsize=[18, 10])
+    reports.plot_features_pdf(trainX, trainY, n_columns=4)
+    predictions.show()
 
-        pred.correlation_curves('column1', ).show() \
-            .learning_curves().show() \
-            .efficiency(trainX.columns[:1], n_bins=7).show() \
-            .efficiency(trainX.columns[:2], n_bins=12, target_efficiencies=[0.5]).show() \
-            .roc(stages=[10, 15]).show() \
-            .hist(['column0']).show() \
-            .compute_metrics(stages=[5, 10], metrics=roc_auc_score)
 
-        pred.rcp('column0', n_bins=7)
-        pred.show()
-
-    reports.plot_features_pdf(trainX, trainY)
-    reports.pylab.show()
+def test_roc(null_pylab=True):
+    if null_pylab:
+        reports.pylab = MyNull()
+    predictions.roc().show()
+    predictions.roc(stages=[10, 15]).show()
     reports.plot_roc(trainY, trainY, is_cut=True)
+    predictions.show()
+
+
+def test_reports_efficiency(null_pylab=True):
+    if null_pylab:
+        reports.pylab = MyNull()
+
+    predictions.efficiency(trainX.columns[:1], n_bins=7).show()
+
+    predictions.rcp('column0', n_bins=7)
+    predictions.show()
+
+    predictions.rcp('column0', n_bins=30)
+    predictions.show()
+
+    predictions.efficiency(trainX.columns[:2], n_bins=12, target_efficiencies=[0.5]).show()
+
 
