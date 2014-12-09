@@ -79,6 +79,7 @@ class uGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
 
         # preparing for fitting in trees
         X = self.get_train_vars(X)
+        self.n_features = X.shape[1]
         X, y = check_arrays(X, y, dtype=DTYPE, sparse_format="dense", check_ccontiguous=True)
         y_pred = numpy.zeros(len(X), dtype=float)
 
@@ -152,3 +153,8 @@ class uGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
 
     def predict(self, X):
         return numpy.argmax(self.predict_proba(X), axis=1)
+
+    @property
+    def feature_importances_(self):
+        total_sum = sum(tree.feature_importances_ for tree in self.estimators)
+        return total_sum / len(self.estimators)
