@@ -12,7 +12,7 @@ from collections import defaultdict
 from sklearn.utils.validation import check_random_state
 from sklearn.base import BaseEstimator
 
-from .commonutils import computeSignalKnnIndices, indices_of_values, check_sample_weight
+from .commonutils import computeSignalKnnIndices, indices_of_values, check_sample_weight, check_uniform_label
 from .metrics import bin_to_group_indices, compute_group_weights, compute_bin_indices
 
 __author__ = 'Alex Rogozhnikov'
@@ -164,7 +164,7 @@ class SimpleKnnLossFunction(AbstractMatrixLossFunction):
         self.knn = knn
         self.distinguish_classes = distinguish_classes
         self.row_norm = row_norm
-        self.uniform_label = [uniform_label] if isinstance(uniform_label, numbers.Number) else uniform_label
+        self.uniform_label = check_uniform_label(uniform_label)
         AbstractMatrixLossFunction.__init__(self, uniform_variables)
 
     def compute_parameters(self, trainX, trainY):
@@ -206,10 +206,10 @@ class SimpleKnnLossFunction(AbstractMatrixLossFunction):
         return A, w
 
 
-#endregion
+# endregion
 
 
-#region FlatnessLossFunction
+# region FlatnessLossFunction
 
 def exp_margin(margin):
     """ margin = - y_signed * y_pred """
@@ -291,9 +291,6 @@ class AbstractFlatnessLossFunction(AbstractLossFunction):
                 compute_positions(y_pred[label_mask], sample_weight=self.sample_weight[label_mask])
 
             for indices_in_bin in self.group_indices[label]:
-                # TODO delete
-                assert numpy.all(label_mask[indices_in_bin]), "Not all events in bin of appropriate class"
-
                 local_pos = compute_positions(y_pred[indices_in_bin],
                                               sample_weight=self.sample_weight[indices_in_bin])
                 global_pos = global_positions[indices_in_bin]
@@ -378,4 +375,4 @@ class KnnFlatnessLossFunction(AbstractFlatnessLossFunction):
         else:
             return knn_indices
 
-#endregion
+# endregion
