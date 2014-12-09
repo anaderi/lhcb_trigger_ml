@@ -11,7 +11,8 @@ obtain efficiency uniformity at the specified level
 # Nikita Kazeev <kazeevn@yandex-team.ru>
 
 from collections import defaultdict
-from itertools import izip
+from six.moves import zip
+
 import numpy as np
 from scipy.special import expit
 from sklearn.base import BaseEstimator, clone
@@ -20,9 +21,9 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays, column_or_1d
 
-from commonutils import sigmoid_function, compute_bdt_cut, map_on_cluster, generate_sample, \
+from .commonutils import sigmoid_function, compute_bdt_cut, map_on_cluster, generate_sample, \
     computeKnnIndicesOfSameClass, compute_cut_for_efficiency
-from metrics import compute_group_efficiencies
+from .metrics import compute_group_efficiencies
 
 
 __author__ = "Alex Rogozhnikov, Nikita Kazeev"
@@ -207,7 +208,7 @@ class uBoostBDT:
                 "Wrong shape of neighbours_matrix"
             self.knn_indices = neighbours_matrix
         else:
-            assert self.uniform_variables is not None,\
+            assert self.uniform_variables is not None, \
                 "uniform_variables should be set"
             self.knn_indices = computeKnnIndicesOfSameClass(
                 self.uniform_variables, X, y, self.n_neighbors)
@@ -217,7 +218,7 @@ class uBoostBDT:
             sample_weight = np.ones(len(X), dtype=np.float) / len(X)
         else:
             # Normalize existing weights
-            assert np.all(sample_weight >= 0.),\
+            assert np.all(sample_weight >= 0.), \
                 'the weights should be non-negative'
             sample_weight /= np.sum(sample_weight)
 
@@ -243,7 +244,7 @@ class uBoostBDT:
 
         self.score_cut = self.signed_uniform_label * compute_bdt_cut(
             self.target_efficiency, y == self.uniform_label, self.predict_score(X) * self.signed_uniform_label)
-        assert np.allclose(self.score_cut, self.score_cuts_[-1], rtol=1e-10, atol=1e-10),\
+        assert np.allclose(self.score_cut, self.score_cuts_[-1], rtol=1e-10, atol=1e-10), \
             "score cut doesn't appear to coincide with the staged one"
         assert len(self.estimators_) == len(self.estimator_weights_) == len(self.score_cuts_)
         return self
@@ -283,7 +284,7 @@ class uBoostBDT:
 
         # global_score_cut = compute_bdt_cut(self.target_efficiency, y, score)
         # local_efficiencies = compute_groups_efficiencies(
-        #     global_score_cut, self.knn_indices, y, score,
+        # global_score_cut, self.knn_indices, y, score,
         #     smoothing_width=self.smoothing)
 
         # pay attention - sample_weight should be used only here
@@ -298,7 +299,7 @@ class uBoostBDT:
         # Mike (uboost author) said he didn't take that into account.
         beta = np.log(1. / e_prime)
         boost_weights = np.exp((self.target_efficiency - local_efficiencies) * is_uniform_class *
-            (beta * self.uniforming_rate))
+                               (beta * self.uniforming_rate))
 
         if self.keep_debug_info:
             self.debug_dict['local_effs'].append(local_efficiencies.copy())
@@ -310,7 +311,7 @@ class uBoostBDT:
         which is modified in uBoost way"""
         cumulative_score = np.zeros(len(X))
         y_signed = 2 * y - 1
-        for iboost in xrange(self.n_estimators):
+        for iboost in range(self.n_estimators):
             estimator = self._make_estimator()
             mask = generate_mask(len(X), self.bagging, self.random_generator)
             estimator.fit(X, y, sample_weight=sample_weight * mask)
@@ -346,7 +347,7 @@ class uBoostBDT:
             self.estimator_weights_.append(estimator_weight)
 
             # assert np.allclose(cumulative_score, self.predict_score(X), atol=1e-8), \
-            #     "wrong prediction"
+            # "wrong prediction"
 
             if self.keep_debug_info:
                 self.debug_dict['weights'].append(sample_weight.copy())
@@ -400,7 +401,7 @@ class uBoostBDT:
 
     def _uboost_staged_predict_score(self, X):
         """Method added specially for uBoostClassifier"""
-        for cut, score in izip(self.score_cuts_, self.staged_predict_score(X)):
+        for cut, score in zip(self.score_cuts_, self.staged_predict_score(X)):
             yield sigmoid_function(score - cut, self.smoothing)
 
     @property
@@ -415,12 +416,13 @@ class uBoostBDT:
                              " call `fit` before `feature_importances_`.")
 
         return sum(tree.feature_importances_ * weight for tree, weight
-                   in izip(self.estimators_, self.estimator_weights_))
+                   in zip(self.estimators_, self.estimator_weights_))
 
 
 def _train_classifier(classifier, X_train_vars, y, sample_weight, neighbours_matrix):
     # supplementary function to train separate parts of uBoost on cluster
-    return classifier.fit(X_train_vars, y, sample_weight=sample_weight,
+    return classifier.fit(X_train_vars, y,
+                          sample_weight=sample_weight,
                           neighbours_matrix=neighbours_matrix)
 
 
@@ -533,7 +535,7 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
 
         neighbours_matrix = computeKnnIndicesOfSameClass(
             self.uniform_variables, X, y, n_neighbours=self.knn)
-        # TODO(Alex) select some other targets ?
+        # TODO(Alex) maybe select some other targets ?
         self.target_efficiencies = np.linspace(0, 1, self.efficiency_steps + 2)[1:-1]
         self.classifiers = []
 
@@ -549,13 +551,13 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
                 smoothing=self.smoothing, algorithm=self.algorithm)
             self.classifiers.append(classifier)
 
-        map_on_cluster(self.ipc_profile,
-                       _train_classifier,
-                       self.classifiers,
-                       self.efficiency_steps * [X_train_vars],
-                       self.efficiency_steps * [y],
-                       self.efficiency_steps * [sample_weight],
-                       self.efficiency_steps * [neighbours_matrix])
+        self.classifiers = map_on_cluster(self.ipc_profile,
+                                          _train_classifier,
+                                          self.classifiers,
+                                          self.efficiency_steps * [X_train_vars],
+                                          self.efficiency_steps * [y],
+                                          self.efficiency_steps * [sample_weight],
+                                          self.efficiency_steps * [neighbours_matrix])
 
         return self
 
@@ -575,8 +577,8 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
 
     def staged_predict_proba(self, X):
         X = self.get_train_vars(X)
-        for scores in izip(*[clf._uboost_staged_predict_score(X)
-                             for clf in self.classifiers]):
+        for scores in zip(*[clf._uboost_staged_predict_score(X)
+                            for clf in self.classifiers]):
             yield self.score_to_proba(sum(scores))
 
 
@@ -607,5 +609,6 @@ def minimal_test():
     uboost = uBoostClassifier(['column0'], n_estimators=2, efficiency_steps=3)
     uboost.fit(trainX, trainY)
     result = uboost.predict_proba(trainX)
+
 
 minimal_test()

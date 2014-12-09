@@ -42,7 +42,7 @@ def count_probabilities(primary_weights, secondary_weights, knn):
     primary_weights /= numpy.sum(primary_weights)
     secondary_weights = numpy.array(secondary_weights)
     probabilities = numpy.zeros(size, dtype=float)
-    for index, neighbours in knn.iteritems():
+    for index, neighbours in knn.items():
         knn_weights = numpy.take(secondary_weights, neighbours)
         knn_proba = knn_weights / numpy.sum(knn_weights) * primary_weights[index]
         probabilities[neighbours] += knn_proba
@@ -102,7 +102,7 @@ def generate_toymc(data, size, knn=4, symmetrize=True, power=2.0,
         # removing duplicates in neighbors
         old_neighbours = two_side_neighbours
         two_side_neighbours = {}
-        for i, neighbours_i in old_neighbours.iteritems():
+        for i, neighbours_i in old_neighbours.items():
             two_side_neighbours[i] = numpy.unique(neighbours_i)
 
     secondary_weights = numpy.ones(len(neighbours), dtype=float)

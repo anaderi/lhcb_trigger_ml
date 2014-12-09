@@ -182,7 +182,7 @@ def compute_bin_indices(X, var_names, bin_limits=None, mask=None, n_bins=20):
     bin_indices = numpy.zeros(len(X), dtype=numpy.int)
     for var_name, bin_limits_axis in zip(var_names, bin_limits):
         bin_indices *= (len(bin_limits_axis) + 1)
-        bin_indices += numpy.searchsorted(bin_limits_axis, X[var_name])
+        bin_indices += numpy.searchsorted(bin_limits_axis, X.ix[:, var_name])
     return bin_indices
 
 
