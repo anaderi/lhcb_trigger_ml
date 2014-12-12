@@ -38,7 +38,7 @@ class AbstractParameterGenerator(object):
         assert isinstance(param_grid, dict), 'the passed param_grid should be of OrderedDict class'
         self.param_grid = OrderedDict(param_grid)
         _check_param_grid(self.param_grid)
-        self.dimensions = list([len(param_values) for param, param_values in self.param_grid.iteritems()])
+        self.dimensions = list([len(param_values) for param, param_values in self.param_grid.items()])
         size = numpy.prod(self.dimensions)
         assert size > 1, 'The space of parameters contains only %i points' % size
         if n_evaluations > size / 2:
@@ -53,7 +53,7 @@ class AbstractParameterGenerator(object):
         self.evaluations_done = 0
 
     def indices_to_parameters(self, state_indices):
-        return OrderedDict([(name, values[i]) for i, (name, values) in zip(state_indices, self.param_grid.iteritems())])
+        return OrderedDict([(name, values[i]) for i, (name, values) in zip(state_indices, self.param_grid.items())])
 
     def _generate_start_point(self):
         while True:
@@ -82,12 +82,12 @@ class AbstractParameterGenerator(object):
 
     @property
     def best_params_(self):
-        return self.indices_to_parameters(max(self.grid_scores_.iteritems(), key=lambda x: x[1])[0])
+        return self.indices_to_parameters(max(self.grid_scores_.items(), key=lambda x: x[1])[0])
 
     def print_results(self, reorder=True):
         """Prints the results of training, if reorder==True, best results go earlier,
         otherwise the results are printed in the order of computation"""
-        sequence = self.grid_scores_.iteritems()
+        sequence = self.grid_scores_.items()
         if reorder:
             sequence = sorted(sequence, key=lambda x: -x[1])
         for state_indices, value in sequence:
@@ -115,8 +115,8 @@ class AbstractParameterGenerator(object):
             for b in best:
                 best_stats[b].append(numpy.zeros(n_values))
 
-        thresholds = [commonutils.weighted_percentile(self.grid_scores_.values(), [1. - b])[0] for b in best]
-        for index, score in self.grid_scores_.iteritems():
+        thresholds = [commonutils.weighted_percentile(list(self.grid_scores_.values()), [1. - b])[0] for b in best]
+        for index, score in self.grid_scores_.items():
             for feat_i, feat_val in enumerate(index):
                 all_stats[feat_i][feat_val] += 1
                 for t, b in zip(thresholds, best):
@@ -143,7 +143,7 @@ def create_subgrid(param_grid, n_values):
     """
     subgrid = OrderedDict()
     subgrid_indices = OrderedDict()
-    for key, values in param_grid.iteritems():
+    for key, values in param_grid.items():
         if len(values) <= n_values:
             subgrid[key] = list(values)
             subgrid_indices[key] = range(len(values))
@@ -199,13 +199,13 @@ class SimpleParameterOptimizer(AbstractParameterGenerator):
             self.queued_tasks_.add(indices)
             return indices, self.indices_to_parameters(indices)
 
-        results = numpy.array(self.grid_scores_.values())
+        results = numpy.array(list(self.grid_scores_.values()))
         std = numpy.std(results) + 1e-5
         probabilities = numpy.exp(numpy.clip((results - numpy.mean(results)) * 3. / std, -5, 5))
         probabilities /= numpy.sum(probabilities)
         while True:
             start = self.random_state.choice(len(probabilities), p=probabilities)
-            start_indices = self.grid_scores_.keys()[start]
+            start_indices = list(self.grid_scores_.keys())[start]
             new_state_indices = list(start_indices)
 
             p = 1. - len(self.queued_tasks_) / self.n_evaluations
@@ -260,6 +260,7 @@ def estimate_classifier(params_dict, base_estimator, X, y, folds, fold_checks,
 
         return score / fold_checks
     except Exception as e:
+        # If there was some exception on the node, it will be returned
         if catch_exceptions:
             return e
         else:
@@ -375,7 +376,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
 
                 self.generator.add_result(state_indices, value)
                 self.evaluations_done += 1
-                state_string = ", ".join([k + '=' + str(v) for k, v in state_dict.iteritems()])
+                state_string = ", ".join([k + '=' + str(v) for k, v in state_dict.items()])
                 self._log(value, ": ", state_string)
         else:
             from IPython.parallel import Client
@@ -393,7 +394,7 @@ class GridOptimalSearchCV(BaseEstimator, ClassifierMixin):
                     [self.scorer_needs_x] * portion)
                 assert len(result) == portion, "The length of result is very strange"
                 for state_indices, state_dict, score in zip(state_indices_array, state_dict_array, result):
-                    params = ", ".join([k + '=' + str(v) for k, v in state_dict.iteritems()])
+                    params = ", ".join([k + '=' + str(v) for k, v in state_dict.items()])
                     if isinstance(score, Exception):
                         # returned exception
                         message = 'Fail during training on the node \nException ' + str(score) +\

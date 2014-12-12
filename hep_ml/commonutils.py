@@ -35,14 +35,14 @@ def execute_notebook(filename):
 
 def map_on_cluster(ipc_profile, *args, **kw_args):
     """The same as map, but the first argument is ipc_profile. Distributes the task over IPython cluster.
+    Important: this function is not lazy!
     :param str|None ipc_profile: the IPython cluster profile to use.
     :return: the result of mapping
     """
     if ipc_profile is None:
-        return map(*args, **kw_args)
+        return list(map(*args, **kw_args))
     else:
         from IPython.parallel import Client
-
         return Client(profile=ipc_profile).load_balanced_view().map_sync(*args, **kw_args)
 
 
