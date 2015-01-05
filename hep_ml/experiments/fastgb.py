@@ -361,9 +361,6 @@ class FastNeuralGradientBoostingClassifier(FastGradientBoostingClassifier):
 
 
 class CategoricalGradientBoosting(AbstractGradientBoostingClassifier):
-    """
-    Specially for Avazu
-    """
     def __init__(self, loss=None,
                  base_estimator=None,
                  n_estimators=100,
@@ -372,10 +369,13 @@ class CategoricalGradientBoosting(AbstractGradientBoostingClassifier):
                  train_variables=None,
                  dtype='int',
                  update_tree=True,
-                 random_state=None):
+                 random_state=None,
+                 n_threads=1):
         self.base_estimator = base_estimator
         self.dtype = dtype
         self.update_tree = update_tree
+        # this really needed only to descendants
+        self.n_threads = n_threads
         AbstractGradientBoostingClassifier.__init__(self, loss=loss,
                                                     n_estimators=n_estimators,
                                                     learning_rate=learning_rate,
@@ -385,6 +385,7 @@ class CategoricalGradientBoosting(AbstractGradientBoostingClassifier):
 
     def _prepare_initial_predictions(self, X, y, sample_weight):
         from scipy.special import logit
+
         self.initial_prediction = logit(numpy.average(y, weights=sample_weight))
 
     def _prepare_data_for_fitting(self, X, y, sample_weight):
@@ -403,3 +404,55 @@ class CategoricalGradientBoosting(AbstractGradientBoostingClassifier):
             self.loss.update_fast_tree(fast_tree=estimator,
                                        X=X, y=y, y_pred=y_pred, sample_weight=sample_weight,
                                        update_mask=numpy.ones(len(X), dtype=bool), residual=residual)
+
+
+from multiprocessing.pool import ThreadPool
+from threading import Lock
+
+
+def train_one_classifier(train_params):
+    self, X, y, sample_weight, y_pred, lock = train_params
+
+    # estimator creation
+    estimator = self._create_estimator(len(self.estimators))
+
+    # estimator learning
+    residual = self.loss.negative_gradient(y_pred)
+    train_mask = self._generate_mask(len(X), subsample=self.subsample)
+    self._fit_estimator(estimator, X, y, sample_weight, residual, mask=train_mask)
+
+    # update estimator
+    update_mask = numpy.ones(len(y), dtype=bool)
+    self._update_estimator(estimator, X, y, sample_weight, residual, y_pred, mask=update_mask)
+
+    # updating training state
+    stage_pred = self.learning_rate * estimator.predict(X)
+    with lock:
+        y_pred += stage_pred
+        self.estimators.append(estimator)
+        self.scores.append(self.loss(y_pred))
+
+
+class ParallelCategoricalGB(CategoricalGradientBoosting):
+    def fit(self, X, y, sample_weight=None):
+        X, y, sample_weight = self._initial_data_check(X, y, sample_weight)
+        self._check_params()
+
+        self.loss = copy.copy(self.loss)
+        self.loss.fit(X, y, sample_weight=sample_weight)
+
+        X, y, sample_weight = self._prepare_data_for_fitting(X, y, sample_weight)
+
+        self._prepare_initial_predictions(X, y, sample_weight)
+        y_pred = numpy.zeros(len(X), dtype=float) + self.initial_prediction
+        self.estimators = []
+        self.scores = []
+
+        pool = ThreadPool(processes=self.n_threads)
+
+        lock = Lock()
+        train_params = [self, X, y, sample_weight, y_pred, lock]
+
+        pool.map(train_one_classifier, [train_params] * self.n_estimators, chunksize=1)
+
+        return self
