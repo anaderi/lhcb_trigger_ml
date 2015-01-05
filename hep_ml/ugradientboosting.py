@@ -10,8 +10,9 @@ from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays, column_or_1d
 
 from .commonutils import check_sample_weight, sigmoid_function
-from .losses import AbstractLossFunction, AbstractFlatnessLossFunction, \
-    KnnFlatnessLossFunction, BinFlatnessLossFunction, AbstractMatrixLossFunction, SimpleKnnLossFunction, AdaLossFunction
+from .losses import AbstractLossFunction, AdaLossFunction, AbstractFlatnessLossFunction, \
+    KnnFlatnessLossFunction, BinFlatnessLossFunction, AbstractMatrixLossFunction, \
+    SimpleKnnLossFunction, BinomialDevianceLossFunction
 
 
 __author__ = 'Alex Rogozhnikov'
