@@ -8,6 +8,7 @@ import warnings
 import numpy
 import pandas
 from scipy import sparse
+from scipy.special import expit
 from collections import defaultdict
 from sklearn.utils.validation import check_random_state
 from sklearn.base import BaseEstimator
@@ -45,7 +46,8 @@ class AbstractLossFunction(BaseEstimator):
 
     def update_tree(self, tree, X, y, y_pred, sample_weight, update_mask, residual):
         """This method may be not called at all, so it shouldn't
-        modify y_pred (unlike LossFunction from sklearn)"""
+        modify y_pred (unlike LossFunction from sklearn),
+        y_pred will be recomputed outside after updating the tree"""
 
         # compute leaf for each sample in ``X``.
         terminal_regions = tree.apply(X)
@@ -57,14 +59,32 @@ class AbstractLossFunction(BaseEstimator):
         for leaf, indices_in_leaf in indices_of_values(masked_terminal_regions):
             if leaf == -1:
                 continue
-            self.update_tree_leaf(tree, leaf=leaf, indices_in_leaf=indices_in_leaf,
-                                  X=X, y=y, y_pred=y_pred,
-                                  sample_weight=sample_weight, update_mask=update_mask,
-                                  residual=residual)
+            tree.value[leaf, 0, 0] = self.update_tree_leaf(
+                leaf=leaf, indices_in_leaf=indices_in_leaf, X=X, y=y, y_pred=y_pred,
+                sample_weight=sample_weight, update_mask=update_mask, residual=residual)
 
-    def update_tree_leaf(self, tree, leaf, indices_in_leaf,
+    def update_fast_tree(self, fast_tree, X, y, y_pred, sample_weight, update_mask, residual):
+        """This method may be not called at all, so it shouldn't
+        modify y_pred (unlike LossFunction from sklearn),
+        y_pred will be recomputed outside after updating the tree"""
+
+        # compute leaf for each sample in ``X``.
+        terminal_regions, _ = fast_tree.apply(X)
+        # mask all which are not in sample mask.
+        terminal_regions[~update_mask] = -1
+
+        for leaf, indices_in_leaf in indices_of_values(terminal_regions):
+            if leaf == -1:
+                continue
+            new_value = self.update_tree_leaf(
+                leaf=leaf, indices_in_leaf=indices_in_leaf, X=X, y=y, y_pred=y_pred,
+                sample_weight=sample_weight, update_mask=update_mask, residual=residual)
+            assert len(fast_tree.nodes_data[leaf]) == 1
+            fast_tree.nodes_data[leaf] = (new_value, )
+
+    def update_tree_leaf(self, leaf, indices_in_leaf,
                          X, y, y_pred, sample_weight, update_mask, residual):
-        pass
+        raise NotImplementedError('This method should be overriden')
 
 
 class AdaLossFunction(AbstractLossFunction):
@@ -79,19 +99,39 @@ class AdaLossFunction(AbstractLossFunction):
     def negative_gradient(self, y_pred):
         return self.y_signed * self.sample_weight * numpy.exp(- self.y_signed * y_pred)
 
-    def update_tree_leaf(self, tree, leaf, indices_in_leaf,
-                         X, y, y_pred, sample_weight, update_mask, residual):
+    def update_tree_leaf(self, leaf, indices_in_leaf, X, y, y_pred, sample_weight, update_mask, residual):
         leaf_ans = y[indices_in_leaf]
         leaf_exp = sample_weight[indices_in_leaf] * numpy.exp(
             - self.y_signed[indices_in_leaf] * y_pred[indices_in_leaf])
         w1 = numpy.sum(leaf_exp[leaf_ans == 1])
         w2 = numpy.sum(leaf_exp[leaf_ans == 0])
         # regularization
-        w_sum = w1 + w2
-        w1 += 1e-5 * w_sum
-        w2 += 1e-5 * w_sum
+        w_reg = (w1 + w2) * 1e-5
         # minimization of w1 * e^(-x) + w2 * e^x
-        return 0.5 * numpy.log(w1 / w2)
+        return 0.5 * numpy.log((w1 + w_reg) / (w2 + w_reg))
+
+
+class BinomialDevianceLossFunction(AbstractLossFunction):
+    def fit(self, X, y, sample_weight):
+        self.y = y
+        self.sample_weight = sample_weight
+        self.y_signed = 2 * y - 1
+
+    def __call__(self, y_pred):
+        return numpy.sum(self.sample_weight * numpy.logaddexp(0, - self.y_signed * y_pred))
+
+    def negative_gradient(self, y_pred):
+        return self.y_signed * self.sample_weight * expit(- self.y_signed * y_pred)
+
+    def update_tree_leaf(self, leaf, indices_in_leaf, X, y, y_pred, sample_weight, update_mask, residual):
+        leaf_y = y[indices_in_leaf]
+        y_signed = 2 * leaf_y - 1
+        leaf_weights = sample_weight[indices_in_leaf]
+        residual_abs = expit(numpy.clip(-y_signed * y_pred[indices_in_leaf], -10, 10))
+        nominator = numpy.sum(y_signed * residual_abs * leaf_weights)
+        denominator = numpy.sum(residual_abs * (1 - residual_abs) * leaf_weights)
+        regularization = 1. * numpy.mean(leaf_weights)
+        return nominator / (denominator + regularization)
 
 
 # region MatrixLossFunction
@@ -142,14 +182,13 @@ class AbstractMatrixLossFunction(AbstractLossFunction):
         self.update_exponents = self.w * numpy.exp(- self.A.dot(self.y_signed * y_pred))
         AbstractLossFunction.update_tree(self, tree, X, y, y_pred, sample_weight, update_mask, residual)
 
-    def update_tree_leaf(self, tree, leaf, indices_in_leaf,
-                         X, y, y_pred, sample_weight, update_mask, residual):
+    def update_tree_leaf(self, leaf, indices_in_leaf, X, y, y_pred, sample_weight, update_mask, residual):
         terminal_region = numpy.zeros(len(X), dtype=float)
         terminal_region[indices_in_leaf] += 1
         z = self.A.dot(terminal_region * self.y_signed)
         # optimal value here by several steps?
         alpha = numpy.sum(self.update_exponents * z) / (numpy.sum(self.update_exponents * z * z) + 1e-10)
-        tree.value[leaf, 0, 0] = alpha
+        return alpha
 
 
 class SimpleKnnLossFunction(AbstractMatrixLossFunction):
@@ -317,13 +356,13 @@ class AbstractFlatnessLossFunction(AbstractLossFunction):
 
         return neg_gradient
 
-    def update_tree_leaf(self, tree, leaf, indices_in_leaf,
+    def update_tree_leaf(self, leaf, indices_in_leaf,
                          X, y, y_pred, sample_weight, update_mask, residual):
         if self.use_median:
             residual = residual[indices_in_leaf]
-            tree.value[leaf, 0, 0] = numpy.median(residual)
+            return numpy.median(residual)
         else:
-            tree.value[leaf, 0, 0] = numpy.clip(tree.value[leaf, 0, 0], -10, 10)
+            return numpy.clip(y_pred[indices_in_leaf[0]], -10, 10)
 
 
 class BinFlatnessLossFunction(AbstractFlatnessLossFunction):

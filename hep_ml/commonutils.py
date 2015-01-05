@@ -5,7 +5,6 @@ which are often used (by other modules)
 
 from __future__ import print_function, division, absolute_import
 
-from collections import OrderedDict
 import math
 import io
 import numbers
