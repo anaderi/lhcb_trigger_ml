@@ -9,18 +9,14 @@ from __future__ import division, print_function, absolute_import
 from collections import OrderedDict
 import numpy
 from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.linear_model import LogisticRegression, SGDClassifier, LinearRegression
 from sklearn.utils.validation import check_random_state
 
 
 __author__ = 'Alex Rogozhnikov'
 
-# think of general framework to maintain different features: arrays, categories, links to other objects.
-# different losses
-# + abstract splitting criterions
-# + abstract passed right/left interface
 
-# Loss is minimized in tree
-
+# Criterion is minimized in tree
 
 class MseCriterion(object):
     @staticmethod
@@ -29,16 +25,11 @@ class MseCriterion(object):
         answers = y[orders]
         weights = sample_weight[orders]
         left_sum, right_sum = _compute_cumulative_sums(answers * weights)
-        left_weights, right_weights = _compute_cumulative_sums(weights + 1e-50)
+        left_weights, right_weights = _compute_cumulative_sums(weights + 1e-20)
         # mse = left_sq + right_sq - left_sum ** 2 / left_weights - right_sum ** 2 / right_weights
         # one can see that left_sq + right_sq is constant, and can be omitted, so we have:
         costs = - (left_sum ** 2 / left_weights + right_sum ** 2 / right_weights)
-        optimal_costs = numpy.min(costs, axis=0)
-        optimal_sorted_positions = numpy.argmin(costs, axis=0)
-        features_index = numpy.arange(data.shape[1])
-        optimal_orders = orders[optimal_sorted_positions, features_index]
-        optimal_cuts = data[optimal_orders, features_index]
-        return optimal_cuts, optimal_costs, optimal_sorted_positions
+        return _compute_cuts_costs_positions(costs, data=data, orders=orders)
 
 
 class FriedmanMseCriterion(object):
@@ -52,35 +43,7 @@ class FriedmanMseCriterion(object):
         diff = left_sum / left_weights - right_sum / right_weights
         # improvement = n_left * n_right * diff ^ 2 / (n_left + n_right)
         costs = - left_weights * right_weights * (diff ** 2)
-        optimal_costs = numpy.min(costs, axis=0)
-        optimal_sorted_positions = numpy.argmin(costs, axis=0)
-        features_index = numpy.arange(data.shape[1])
-        optimal_orders = orders[optimal_sorted_positions, features_index]
-        optimal_cuts = data[optimal_orders, features_index]
-        return optimal_cuts, optimal_costs, optimal_sorted_positions
-
-
-class OrderCriterion(object):
-    @staticmethod
-    def compute_best_splits(data, y, sample_weight):
-        y_order = numpy.argsort(numpy.argsort(y))
-        orders = numpy.argsort(data, axis=0)
-        # answers = y[orders]
-        pred_orders = y_order[orders]
-        weights = sample_weight[orders]
-        left_sum, right_sum = _compute_cumulative_sums(pred_orders * weights)
-        left_weights, right_weights = _compute_cumulative_sums(weights + 1e-50)
-        regularization = 0.03 * numpy.sum(sample_weight)
-        left_expected = numpy.linspace(0, 1, len(y) + 1)[1:-1] * numpy.mean(sample_weight) * numpy.sum(y_order)
-        # improvement = abs(expected_sum - current_sum) / sqrt(p * (1-p)), the sum over orders of passed events
-        costs = - numpy.abs(left_sum - left_expected[:, numpy.newaxis])
-        costs /= numpy.sqrt((left_weights + regularization) * (right_weights + regularization))
-        optimal_costs = numpy.min(costs, axis=0)
-        optimal_sorted_positions = numpy.argmin(costs, axis=0)
-        features_index = numpy.arange(data.shape[1])
-        optimal_orders = orders[optimal_sorted_positions, features_index]
-        optimal_cuts = data[optimal_orders, features_index]
-        return optimal_cuts, optimal_costs, optimal_sorted_positions
+        return _compute_cuts_costs_positions(costs, data=data, orders=orders)
 
 
 class PValueCriterion(object):
@@ -94,19 +57,78 @@ class PValueCriterion(object):
         pred_orders = y_order[orders]
         weights = sample_weight[orders]
         left_sum, right_sum = _compute_cumulative_sums(pred_orders * weights)
-        assert numpy.allclose(left_sum, -right_sum)
 
         left_weights, right_weights = _compute_cumulative_sums(weights + 1e-50)
         regularization = 0.01 * numpy.sum(sample_weight)
         # mean = 0, var = left_weights * right_weights
         costs = - numpy.abs(left_sum) / len(y)
         costs /= numpy.sqrt((left_weights + regularization) * (right_weights + regularization))
-        optimal_costs = numpy.min(costs, axis=0)
-        optimal_sorted_positions = numpy.argmin(costs, axis=0)
-        features_index = numpy.arange(data.shape[1])
-        optimal_orders = orders[optimal_sorted_positions, features_index]
-        optimal_cuts = data[optimal_orders, features_index]
-        return optimal_cuts, optimal_costs, optimal_sorted_positions
+        return _compute_cuts_costs_positions(costs, data=data, orders=orders)
+
+
+class AbstractClassificationCriterion(object):
+    @staticmethod
+    def compute_costs(s_left, s_right, b_left, b_right):
+        raise NotImplementedError('Should be overloaded')
+
+    @classmethod
+    def compute_best_splits(cls, data, y, sample_weight):
+        orders = numpy.argsort(data, axis=0)
+        answers = y[orders]
+        weights = sample_weight[orders]
+        pos_answers = answers * (answers > 0)
+        neg_answers = - answers * (answers < 0)
+        left_pos_sum, right_pos_sum = _compute_cumulative_sums(pos_answers * weights)
+        left_neg_sum, right_neg_sum = _compute_cumulative_sums(neg_answers * weights)
+        # using passed function to compute criterion
+        costs = cls.compute_costs(left_pos_sum, right_pos_sum, left_neg_sum, right_neg_sum)
+        return _compute_cuts_costs_positions(costs, data=data, orders=orders)
+
+
+class GiniCriterion(AbstractClassificationCriterion):
+    @staticmethod
+    def compute_costs(s_left, s_right, b_left, b_right):
+        return s_left * b_left / (s_left + b_left) + s_right * b_right / (s_right + b_right)
+
+
+class EntropyCriterion(AbstractClassificationCriterion):
+    @staticmethod
+    def compute_costs(s_left, s_right, b_left, b_right):
+        reg = 10
+        total_left = s_left + b_left
+        total_right = s_right + b_right
+        return -(
+            s_left * numpy.log(s_left + reg)
+            + s_right * numpy.log(s_right + reg)
+            + b_left * numpy.log(b_left + reg)
+            + b_right * numpy.log(b_right + reg)
+            - total_left * numpy.log(total_left + reg)
+            - total_right * numpy.log(total_right + reg)
+        )
+
+
+class SignificanceCriterion(AbstractClassificationCriterion):
+    @staticmethod
+    def compute_costs(s_left, s_right, b_left, b_right):
+        return - (s_left ** 2 / (b_left + 5) + s_right ** 2 / (b_right + 5))
+
+
+class SymmetricSignificanceCriterion(AbstractClassificationCriterion):
+    @staticmethod
+    def compute_costs(s_left, s_right, b_left, b_right):
+        reg = 10
+        result = s_left ** 2 / (b_left + reg) + s_right ** 2 / (b_right + reg)
+        result += b_left ** 2 / (s_left + reg) + b_right ** 2 / (s_right + reg)
+        return -result
+
+
+class PoissonSignificanceCriterion(AbstractClassificationCriterion):
+    @staticmethod
+    def compute_costs(s_left, s_right, b_left, b_right):
+        reg = 20
+        result = (s_left - b_left) * numpy.log((s_left + reg) / (b_left + reg))
+        result += (s_right - b_right) * numpy.log((s_right + reg) / (b_right + reg))
+        return -result
 
 
 def _compute_cumulative_sums(values):
@@ -116,11 +138,34 @@ def _compute_cumulative_sums(values):
     return left[:-1, :], right[:-1, :]
 
 
+def _compute_cuts_costs_positions(costs, data, orders):
+    """
+    Supplementary function to compute things that criterion should return.
+
+    :param costs: [n_samples, n_features]
+    :param data: [n_samples, n_features] original dataset
+    :param orders: [n_samples, n_features] ordering of values for each feature
+    """
+    optimal_costs = numpy.min(costs, axis=0)
+    optimal_sorted_positions = numpy.argmin(costs, axis=0)
+    features_index = numpy.arange(costs.shape[1])
+    assert (optimal_costs == costs[optimal_sorted_positions, features_index]).all()
+    optimal_orders = orders[optimal_sorted_positions, features_index]
+    _next_optimal_orders = orders[optimal_sorted_positions + 1, features_index]
+    optimal_cuts = (data[optimal_orders, features_index] + data[_next_optimal_orders, features_index]) / 2.
+    return optimal_cuts, optimal_costs, optimal_sorted_positions
+
+
 criterions = {'mse': MseCriterion,
               'fmse': FriedmanMseCriterion,
               'friedman-mse': FriedmanMseCriterion,
-              'order': OrderCriterion,
-              'pvalue': PValueCriterion}
+              'pvalue': PValueCriterion,
+              'significance': SignificanceCriterion,
+              'significance2': SymmetricSignificanceCriterion,
+              'gini': GiniCriterion,
+              'entropy': EntropyCriterion,
+              'poisson': PoissonSignificanceCriterion
+}
 
 
 class FastTreeRegressor(BaseEstimator, RegressorMixin):
@@ -156,7 +201,6 @@ class FastTreeRegressor(BaseEstimator, RegressorMixin):
             left, right = self._children(node_index)
             self.print_tree(left, "  " + prefix)
             self.print_tree(right, "  " + prefix)
-
 
     @staticmethod
     def _children(node_index):
@@ -281,11 +325,13 @@ class FastNeuroTreeRegressor(FastTreeRegressor):
                  max_depth=5,
                  max_features=None,
                  min_samples_split=40,
+                 min_samples_leaf=10,
                  n_lincomb=2,
                  n_events_form_lincomb=50,
                  max_events_used=1000,
                  criterion='mse',
                  random_state=None):
+        self.min_samples_leaf = min_samples_leaf
         self.n_lincomb = n_lincomb
         self.n_events_form_lincomb = n_events_form_lincomb
         FastTreeRegressor.__init__(self,
@@ -313,17 +359,16 @@ class FastNeuroTreeRegressor(FastTreeRegressor):
         for i, lincomb_features in enumerate(candidate_features):
             pre_events_used = selected_events[:self.n_events_form_lincomb]
             data = X[numpy.ix_(pre_events_used, lincomb_features)]
-            b = numpy.einsum('ij,i,i->j', data, y[pre_events_used], w[pre_events_used])
-            # b = numpy.sum(data * y[pre_events_used, numpy.newaxis] * w[pre_events_used, numpy.newaxis], axis=0)
-            A = numpy.einsum('ij,ik,i->jk', data, data, w[pre_events_used])
-            # data[:, :, numpy.newaxis] * data[:, numpy.newaxis, :] * w[pre_events_used, numpy.newaxis, numpy.newaxis]
-            # A = A.sum(axis=0)
-            assert A.shape[1] == b.shape[0]
-            # regularization
-            A += 0.01 * numpy.eye(self.n_lincomb) * (numpy.mean(numpy.abs(A)) + 1e-6)
-            coeffs = numpy.linalg.inv(A).dot(b)
+            w_used = w[pre_events_used]
+            lr = LinearRegression().fit(data * w_used[:, numpy.newaxis], y[pre_events_used] * w_used)
+            # normalizing coeffs
+            coeffs = lr.coef_
+            coeffs /= numpy.abs(coeffs).sum() + 0.01
+
             candidate_lincomb_coefficients[i, :] = coeffs
-            formed_data[:, i] = X[numpy.ix_(selected_events, lincomb_features)].dot(coeffs)
+            formed_data[:, i] = self._compute_lincomb(X, indices=selected_events,
+                                                      lincomb_features=lincomb_features,
+                                                      lincomb_coefficients=coeffs)
 
         cuts, costs, _ = self._criterion.compute_best_splits(
             formed_data, y[selected_events], sample_weight=w[selected_events])
@@ -334,11 +379,14 @@ class FastNeuroTreeRegressor(FastTreeRegressor):
         lincomb_features = candidate_features[combination_index, :]
         lincomb_coefficients = candidate_lincomb_coefficients[combination_index, :]
         # computing information for (possible) children
-        lincomb_values = X[numpy.ix_(passed_indices, lincomb_features)].dot(lincomb_coefficients)
+        lincomb_values = self._compute_lincomb(X, indices=passed_indices,
+                                               lincomb_features=lincomb_features,
+                                               lincomb_coefficients=lincomb_coefficients)
+
         passed_left_subtree = passed_indices[lincomb_values <= split]
         passed_right_subtree = passed_indices[lincomb_values > split]
         left, right = self._children(node_index)
-        if len(passed_left_subtree) == 0 or len(passed_right_subtree) == 0:
+        if len(passed_left_subtree) < self.min_samples_leaf or len(passed_right_subtree) < self.min_samples_leaf:
             # this will be leaf
             self.nodes_data[node_index] = (numpy.average(y[passed_indices], weights=w[passed_indices]), )
         else:
@@ -346,6 +394,12 @@ class FastNeuroTreeRegressor(FastTreeRegressor):
             self.nodes_data[node_index] = (lincomb_features, lincomb_coefficients, split)
             self._fit_tree_node(X, y, w, left, depth + 1, passed_left_subtree)
             self._fit_tree_node(X, y, w, right, depth + 1, passed_right_subtree)
+
+    def _compute_lincomb(self, X, indices, lincomb_features, lincomb_coefficients):
+        result = numpy.zeros(len(indices))
+        for feature, coeff in zip(lincomb_features, lincomb_coefficients):
+            result += X[indices, feature] * coeff
+        return result
 
     def _apply_node(self, X, leaf_indices, predictions, node_index, passed_indices):
         """Recursive function to compute the index """
@@ -357,7 +411,9 @@ class FastNeuroTreeRegressor(FastTreeRegressor):
         else:
             # non-leaf
             lincomb_features, lincomb_coefficients, split = node_data
-            lincomb_values = X[numpy.ix_(passed_indices, lincomb_features)].dot(lincomb_coefficients)
+            lincomb_values = self._compute_lincomb(X, indices=passed_indices,
+                                                   lincomb_features=lincomb_features,
+                                                   lincomb_coefficients=lincomb_coefficients)
             passed_left_subtree = passed_indices[lincomb_values <= split]
             passed_right_subtree = passed_indices[lincomb_values > split]
             left, right = self._children(node_index)
