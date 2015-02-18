@@ -8,8 +8,47 @@ import pandas
 import math
 from numpy.random import normal as randn
 from sklearn.utils.validation import check_random_state
+from sklearn.base import BaseEstimator, TransformerMixin
 
 __author__ = 'Alex Rogozhnikov'
+
+
+class SupervisedTransform(BaseEstimator, TransformerMixin):
+    def __init__(self, scale=10.):
+        """
+        This transformation applies nonlinear rescale to each axis,
+        only order of events is taken into account.
+
+        If sig and bck events are neighbours in some feature, they will be 'splitted' by 'insertion'
+        Scale is how big insertion is
+        """
+        self.scale = scale
+
+    def fit(self, X, y):
+        X = numpy.array(X)
+        self.initial_values = []
+        self.transformed_values = []
+        for axis in range(X.shape[1]):
+            indices = numpy.argsort(X[:, axis])
+            self.initial_values.append(X[indices, axis] * (1 + 1e-6 * numpy.random.normal(len(X))))
+            transformed = numpy.arange(len(X), dtype='float')
+            # increase the distance between neighs of different classes
+            additions = numpy.abs(numpy.diff(y[indices]))
+            additions = numpy.cumsum(numpy.abs(additions))
+            transformed[1:] += additions * self.scale
+            transformed /= transformed[-1] / 2.
+            transformed -= 1
+            self.transformed_values.append(transformed)
+        return self
+
+    def transform(self, X):
+        X = numpy.array(X)
+        result = []
+        for axis, (init_vals, trans_vals) in enumerate(zip(self.initial_values, self.transformed_values)):
+            result.append(numpy.interp(X[:, axis], init_vals, trans_vals))
+        return numpy.vstack(result).T
+
+
 
 
 
