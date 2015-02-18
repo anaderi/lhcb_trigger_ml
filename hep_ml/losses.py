@@ -88,6 +88,9 @@ class AbstractLossFunction(BaseEstimator):
 
 
 class AdaLossFunction(AbstractLossFunction):
+    def __init__(self, regularization=1e-2):
+        self.regularization = regularization
+
     def fit(self, X, y, sample_weight):
         self.y = y
         self.sample_weight = sample_weight
@@ -106,7 +109,7 @@ class AdaLossFunction(AbstractLossFunction):
         w1 = numpy.sum(leaf_exp[leaf_ans == 1])
         w2 = numpy.sum(leaf_exp[leaf_ans == 0])
         # regularization
-        w_reg = (w1 + w2) * 1e-5
+        w_reg = (w1 + w2) * self.regularization
         # minimization of w1 * e^(-x) + w2 * e^x
         return 0.5 * numpy.log((w1 + w_reg) / (w2 + w_reg))
 
