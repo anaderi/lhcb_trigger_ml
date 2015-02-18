@@ -29,9 +29,10 @@ class SupervisedTransform(BaseEstimator, TransformerMixin):
         self.initial_values = []
         self.transformed_values = []
         for axis in range(X.shape[1]):
-            initial_values = X[indices, axis] * (1 + 1e-6 * numpy.random.normal(size=len(X)))
+            initial_values = X[:, axis] * (1 + 1e-6 * numpy.random.normal(size=len(X)))
             initial_values += 1e-8 * numpy.random.normal(size=len(X))
             indices = numpy.argsort(initial_values)
+            initial_values = initial_values[indices]
             self.initial_values.append(initial_values)
             transformed = numpy.arange(len(X), dtype='float')
             # increase the distance between neighs of different classes
