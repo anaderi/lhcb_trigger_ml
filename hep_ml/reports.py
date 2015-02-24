@@ -209,7 +209,7 @@ class Predictions(object):
         proba_on_stages = pandas.DataFrame(self._get_stages(stages))
         for stage_name, proba_on_stage in proba_on_stages.iterrows():
             self._strip_figure(len(proba_on_stage))
-            for i, (clf_name, predict_proba) in enumerate(proba_on_stage.items(), 1):
+            for i, (clf_name, predict_proba) in enumerate(proba_on_stage.iteritems(), 1):
                 pylab.subplot(1, len(proba_on_stage), i)
                 for label in numpy.unique(self.y):
                     pylab.hist(predict_proba[self.y == label, label], histtype=histtype, bins=bins, label=str(label))
