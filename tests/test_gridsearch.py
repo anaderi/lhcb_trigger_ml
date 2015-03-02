@@ -1,6 +1,7 @@
 import numpy
+from collections import OrderedDict
 from hep_ml.grid_search import SimpleParameterOptimizer, AbstractParameterGenerator, GridOptimalSearchCV
-from hep_ml.commonutils import generate_sample, OrderedDict
+from hep_ml.commonutils import generate_sample
 
 __author__ = 'Alex Rogozhnikov'
 
