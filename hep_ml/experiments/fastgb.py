@@ -137,6 +137,9 @@ class AbstractGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
     def _prepare_initial_predictions(self, X, y, sample_weight):
         self.initial_prediction = logit(numpy.average(y, weights=sample_weight))
 
+    def _compute_initial_predictions(self, X):
+        return numpy.zeros(len(X), dtype='float') + self.initial_prediction
+
     def _generate_mask(self, length, subsample):
         if subsample == 1.0:
             return slice(None, None, None)
@@ -148,20 +151,27 @@ class AbstractGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
         X, y, sample_weight = self._initial_data_check(X, y, sample_weight)
         self._check_params()
 
+        loss_weight = sample_weight
+        tree_weight = numpy.ones(len(sample_weight))
+
+        if False:
+            loss_weight, tree_weight = tree_weight, loss_weight
+
+
         self.loss = copy.copy(self.loss)
-        self.loss.fit(X, y, sample_weight=sample_weight)
+        self.loss.fit(X, y, sample_weight=loss_weight)
 
         X, y, sample_weight = self._prepare_data_for_fitting(X, y, sample_weight)
 
         self._prepare_initial_predictions(X, y, sample_weight)
-        y_pred = numpy.zeros(len(X), dtype=float) + self.initial_prediction
+        y_pred = self._compute_initial_predictions(X)
         self.estimators = []
         self.scores = []
 
-        pool = ThreadPool(processes=self.n_threads)
+        # pool = ThreadPool(processes=self.n_threads)
 
         lock = Lock()
-        train_params = [self, X, y, sample_weight, y_pred, lock]
+        train_params = [self, X, y, tree_weight, y_pred, lock]
         # TODO use threading
         # pool.map(_train_one_classifier, [train_params] * self.n_estimators, chunksize=1)
         map(_train_one_classifier, [train_params] * self.n_estimators)
@@ -183,7 +193,7 @@ class AbstractGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
 
     def staged_predict_score(self, X):
         X = self.get_train_vars(X)
-        y_pred = numpy.zeros(len(X)) + self.initial_prediction
+        y_pred = self._compute_initial_predictions(X)
         for estimator in self.estimators:
             y_pred += self.learning_rate * estimator.predict(X)
             yield y_pred
@@ -207,7 +217,7 @@ class AbstractGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
 
 class CommonGradientBoosting(AbstractGradientBoostingClassifier):
     """
-    This classifier runs gradient boosting upon any scikit-learn regressor
+    This classifier runs gradient boosting upon any sklearn regressor
     (passed as base_estimator)
     """
 
@@ -325,7 +335,7 @@ class TreeGradientBoostingClassifier(CommonGradientBoosting):
                  n_estimators=100,
                  subsample=1.0,
                  learning_rate=0.1,
-                 update_tree=False,
+                 update_tree=True,
                  train_variables=None,
                  n_threads=1,
                  dtype=DTYPE,
@@ -352,3 +362,30 @@ class TreeGradientBoostingClassifier(CommonGradientBoosting):
             self.loss.update_fast_tree(fast_tree=estimator,
                                        X=X, y=y, y_pred=y_pred, sample_weight=sample_weight,
                                        update_mask=mask, residual=residual)
+
+    def refit_trees(self, X, y, sample_weight=None, loss=None, learning_rate=None,
+                    subsample=0.5, forgetting_noise=0.1):
+        X, y, sample_weight = self._initial_data_check(X, y, sample_weight)
+        if learning_rate is None:
+            learning_rate = self.learning_rate
+
+        if loss is None:
+            loss = self.loss
+        loss = copy.copy(loss)
+        loss.fit(X, y, sample_weight=sample_weight)
+
+        X, y, sample_weight = self._prepare_data_for_fitting(X, y, sample_weight)
+
+        y_pred = self._compute_initial_predictions(X)
+        for estimator in self.estimators:
+            y_pred += learning_rate * estimator.predict(X)
+
+        for estimator in self.estimators:
+            y_pred -= learning_rate * estimator.predict(X)
+            visual_pred = y_pred * numpy.exp(- numpy.random.exponential(size=len(y_pred)) * forgetting_noise)
+            loss.update_fast_tree(fast_tree=estimator,
+                                  X=X, y=y, y_pred=visual_pred, sample_weight=sample_weight,
+                                  update_mask=self._generate_mask(len(y), subsample=subsample),
+                                  residual=loss.negative_gradient(visual_pred))
+            y_pred += learning_rate * estimator.predict(X)
+
