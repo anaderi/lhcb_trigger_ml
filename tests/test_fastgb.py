@@ -7,7 +7,8 @@ from sklearn.tree.tree import DecisionTreeRegressor
 from hep_ml.commonutils import generate_sample
 from hep_ml.ugradientboosting import AdaLossFunction, BinomialDevianceLossFunction as BinomialDeviance, \
     uGradientBoostingClassifier
-from hep_ml.experiments.categorical import CategoricalTreeRegressor, SimpleCategorizer, ComplexCategorizer
+from hep_ml.experiments.categorical import CategoricalTreeRegressor, SimpleCategoricalRegressor, ObliviousCategoricalRegressor, \
+    CategoricalLinearClassifier
 from hep_ml.experiments.fasttree import FastTreeRegressor, FastNeuroTreeRegressor
 from hep_ml.experiments.fastgb import TreeGradientBoostingClassifier, CommonGradientBoosting, FoldingGBClassifier
 import time
@@ -30,6 +31,29 @@ def test_workability(n_samples=10000, n_features=10, distance=0.5):
 
 
 # test_workability()
+
+
+def test_refitting(n_samples=10000, n_features=10, distance=0.5):
+    trainX, trainY = generate_sample(n_samples=n_samples, n_features=n_features, distance=distance)
+    testX, testY = generate_sample(n_samples=n_samples, n_features=n_features, distance=distance)
+
+    booster = TreeGradientBoostingClassifier(n_estimators=100, update_tree=True,
+                                             base_estimator=FastTreeRegressor())
+    booster.fit(trainX, trainY)
+    print(roc_auc_score(testY, booster.predict_proba(testX)[:, 1]))
+    print(roc_auc_score(trainY, booster.predict_proba(trainX)[:, 1]))
+
+    booster.refit_trees(trainX, trainY)
+    print(roc_auc_score(testY, booster.predict_proba(testX)[:, 1]))
+    print(roc_auc_score(trainY, booster.predict_proba(trainX)[:, 1]))
+
+
+    booster.refit_trees(testX, testY)
+    print(roc_auc_score(testY, booster.predict_proba(testX)[:, 1]))
+    print(roc_auc_score(trainY, booster.predict_proba(trainX)[:, 1]))
+
+# test_refitting()
+
 
 
 def test_gb_quality(n_samples=10000, n_features=10, distance=0.5):
@@ -73,7 +97,7 @@ def test_gb_quality(n_samples=10000, n_features=10, distance=0.5):
         # assert new_auc > 0.7, new_auc
 
 
-test_gb_quality(n_samples=100000)
+# test_gb_quality(n_samples=100000)
 
 
 def test_categorical_gb(n_samples=100000, n_features=10, p=0.7):
@@ -90,11 +114,12 @@ def test_categorical_gb(n_samples=100000, n_features=10, p=0.7):
         'cat': CommonGradientBoosting(loss=AdaLossFunction(), subsample=0.5, dtype=int,
             base_estimator=CategoricalTreeRegressor()),
         'cat2': TreeGradientBoostingClassifier(loss=BinomialDeviance(), dtype='int', update_tree=False,
-            base_estimator=SimpleCategorizer(n_features=2, n_attempts=3, method='cv')),
+            base_estimator=SimpleCategoricalRegressor(n_features=2, n_attempts=3, method='cv')),
         'cat3': TreeGradientBoostingClassifier(loss=BinomialDeviance(), dtype='int', update_tree=False,
-            base_estimator=ComplexCategorizer(n_features=10, n_categories_power=5, splits=1, pfactor=0.5)),
+            base_estimator=ObliviousCategoricalRegressor(n_features=10, n_categories_power=5, splits=1, pfactor=0.5)),
         'cat2-2': TreeGradientBoostingClassifier(loss=BinomialDeviance(), dtype='int', update_tree=False, n_threads=2,
-            base_estimator=SimpleCategorizer(n_features=2, n_attempts=1)),
+            base_estimator=SimpleCategoricalRegressor(n_features=2, n_attempts=1)),
+        'cat-linear': CategoricalLinearClassifier(),
     }
     for name, booster in boosters.items():
         start = time.time()
@@ -103,4 +128,5 @@ def test_categorical_gb(n_samples=100000, n_features=10, p=0.7):
         print(name, "spent:{:3.2f} auc:{}".format(time.time() - start, auc))
 
 
-# test_categorical_gb()
+
+test_categorical_gb()

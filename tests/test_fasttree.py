@@ -61,7 +61,7 @@ def tree_quality_comparison(n_samples=200000, n_features=10):
     testX = numpy.dot(testX.values, multiplier)
     regressors = OrderedDict()
     regressors['old'] = DecisionTreeRegressor(max_depth=10, min_samples_split=50)
-    regressors['new'] = FastTreeRegressor(max_depth=10, min_samples_split=50, criterion='order')
+    regressors['new'] = FastTreeRegressor(max_depth=10, min_samples_split=50, criterion='pvalue')
     w = numpy.ones(n_samples)
 
     for name, regressor in regressors.items():
