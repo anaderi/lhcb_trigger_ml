@@ -223,8 +223,9 @@ class FastTreeRegressor(BaseEstimator, RegressorMixin):
             X[numpy.ix_(selected_events, selected_features)], y[selected_events], sample_weight=w[selected_events])
 
         # feature that showed best pre-estimated cost
-        feature_index = selected_features[numpy.argmin(costs)]
-        split = cuts[numpy.argmin(costs)]
+        best_feature_index = numpy.argmin(costs)
+        feature_index = selected_features[best_feature_index]
+        split = cuts[best_feature_index]
         # computing information for (possible) children
         passed_left_subtree = passed_indices[X[passed_indices, feature_index] <= split]
         passed_right_subtree = passed_indices[X[passed_indices, feature_index] > split]
@@ -248,8 +249,9 @@ class FastTreeRegressor(BaseEstimator, RegressorMixin):
         else:
             # non-leaf
             feature_index, split = node_data
-            passed_left_subtree = passed_indices[X[passed_indices, feature_index] <= split]
-            passed_right_subtree = passed_indices[X[passed_indices, feature_index] > split]
+            to_right = X[passed_indices, feature_index] > split
+            passed_left_subtree = passed_indices[~to_right]
+            passed_right_subtree = passed_indices[to_right]
             left, right = self._children(node_index)
             self._apply_node(X, leaf_indices, predictions, left, passed_left_subtree)
             self._apply_node(X, leaf_indices, predictions, right, passed_right_subtree)
