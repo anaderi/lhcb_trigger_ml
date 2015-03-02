@@ -7,8 +7,8 @@ from __future__ import division, print_function
 
 import numpy
 import pandas
-from sklearn.metrics import auc, roc_curve
 from sklearn.utils.validation import column_or_1d, check_arrays
+from sklearn.metrics import roc_curve
 
 from .commonutils import check_sample_weight, compute_cut_for_efficiency, computeSignalKnnIndices, sigmoid_function
 
@@ -17,7 +17,6 @@ __author__ = 'Alex Rogozhnikov'
 
 __all__ = ['sde', 'cvm_flatness', 'cvm_2samp', 'theil']
 
-# TODO simpler interfaces
 # TODO uniformity in usage of masks
 
 # region Utilities
@@ -28,6 +27,7 @@ def compute_cdf(ordered_weights):
     be sure that sum(ordered_weights) == 1
     """
     return numpy.cumsum(ordered_weights) - 0.5 * ordered_weights
+
 
 #endregion
 
@@ -54,6 +54,15 @@ background rejection = background efficiency (physicists don't agree with the la
 
 
 def check_metrics_arguments(y_true, y_pred, sample_weight, two_class=True, binary_pred=True):
+    """
+    Checks the arguments passed to metrics
+    :param y_true:
+    :param y_pred:
+    :param sample_weight:
+    :param two_class:
+    :param binary_pred:
+    :return:
+    """
     sample_weight = check_sample_weight(y_true, sample_weight=sample_weight)
     y_true = column_or_1d(y_true)
     y_pred = column_or_1d(y_pred)
@@ -91,14 +100,6 @@ def compute_sb(y_true, y_pred, sample_weight):
     return s / total_s, b / total_b
 
 
-def roc_auc_score(y_true, y_score, sample_weight=None):
-    """The same as sklearn.metrics.roc_auc_score, but supports weights """
-    if len(numpy.unique(y_true)) != 2:
-        raise ValueError("AUC is defined for binary classification only")
-    fpr, tpr, _ = roc_curve(y_true, y_score, sample_weight=sample_weight)
-    return auc(fpr, tpr, reorder=True)
-
-
 def efficiency_score(y_true, y_pred, sample_weight=None):
     """Efficiency = right classified signal / everything that is really signal
     Efficiency == recall, returns -0.1 when ill-defined"""
@@ -130,15 +131,14 @@ def sensitivity(y_true, y_score, sample_weight=None):
     y_true, y_score, sample_weight = \
         check_metrics_arguments(y_true, y_score, sample_weight=sample_weight, two_class=True, binary_pred=True)
     s, b = compute_sb(y_true, y_score, sample_weight=sample_weight)
-    return s / numpy.sqrt(s + b)
+    return s / numpy.sqrt(s + b + 1e-6)
 
 
 def optimal_sensitivity(y_true, y_score, sample_weight=None):
     """s,b are normalized to be in [0,1] """
+    from sklearn.metrics import roc_curve
     b, s, _ = roc_curve(y_true, y_score, sample_weight=sample_weight)
-    # skipping initial zero
-    s, b = s[1:], b[1:]
-    return numpy.max(s / numpy.sqrt(s + b))
+    return numpy.max(s / numpy.sqrt(s + b + 1e-6))
 
 
 #endregion
@@ -303,6 +303,22 @@ def weighted_deviation(a, weights, power=2.):
 
 
 #endregion
+
+
+class AbstractMetric(object):
+    def fit(self, X, y, sample_weight=None):
+        pass
+
+    def __call__(self, y_pred):
+        pass
+
+
+class BinBasedMetrics(AbstractMetric):
+    def __init__(self, n_bins):
+        self.n_bins = n_bins
+
+    def fit(self, X, y, sample_weight=None):
+        raise NotImplementedError()
 
 
 #region SDE

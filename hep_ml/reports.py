@@ -13,7 +13,7 @@ import warnings
 import numpy
 import pandas
 import matplotlib.pyplot as pylab
-from sklearn.metrics import auc
+from sklearn.metrics import auc, roc_auc_score, roc_curve
 from sklearn.utils.validation import check_arrays, column_or_1d
 from matplotlib import cm
 from scipy.stats import pearsonr
@@ -21,7 +21,7 @@ from scipy.stats import pearsonr
 from .commonutils import compute_bdt_cut, \
     check_sample_weight, build_normalizer, computeSignalKnnIndices, map_on_cluster
 
-from .metrics import roc_curve, roc_auc_score, compute_bin_indices, \
+from .metrics import compute_bin_indices, \
     compute_sde_on_bins, compute_sde_on_groups, compute_theil_on_bins, \
     bin_based_cvm, compute_bin_efficiencies, compute_bin_weights, bin_based_ks
 
