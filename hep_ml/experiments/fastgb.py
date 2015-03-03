@@ -151,8 +151,8 @@ class AbstractGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
         X, y, sample_weight = self._initial_data_check(X, y, sample_weight)
         self._check_params()
 
-        loss_weight = sample_weight
-        tree_weight = numpy.ones(len(sample_weight))
+        loss_weight = numpy.ones(len(sample_weight))
+        tree_weight = sample_weight
 
         if False:
             loss_weight, tree_weight = tree_weight, loss_weight
