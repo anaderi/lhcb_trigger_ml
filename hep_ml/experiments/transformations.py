@@ -9,12 +9,13 @@ import math
 from numpy.random import normal as randn
 from sklearn.utils.validation import check_random_state
 from sklearn.base import BaseEstimator, TransformerMixin
+from scipy.stats.distributions import norm
 
 __author__ = 'Alex Rogozhnikov'
 
 
 class SupervisedTransform(BaseEstimator, TransformerMixin):
-    def __init__(self, scale=10.):
+    def __init__(self, scale=0., like_normal=False):
         """
         This transformation applies nonlinear rescale to each axis,
         only order of events is taken into account.
@@ -22,6 +23,7 @@ class SupervisedTransform(BaseEstimator, TransformerMixin):
         If sig and bck events are neighbours in some feature, they will be 'splitted' by 'insertion'
         Scale is how big insertion is
         """
+        self.like_normal = like_normal
         self.scale = scale
 
     def fit(self, X, y):
@@ -41,7 +43,16 @@ class SupervisedTransform(BaseEstimator, TransformerMixin):
             transformed[1:] += additions * self.scale
             transformed /= transformed[-1] / 2.
             transformed -= 1
+
+            if self.like_normal:
+                # converting to normal-like distributions
+                transformed -= transformed[0]
+                transformed /= transformed[-1] / 0.9
+                transformed += 0.05
+                transformed = norm().ppf(transformed)
+
             self.transformed_values.append(transformed)
+
         return self
 
     def transform(self, X):
