@@ -23,11 +23,14 @@ def test_workability(n_samples=10000, n_features=10, distance=0.5):
         for loss in [BinomialDeviance(), AdaLossFunction()]:
             for update in [True, False]:
                 for base in [FastTreeRegressor(max_depth=3), FastNeuroTreeRegressor(max_depth=3)]:
-                    clf = booster(loss=loss, n_estimators=100,
-                                  base_estimator=base, update_tree=update)
-                    clf.fit(trainX, trainY)
-                    print('booster', booster, loss, 'update=', update, ' base=', base.__class__,
-                          ' quality=', roc_auc_score(testY, clf.predict_proba(testX)[:, 1]))
+                    if numpy.random.random() > 0.7:
+                        clf = booster(loss=loss, n_estimators=100,
+                                      base_estimator=base, update_tree=update)
+                        clf.fit(trainX, trainY)
+                        auc = roc_auc_score(testY, clf.predict_proba(testX)[:, 1])
+                        print('booster', booster, loss, 'update=', update, ' base=', base.__class__,
+                              ' quality=', auc)
+                        assert auc > 0.8
 
 
 # test_workability()
