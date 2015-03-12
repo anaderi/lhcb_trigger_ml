@@ -21,9 +21,9 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.utils.random import check_random_state
 from sklearn.utils.validation import check_arrays, column_or_1d
 
-from .commonutils import sigmoid_function, compute_bdt_cut, map_on_cluster, generate_sample, \
+from .commonutils import sigmoid_function, compute_bdt_cut, map_on_cluster, \
     computeKnnIndicesOfSameClass, compute_cut_for_efficiency
-from .metrics import compute_group_efficiencies
+from .metrics_utils import compute_group_efficiencies
 
 
 __author__ = "Alex Rogozhnikov, Nikita Kazeev"
@@ -33,7 +33,6 @@ __all__ = ["uBoostBDT", "uBoostClassifier"]
 
 
 # TODO update interface of knn function
-# TODO take weights into account when computing efficiencies
 
 
 class uBoostBDT:
@@ -150,7 +149,6 @@ class uBoostBDT:
         self.train_variables = train_variables
         self.smoothing = smoothing
         self.uniform_label = uniform_label
-        self.signed_uniform_label = 2 * uniform_label - 1
         self.keep_debug_info = keep_debug_info
         self.random_state = random_state
         self.algorithm = algorithm
@@ -202,6 +200,7 @@ class uBoostBDT:
 
         assert np.in1d(y, [0, 1]).all(), \
             "only two-class classification is implemented"
+        self.signed_uniform_label = 2 * self.uniform_label - 1
 
         if neighbours_matrix is not None:
             assert np.shape(neighbours_matrix) == (len(X), self.n_neighbors), \
@@ -267,9 +266,11 @@ class uBoostBDT:
             return np.log(p[:, 1] / p[:, 0])
 
     def _normalize_weight(self, y, weight):
+        # frequently algorithm assigns very big weight to signal events
+        # compared to background ones
         weight += 1e-30
-        weight[y == 0] /= np.sum(weight[y == 0])
-        weight[y == 1] /= np.sum(weight[y == 1])
+        weight[y == 0] /= np.mean(weight[y == 0])
+        weight[y == 1] /= np.mean(weight[y == 1])
         return weight
 
     def compute_uboost_multipliers(self, sample_weight, score, y):
@@ -282,11 +283,6 @@ class uBoostBDT:
         local_efficiencies = compute_group_efficiencies(signed_score, self.knn_indices, cut=signed_score_cut,
                                                         smoothing=self.smoothing)
 
-        # global_score_cut = compute_bdt_cut(self.target_efficiency, y, score)
-        # local_efficiencies = compute_groups_efficiencies(
-        # global_score_cut, self.knn_indices, y, score,
-        #     smoothing_width=self.smoothing)
-
         # pay attention - sample_weight should be used only here
         e_prime = np.average(np.abs(local_efficiencies - self.target_efficiency),
                              weights=sample_weight)
@@ -294,7 +290,7 @@ class uBoostBDT:
         is_uniform_class = (y == self.uniform_label)
 
         # beta = np.log((1.0 - e_prime) / e_prime)
-        # log(1. / e_prime), otherwise this can lead to the situation
+        # changed to log(1. / e_prime), otherwise this can lead to the situation
         # where beta is negative (which is a disaster).
         # Mike (uboost author) said he didn't take that into account.
         beta = np.log(1. / e_prime)
@@ -311,7 +307,7 @@ class uBoostBDT:
         which is modified in uBoost way"""
         cumulative_score = np.zeros(len(X))
         y_signed = 2 * y - 1
-        for iboost in range(self.n_estimators):
+        for iteration in range(self.n_estimators):
             estimator = self._make_estimator()
             mask = generate_mask(len(X), self.bagging, self.random_generator)
             estimator.fit(X, y, sample_weight=sample_weight * mask)
@@ -345,9 +341,6 @@ class uBoostBDT:
             self.score_cuts_.append(global_score_cut)
             self.estimators_.append(estimator)
             self.estimator_weights_.append(estimator_weight)
-
-            # assert np.allclose(cumulative_score, self.predict_score(X), atol=1e-8), \
-            # "wrong prediction"
 
             if self.keep_debug_info:
                 self.debug_dict['weights'].append(sample_weight.copy())
@@ -535,7 +528,6 @@ class uBoostClassifier(BaseEstimator, ClassifierMixin):
 
         neighbours_matrix = computeKnnIndicesOfSameClass(
             self.uniform_variables, X, y, n_neighbours=self.knn)
-        # TODO(Alex) maybe select some other targets ?
         self.target_efficiencies = np.linspace(0, 1, self.efficiency_steps + 2)[1:-1]
         self.classifiers = []
 
@@ -590,25 +582,14 @@ def generate_mask(n_samples, bagging=True, random_generator=np.random):
            (sampling with replacement at each iteration, size=len(X))
         if float, used sampling without replacement, the size of generated
            set is bagging * len(X)
-        if False, returns 1."""
+        if False, returns ones for all events."""
     if bagging is True:
-        indices = random_generator.randint(0, n_samples, n_samples)
+        indices = random_generator.randint(0, n_samples, size=n_samples)
         mask = np.bincount(indices, minlength=n_samples)
     elif isinstance(bagging, float):
-        mask = random_generator.rand(n_samples) > 1. - bagging
+        mask = random_generator.uniform(size=n_samples) > 1. - bagging
     elif bagging is False:
-        mask = 1.
+        mask = np.ones(n_samples, dtype='float')
     else:
         raise ValueError("something wrong was passed as bagging")
     return mask
-
-
-def minimal_test():
-    """Checks that basic methods work"""
-    trainX, trainY = generate_sample(1000, 10)
-    uboost = uBoostClassifier(['column0'], n_estimators=2, efficiency_steps=3)
-    uboost.fit(trainX, trainY)
-    result = uboost.predict_proba(trainX)
-
-
-minimal_test()

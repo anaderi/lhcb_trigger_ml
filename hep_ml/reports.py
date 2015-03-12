@@ -21,9 +21,10 @@ from scipy.stats import pearsonr
 from .commonutils import compute_bdt_cut, \
     check_sample_weight, build_normalizer, computeSignalKnnIndices, map_on_cluster
 
-from .metrics import compute_bin_indices, \
-    compute_sde_on_bins, compute_sde_on_groups, compute_theil_on_bins, \
-    bin_based_cvm, compute_bin_efficiencies, compute_bin_weights, bin_based_ks
+from .metrics_utils import compute_sde_on_bins, compute_sde_on_groups, compute_theil_on_bins, \
+    bin_based_cvm, bin_based_ks
+
+from .metrics_utils import compute_bin_efficiencies, compute_bin_weights, compute_bin_indices
 
 
 __author__ = 'Alex Rogozhnikov'
@@ -251,7 +252,7 @@ class Predictions(object):
         for var_name in var_names:
             var_data = self.X.loc[mask, var_name]
             bin_limits.append(numpy.linspace(numpy.min(var_data), numpy.max(var_data), n_bins + 1)[1: -1])
-        return compute_bin_indices(self.X, var_names, bin_limits)
+        return compute_bin_indices(self.X.ix[:, var_names].values, bin_limits=bin_limits)
 
     def _compute_nonempty_bins_mask(self, var_names, n_bins=20, mask=None):
         return numpy.bincount(self._compute_bin_indices(var_names, n_bins=n_bins, mask=mask),

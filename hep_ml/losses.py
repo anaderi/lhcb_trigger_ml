@@ -14,7 +14,7 @@ from sklearn.utils.validation import check_random_state
 from sklearn.base import BaseEstimator
 
 from .commonutils import computeSignalKnnIndices, indices_of_values, check_sample_weight, check_uniform_label
-from .metrics import bin_to_group_indices, compute_group_weights, compute_bin_indices
+from .metrics_utils import bin_to_group_indices, compute_group_weights, compute_bin_indices
 
 __author__ = 'Alex Rogozhnikov'
 
@@ -389,7 +389,7 @@ class BinFlatnessLossFunction(AbstractFlatnessLossFunction):
             bin_limits = []
             for axis_limits in extended_bin_limits:
                 bin_limits.append(axis_limits[1 + shift:-1:2])
-            bin_indices = compute_bin_indices(X, self.uniform_variables, bin_limits)
+            bin_indices = compute_bin_indices(X.ix[:, self.uniform_variables].values, bin_limits=bin_limits)
             groups_indices += list(bin_to_group_indices(bin_indices, mask=label_mask))
         return groups_indices
 
