@@ -42,6 +42,7 @@ def map_on_cluster(ipc_profile, *args, **kw_args):
         return list(map(*args, **kw_args))
     else:
         from IPython.parallel import Client
+
         return Client(profile=ipc_profile).load_balanced_view().map_sync(*args, **kw_args)
 
 
@@ -53,7 +54,7 @@ def sigmoid_function(x, width):
     """
     assert width >= 0, 'the width should be non-negative'
     if abs(width) > 0.0001:
-        return expit(numpy.clip(x / width, -500, 500))
+        return expit(x / width)
     else:
         return (x > 0) * 1.0
 
@@ -72,20 +73,6 @@ def generate_sample(n_samples, n_features, distance=2.0):
     columns = ["column" + str(x) for x in range(n_features)]
     X = pandas.DataFrame(X, columns=columns)
     return X, y
-
-
-def check_sample_weight(y_true, sample_weight):
-    """Checks the weights, returns normalized version
-    :param y_true: numpy.array of shape [n_samples]
-    :param sample_weight: array-like of shape [n_samples] or None
-    :returns: numpy.array with weights of shape [n_samples]"""
-    if sample_weight is None:
-        return numpy.ones(len(y_true), dtype=numpy.float)
-    else:
-        sample_weight = numpy.array(sample_weight, dtype=numpy.float)
-        assert len(y_true) == len(sample_weight), \
-            "The length of weights is different: not {0}, but {1}".format(len(y_true), len(sample_weight))
-        return sample_weight
 
 
 def check_uniform_label(uniform_label):
@@ -137,7 +124,7 @@ def train_test_split(*arrays, **kw_args):
 
 def weighted_percentile(array, percentiles, sample_weight=None, array_sorted=False, old_style=False):
     """ Very close to numpy.precentile, but supports weights.
-    NB: percentiles should be in [0, 1]
+    NOTE: percentiles should be in [0, 1]!
     :param array: numpy.array with data
     :param percentiles: array-like with many percentiles
     :param sample_weight: array-like of the same length as `array`
@@ -247,7 +234,7 @@ def computeKnnIndicesOfSameClass(uniform_variables, X, y, n_neighbours=50):
     return result
 
 
-#endregion
+# endregion
 
 
 def smear_dataset(testX, smeared_variables=None, smearing_factor=0.1):
@@ -293,7 +280,67 @@ def indices_of_values(array):
         yield sorted_array[limits[i]], indices[limits[i]: limits[i + 1]]
 
 
-def print_header(header, level=3):
+def print_header(text, level=3):
+    """
+    Function to be used in notebooks to display headers not just plain text
+    :param text: str or object to print its __repr__
+    :param level: int, from 1 to 6 (1st, 2nd, 3rd order header)
+    """
     from IPython.display import display_html
-    display_html("<h{level}>{header}</h{level}>".format(header=header, level=level), raw=True)
+
+    display_html("<h{level}>{header}</h{level}>".format(header=text, level=level), raw=True)
+
+
+def take_features(X, features):
+    """
+    Takes features from dataset.
+    :param X: numpy.array or pandas.DataFrame
+    :param features: list of strings (if pandas.DataFrame) or list of ints
+    :return: pandas.DataFrame or numpy.array with the same length.
+    NOTE: may return view to original data!
+    """
+    from numbers import Number
+
+    are_strings = all([isinstance(feature, str) for feature in features])
+    are_numbers = all([isinstance(feature, Number) for feature in features])
+    if are_strings and isinstance(X, pandas.DataFrame):
+        return X.ix[:, features]
+    elif are_numbers:
+        return numpy.array(X)[:, features]
+    else:
+        raise NotImplementedError("Can't take features {} from object of type {}".format(features, type(X)))
+
+
+def check_sample_weight(y_true, sample_weight):
+    """
+    Checks the weights, returns normalized version
+    :param y_true: numpy.array of shape [n_samples]
+    :param sample_weight: array-like of shape [n_samples] or None
+    :returns: numpy.array with weights of shape [n_samples]"""
+    if sample_weight is None:
+        return numpy.ones(len(y_true), dtype=numpy.float)
+    else:
+        sample_weight = numpy.array(sample_weight, dtype=numpy.float)
+        assert len(y_true) == len(sample_weight), \
+            "The length of weights is different: not {0}, but {1}".format(len(y_true), len(sample_weight))
+        return sample_weight
+
+
+def check_xyw(X, y, sample_weight=None):
+    """
+    Checks parameters of classifier / loss / metrics
+    :param X: array-like of shape [n_samples, n_features] (numpy.array or pandas.DataFrame)
+    :param y: array-like of shape [n_samples]
+    :param sample_weight: None or array-like of shape [n_samples]
+    :return:
+    """
+    from sklearn.utils.validation import column_or_1d
+    y = column_or_1d(y)
+    classes = numpy.unique(y)
+    sample_weight = check_sample_weight(y, sample_weight=sample_weight)
+    assert len(X) == len(y), 'Lengths are different'
+    if not (isinstance(X, pandas.DataFrame) or (isinstance(X, numpy.ndarray))):
+        X = numpy.array(X)
+    return X, y, sample_weight
+
 
