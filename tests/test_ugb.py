@@ -1,7 +1,7 @@
 from __future__ import division, print_function, absolute_import
 import numpy
 from hep_ml.commonutils import generate_sample
-from hep_ml.losses import compute_positions, AdaLossFunction, SimpleKnnLossFunction, \
+from hep_ml.losses import compute_positions, BinomialDevianceLossFunction, SimpleKnnLossFunction, \
     BinFlatnessLossFunction, KnnFlatnessLossFunction
 from hep_ml.ugradientboosting import uGradientBoostingClassifier
 
@@ -36,7 +36,7 @@ def check_gradient(loss, size=1000):
 def test_gb_with_ada(n_samples=1000, n_features=10, distance=0.6):
     testX, testY = generate_sample(n_samples, n_features, distance=distance)
     trainX, trainY = generate_sample(n_samples, n_features, distance=distance)
-    loss = AdaLossFunction()
+    loss = BinomialDevianceLossFunction()
     clf = uGradientBoostingClassifier(loss=loss, min_samples_split=20, max_depth=5, learning_rate=.2,
                                       subsample=0.7, n_estimators=10, train_variables=None)
     clf.fit(trainX, trainY)
@@ -59,7 +59,7 @@ def test_gradient_boosting(n_samples=1000):
 
     loss1 = SimpleKnnLossFunction(uniform_variables)
     # loss2 = PairwiseKnnLossFunction(uniform_variables, knn=10)
-    loss3 = AdaLossFunction()
+    loss3 = BinomialDevianceLossFunction()
     # loss4 = RandomKnnLossFunction(uniform_variables, samples * 2, knn=5, knn_factor=3)
     # loss5 = DistanceBasedKnnFunction(uniform_variables, knn=10, distance_dependence=lambda r: numpy.exp(-0.1 * r))
     loss6bin = BinFlatnessLossFunction(uniform_variables, ada_coefficient=0.5)

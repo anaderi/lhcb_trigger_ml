@@ -4,8 +4,8 @@ import pandas
 from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
 from matplotlib.cbook import Null
 
+from sklearn.metrics import roc_auc_score
 from hep_ml import reports
-from hep_ml.metrics import roc_auc_score
 from hep_ml.reports import ClassifiersDict
 from hep_ml.commonutils import generate_sample
 
