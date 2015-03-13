@@ -336,7 +336,6 @@ def check_xyw(X, y, sample_weight=None):
     """
     from sklearn.utils.validation import column_or_1d
     y = column_or_1d(y)
-    classes = numpy.unique(y)
     sample_weight = check_sample_weight(y, sample_weight=sample_weight)
     assert len(X) == len(y), 'Lengths are different'
     if not (isinstance(X, pandas.DataFrame) or (isinstance(X, numpy.ndarray))):

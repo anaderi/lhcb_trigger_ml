@@ -125,20 +125,6 @@ Theil- Theil index of Efficiency (Theil index is used in economics)
 KS   - based on Kolmogorov-Smirnov distance between distributions
 CVM  - based on Cramer-von Mises similarity between distributions
 
-Mask is needed to show the events of needed class,
-for instance, if we want to compute the uniformity on signal predictions,
-mask should be True on signal events and False on the others.
-
-y_score in usually predicted probabilities of event being a needed class.
-
-So, if I want to compute efficiency on signal, I put:
-  mask = y == 1
-  y_pred = clf.predict_proba[:, 1]
-
-If want to do it for bck:
-  mask = y == 0
-  y_pred = clf.predict_proba[:, 0]
-
 """
 
 
@@ -187,11 +173,11 @@ class AbstractBinMetrics(AbstractMetric):
         X_part = numpy.array(take_features(X, self.uniform_features))[self._mask, :]
         self._bin_indices = ut.compute_bin_indices(X_part=X_part, n_bins=self.n_bins)
         self._bin_weights = ut.compute_bin_weights(bin_indices=self._bin_indices,
-                                                   sample_weight=sample_weight)
+                                                   sample_weight=self._masked_weight)
 
 
 class BinBasedSDE(AbstractBinMetrics):
-    def __init__(self, n_bins, uniform_features, uniform_label=0, target_rcp=None, power=2.):
+    def __init__(self, uniform_features, n_bins=10, uniform_label=0, target_rcp=None, power=2.):
         AbstractBinMetrics.__init__(self, n_bins=n_bins,
                                     uniform_features=uniform_features,
                                     uniform_label=uniform_label)
@@ -214,7 +200,7 @@ class BinBasedSDE(AbstractBinMetrics):
 
 
 class BinBasedTheil(AbstractBinMetrics):
-    def __init__(self, n_bins, uniform_features, uniform_label=0, target_rcp=None, power=2.):
+    def __init__(self, uniform_features, n_bins=10, uniform_label=0, target_rcp=None, power=2.):
         AbstractBinMetrics.__init__(self, n_bins=n_bins,
                                     uniform_features=uniform_features,
                                     uniform_label=uniform_label)
@@ -236,7 +222,7 @@ class BinBasedTheil(AbstractBinMetrics):
 
 
 class BinBasedCvM(AbstractBinMetrics):
-    def __init__(self, n_bins, uniform_features, uniform_label=0, power=2.):
+    def __init__(self, uniform_features, n_bins=10, uniform_label=0, power=2.):
         AbstractBinMetrics.__init__(self, n_bins=n_bins,
                                     uniform_features=uniform_features,
                                     uniform_label=uniform_label)
@@ -244,7 +230,7 @@ class BinBasedCvM(AbstractBinMetrics):
 
     def __call__(self, y, proba, sample_weight):
         y_pred = proba[self._mask, self.uniform_label]
-        global_data, global_weight, global_cdf = ut.prepare_distibution(y_pred, weights=self._bin_weights)
+        global_data, global_weight, global_cdf = ut.prepare_distibution(y_pred, weights=self._masked_weight)
 
         result = 0.
         for bin, bin_weight in enumerate(self._bin_weights):
@@ -286,7 +272,7 @@ class AbstractKnnMetrics(AbstractMetric):
 
 
 class KnnBasedSDE(AbstractKnnMetrics):
-    def __init__(self, n_neighbours, uniform_features, uniform_label=0, target_rcp=None, power=2.):
+    def __init__(self, uniform_features, n_neighbours=50, uniform_label=0, target_rcp=None, power=2.):
         AbstractKnnMetrics.__init__(self, n_neighbours=n_neighbours,
                                     uniform_features=uniform_features,
                                     uniform_label=uniform_label)
@@ -309,7 +295,7 @@ class KnnBasedSDE(AbstractKnnMetrics):
 
 
 class KnnBasedTheil(AbstractKnnMetrics):
-    def __init__(self, n_neighbours, uniform_features, uniform_label=0, target_rcp=None, power=2.):
+    def __init__(self, uniform_features, n_neighbours=50, uniform_label=0, target_rcp=None, power=2.):
         AbstractKnnMetrics.__init__(self, n_neighbours=n_neighbours,
                                     uniform_features=uniform_features,
                                     uniform_label=uniform_label)
@@ -332,7 +318,7 @@ class KnnBasedTheil(AbstractKnnMetrics):
 
 
 class KnnBasedCvM(AbstractKnnMetrics):
-    def __init__(self, n_neighbours, uniform_features, uniform_label=0, power=2.):
+    def __init__(self, uniform_features, n_neighbours=50, uniform_label=0, power=2.):
         AbstractKnnMetrics.__init__(self, n_neighbours=n_neighbours,
                                     uniform_features=uniform_features,
                                     uniform_label=uniform_label)
@@ -355,6 +341,25 @@ class KnnBasedCvM(AbstractKnnMetrics):
 
 
 # region Uniformity metrics (old version)
+
+"""
+Comments on the old interface:
+
+Mask is needed to show the events of needed class,
+for instance, if we want to compute the uniformity on signal predictions,
+mask should be True on signal events and False on the others.
+
+y_score in usually predicted probabilities of event being a needed class.
+
+So, if I want to compute efficiency on signal, I put:
+  mask = y == 1
+  y_pred = clf.predict_proba[:, 1]
+
+If want to do it for bck:
+  mask = y == 0
+  y_pred = clf.predict_proba[:, 0]
+
+"""
 
 def sde(y, proba, X, uniform_variables, sample_weight=None, label=1, knn=30):
     """ The most simple way to compute SDE, this is however very slow

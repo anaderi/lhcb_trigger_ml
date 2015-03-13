@@ -12,7 +12,7 @@ from hep_ml.metrics_utils import compute_sde_on_bins, \
     groups_based_ks, cvm_2samp, _cvm_2samp_fast, bin_based_cvm, group_based_cvm
 
 from hep_ml.metrics import sde, theil_flatness, cvm_flatness, \
-    KnnBasedSDE, KnnBasedTheil, KnnBasedCvM
+    KnnBasedSDE, KnnBasedTheil, KnnBasedCvM, BinBasedSDE, BinBasedTheil, BinBasedCvM
 
 from hep_ml.metrics_utils import bin_to_group_indices, compute_bin_indices
 
@@ -193,3 +193,22 @@ def test_metrics_clear(n_samples=2000, knn=50, uniform_class=0):
         metric2.fit(X_clear, y_clear, sample_weight=sample_weight_clear)
         flatness_val2 = metric2(y_clear, predictions_clear, sample_weight_clear)
         assert flatness_val1 == flatness_val2, 'after deleting other class, the metrics changed'
+
+
+def test_workability(n_samples=2000, knn=50, uniform_label=0, n_bins=10):
+    """Simply checks that metrics are working """
+    X, y = generate_sample(n_samples=n_samples, n_features=10)
+    sample_weight = numpy.random.exponential(size=n_samples)
+    predictions = numpy.random.random(size=[n_samples, 2])
+    predictions /= predictions.sum(axis=1, keepdims=True)
+    features = X.columns[:1]
+
+    for class_ in [KnnBasedSDE, KnnBasedTheil, KnnBasedCvM]:
+        metric = class_(n_neighbours=knn, uniform_features=features, uniform_label=uniform_label, )
+        metric.fit(X, y, sample_weight=sample_weight)
+        flatness_val_ = metric(y, predictions, sample_weight)
+
+    for class_ in [BinBasedSDE, BinBasedTheil, BinBasedCvM]:
+        metric = class_(n_bins=n_bins, uniform_features=features, uniform_label=uniform_label, )
+        metric.fit(X, y, sample_weight=sample_weight)
+        flatness_val_ = metric(y, predictions, sample_weight)
