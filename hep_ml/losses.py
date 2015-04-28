@@ -88,6 +88,7 @@ class AbstractLossFunction(BaseEstimator):
 
 
 class AdaLossFunction(AbstractLossFunction):
+    """ AdaLossFunction is the same as ExpLossFunction """
     def __init__(self, regularization=1e-2):
         self.regularization = regularization
 
@@ -102,6 +103,9 @@ class AdaLossFunction(AbstractLossFunction):
     def negative_gradient(self, y_pred):
         return self.y_signed * self.sample_weight * numpy.exp(- self.y_signed * y_pred)
 
+    def hessian(self, y_pred):
+        return self.sample_weight * numpy.exp(- self.y_signed * y_pred)
+
     def update_tree_leaf(self, leaf, indices_in_leaf, X, y, y_pred, sample_weight, update_mask, residual):
         leaf_ans = y[indices_in_leaf]
         leaf_exp = sample_weight[indices_in_leaf] * numpy.exp(
@@ -115,16 +119,24 @@ class AdaLossFunction(AbstractLossFunction):
 
 
 class BinomialDevianceLossFunction(AbstractLossFunction):
+    def __init__(self, regularization=1.):
+        self.regularization = regularization
+
     def fit(self, X, y, sample_weight):
         self.y = y
         self.sample_weight = sample_weight
         self.y_signed = 2 * y - 1
+        self.adjusted_regularization = numpy.mean(sample_weight) * self.regularization
 
     def __call__(self, y_pred):
         return numpy.sum(self.sample_weight * numpy.logaddexp(0, - self.y_signed * y_pred))
 
     def negative_gradient(self, y_pred):
         return self.y_signed * self.sample_weight * expit(- self.y_signed * y_pred)
+
+    def hessian(self, y_pred):
+        expits = expit(self.y_signed * y_pred)
+        return self.sample_weight * expits * (1 - expits)
 
     def update_tree_leaf(self, leaf, indices_in_leaf, X, y, y_pred, sample_weight, update_mask, residual):
         leaf_y = y[indices_in_leaf]
@@ -133,8 +145,34 @@ class BinomialDevianceLossFunction(AbstractLossFunction):
         residual_abs = expit(numpy.clip(-y_signed * y_pred[indices_in_leaf], -10, 10))
         nominator = numpy.sum(y_signed * residual_abs * leaf_weights)
         denominator = numpy.sum(residual_abs * (1 - residual_abs) * leaf_weights)
-        regularization = 1. * numpy.mean(leaf_weights)
-        return nominator / (denominator + regularization)
+        return nominator / (denominator + self.adjusted_regularization)
+
+
+class CompositeLossFunction(AbstractLossFunction):
+    """
+    This is exploss for bck and logloss for signal with proper constants.
+    Such kind of loss functions is very useful to optimize AMS.
+    """
+    def fit(self, X, y, sample_weight):
+        self.y = y
+        self.sample_weight = sample_weight
+        self.y_signed = 2 * y - 1
+        self.sig_w = (y == 1) * self.sample_weight
+        self.bck_w = (y == 0) * self.sample_weight
+
+    def __call__(self, y_pred):
+        result = numpy.sum(self.sig_w * numpy.logaddexp(0, -y_pred))
+        result += numpy.sum(self.bck_w * numpy.exp(0.5 * y_pred))
+        return result
+
+    def negative_gradient(self, y_pred):
+        result = self.sig_w * expit(- y_pred)
+        result -= 0.5 * self.bck_w * numpy.exp(0.5 * y_pred)
+        return result
+
+    def hessian(self, y_pred):
+        expits = expit(self.y_signed * y_pred)
+        return self.sig_w * expits * (1 - expits) + self.bck_w * 0.25 * numpy.exp(0.5 * y_pred)
 
 
 # region MatrixLossFunction
@@ -158,6 +196,7 @@ class AbstractMatrixLossFunction(AbstractLossFunction):
         A, w = self.compute_parameters(X, y)
         self.A = sparse.csr_matrix(A)
         self.A_t = sparse.csr_matrix(self.A.transpose())
+        self.A_t_sq = self.A_t.multiply(self.A_t)
         self.w = numpy.array(w)
         assert A.shape[0] == len(w), "inconsistent sizes"
         assert A.shape[1] == len(X), "wrong size of matrix"
@@ -175,6 +214,12 @@ class AbstractMatrixLossFunction(AbstractLossFunction):
         assert len(y_pred) == self.A.shape[1], "something is wrong with sizes"
         exponents = numpy.exp(- self.A.dot(self.y_signed * y_pred))
         result = self.A_t.dot(self.w * exponents) * self.y_signed
+        return result
+
+    def hessian(self, y_pred):
+        assert len(y_pred) == self.A.shape[1], 'something wrong with sizes'
+        exponents = numpy.exp(- self.A.dot(self.y_signed * y_pred))
+        result = self.A_t_sq.dot(self.w * exponents)
         return result
 
     def compute_parameters(self, trainX, trainY):

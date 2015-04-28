@@ -14,25 +14,6 @@ def check_orders(size=40):
     assert numpy.all(effs1 == numpy.sort(effs1))
 
 
-def check_gradient(loss, size=1000):
-    X, y = generate_sample(size, 10)
-    sample_weight = numpy.ones(size)
-    loss.fit(X, y, sample_weight=sample_weight)
-    pred = numpy.random.random(size)
-    epsilon = 1e-7
-    val = loss(pred)
-    gradient = numpy.zeros_like(pred)
-
-    for i in range(size):
-        pred2 = pred.copy()
-        pred2[i] += epsilon
-        val2 = loss(pred2)
-        gradient[i] = (val2 - val) / epsilon
-
-    n_gradient = loss.negative_gradient(pred)
-    assert numpy.all(abs(n_gradient + gradient) < 1e-3), "Problem with functional gradient"
-
-
 def test_gb_with_ada(n_samples=1000, n_features=10, distance=0.6):
     testX, testY = generate_sample(n_samples, n_features, distance=distance)
     trainX, trainY = generate_sample(n_samples, n_features, distance=distance)
@@ -74,12 +55,4 @@ def test_gradient_boosting(n_samples=1000):
                                              subsample=0.7, n_estimators=n_estimators, train_variables=None) \
             .fit(trainX[:n_samples], trainY[:n_samples]).score(testX, testY)
         assert result >= 0.7, "The quality is too poor: %.3f" % result
-
-    for loss in [loss1, loss3, ]:
-        check_gradient(loss)
-
-    print('uniform gradient boosting is ok')
-
-
-# TODO test that in the bins/groups we have only events of the needed class
 
