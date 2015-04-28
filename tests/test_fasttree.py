@@ -12,6 +12,9 @@ __author__ = 'Alex Rogozhnikov'
 
 
 def test_tree(n_samples=1000):
+    """
+    Testing quality of predictions of fasttree
+    """
     X, y = generate_sample(n_samples=n_samples, n_features=5)
     X = numpy.array(X)
     w = numpy.ones(n_samples)
@@ -20,8 +23,13 @@ def test_tree(n_samples=1000):
     prediction = tree.predict(X)
     tree.print_tree_stats()
     auc = roc_auc_score(y, prediction)
-    print("AUC", auc)
-    assert auc > 0.7, auc
+    assert auc > 0.7, 'quality is too poor, AUC = {}'.format(auc)
+
+    # Testing apply method
+    indices1, values1 = tree.apply(X)
+    indices2, values2 = tree.fast_apply(X)
+
+    assert numpy.all(values1 == values2), 'two apply methods give different results'
 
 
 def test_tree_speed(n_samples=100000, n_features=10):
@@ -52,6 +60,9 @@ def test_tree_speed(n_samples=100000, n_features=10):
 
 
 def tree_quality_comparison(n_samples=200000, n_features=10):
+    """
+    Function is NOT a test, bit helpful to compare performance of standard DT and new one.
+    """
     trainX, trainY = generate_sample(n_samples=n_samples, n_features=n_features)
     testX, testY = generate_sample(n_samples=n_samples, n_features=n_features)
 
@@ -68,10 +79,4 @@ def tree_quality_comparison(n_samples=200000, n_features=10):
         regressor.fit(trainX, trainY, sample_weight=w)
         print(name, roc_auc_score(testY, regressor.predict(testX)))
 
-    # Testing apply method
-    indices1, values1 = regressors['new'].apply(testX)
-    indices2, values2 = regressors['new'].fast_apply(testX)
-    assert numpy.all(values1 == values2), 'two apply methods give different results'
 
-
-tree_quality_comparison(n_samples=1000)
