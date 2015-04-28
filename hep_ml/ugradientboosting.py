@@ -18,7 +18,13 @@ from .losses import AbstractLossFunction, AdaLossFunction, AbstractFlatnessLossF
 __author__ = 'Alex Rogozhnikov'
 
 
-#TODO different kinds of updating (all, other, random and so on)
+def score_to_proba(score):
+    result = numpy.zeros([len(score), 2], dtype=float)
+    result[:, 1] = sigmoid_function(score, width=1.)
+    result[:, 0] = 1. - result[:, 1]
+    return result
+
+
 class uGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, loss=None,
                  n_estimators=10,
@@ -123,12 +129,6 @@ class uGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
         else:
             return X.loc[:, self.train_variables]
 
-    def score_to_proba(self, score):
-        result = numpy.zeros([len(score), 2], dtype=float)
-        result[:, 1] = sigmoid_function(score, width=1.)
-        result[:, 0] = 1. - result[:, 1]
-        return result
-
     def staged_predict_score(self, X):
         X = self.get_train_vars(X)
         y_pred = numpy.zeros(len(X))
@@ -147,10 +147,10 @@ class uGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
 
     def staged_predict_proba(self, X):
         for score in self.staged_predict_score(X):
-            yield self.score_to_proba(score)
+            yield score_to_proba(score)
 
     def predict_proba(self, X):
-        return self.score_to_proba(self.predict_score(X))
+        return score_to_proba(self.predict_score(X))
 
     def predict(self, X):
         return numpy.argmax(self.predict_proba(X), axis=1)
