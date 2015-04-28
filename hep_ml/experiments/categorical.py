@@ -7,6 +7,7 @@ from sklearn.base import BaseEstimator, RegressorMixin, ClassifierMixin
 from collections import OrderedDict
 from hep_ml.losses import BinomialDevianceLossFunction
 from scipy.special import expit
+import itertools
 
 __author__ = 'Alex Rogozhnikov'
 
@@ -248,45 +249,59 @@ class ObliviousCategoricalRegressor(BaseEstimator, RegressorMixin):
 
 
 class CategoricalLinearClassifier(BaseEstimator, ClassifierMixin):
-    def __init__(self, learning_rate=0.01, l1_reg=0., l2_reg=0., max_categories=128):
+    def __init__(self, learning_rate=0.01, l1_reg=0., l2_reg=0., power_categories=15, include_pairs=False):
         """
 
         :param learning_rate:
         :param l1_reg:
         :param l2_reg:
-        :param max_categories: in each feature number should be in [0, n_categories)
+        :param power_categories: in each feature number should be in [0, n_categories)
         :return:
         """
+        self.include_pairs = include_pairs
         self.learning_rate = learning_rate
+        self.power_categories = power_categories
         self.l1_reg = l1_reg
         self.l2_reg = l2_reg
-        self.max_categories = max_categories
+
+    def enumerate_features(self, X):
+        mask = 2 ** self.power_categories - 1
+        for feature in range(X.shape[1]):
+            yield X[:, feature] & mask
+        if self.include_pairs:
+            for feature1, feature2 in itertools.combinations(range(X.shape[1]), 2):
+                yield (X[:, feature1] + 13 * X[:, feature2]) & mask
+
+    def compute_n_features(self):
+        if self.include_pairs:
+            return self.n_features + self.n_features * (self.n_features - 1) // 2
+        else:
+            return self.n_features
 
     def fit(self, X, y, sample_weight=None, iterations=100, loss=None):
         X, y = check_arrays(X, y)
+        self.n_features = X.shape[1]
         sample_weight = check_sample_weight(y, sample_weight=sample_weight)
         if loss is None:
             loss = BinomialDevianceLossFunction()
         loss.fit(X, y, sample_weight=sample_weight)
-        self.n_features = X.shape[1]
-        self.coeffs = numpy.zeros([self.n_features, self.max_categories], dtype='float')
-        assert numpy.max(X) < self.max_categories
-        assert numpy.min(X) >= 0
+
+        self.coeffs = numpy.zeros([self.compute_n_features(), 2 ** self.power_categories], dtype='float')
+        y_pred = numpy.zeros(len(X), dtype='float')
 
         for iteration in range(iterations):
-            # this line could be skipped, but we need it to avoid
-            # mistakes after too many steps of computations
-            y_pred = self.decision_function(X)
             print(iteration, loss(y_pred))
 
-            for feature in range(self.n_features):
+            for feature, feature_values in enumerate(self.enumerate_features(X)):
+                # TODO compute once per iteration!
                 ngradient = loss.negative_gradient(y_pred)
-                nominator = numpy.bincount(X[:, feature], weights=ngradient, minlength=self.max_categories)
-                nominator -= self.l2_reg * self.coeffs[feature, :] + self.l1_reg * numpy.sign(self.coeffs[feature, :])
+
+                nominator = numpy.bincount(feature_values, weights=ngradient, minlength=2 ** self.power_categories)
+                nominator -= 2 * self.l2_reg * self.coeffs[feature, :] + self.l1_reg * numpy.sign(self.coeffs[feature, :])
 
                 denominator = numpy.abs(ngradient) * (1. - numpy.abs(ngradient))
-                denominator = numpy.bincount(X[:, feature], weights=denominator, minlength=self.max_categories)
-                denominator += 2 * self.l2_reg + 5
+                denominator = numpy.bincount(feature_values, weights=denominator, minlength=2 ** self.power_categories)
+                denominator += 2 * self.l2_reg
 
                 gradients = nominator / denominator
                 right_gradients = gradients
@@ -297,8 +312,9 @@ class CategoricalLinearClassifier(BaseEstimator, ClassifierMixin):
                 old_coeffs = self.coeffs[feature, :]
                 new_coeffs = old_coeffs + self.learning_rate * right_gradients
                 new_coeffs[new_coeffs * old_coeffs < 0] = 0
-                y_pred += numpy.take(new_coeffs - old_coeffs, X[:, feature])
                 self.coeffs[feature, :] = new_coeffs
+                y_diff = numpy.take(new_coeffs - old_coeffs, feature_values)
+                y_pred += y_diff
 
         return self
 
@@ -306,8 +322,8 @@ class CategoricalLinearClassifier(BaseEstimator, ClassifierMixin):
         X = numpy.array(X)
         assert X.shape[1] == self.n_features
         result = numpy.zeros(len(X), dtype='float')
-        for feature in range(self.n_features):
-            result += numpy.take(self.coeffs[feature, :], X[:, feature])
+        for feature, feature_values in enumerate(self.enumerate_features(X)):
+            result += numpy.take(self.coeffs[feature, :], feature_values)
         return result
 
     def predict_proba(self, X):
@@ -315,9 +331,5 @@ class CategoricalLinearClassifier(BaseEstimator, ClassifierMixin):
         result[:, 1] = expit(self.decision_function(X))
         result[:, 0] = 1 - result[:, 1]
         return result
-
-
-
-
 
 
