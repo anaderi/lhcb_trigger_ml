@@ -46,7 +46,7 @@ setup(
         'rootpy >= 0.7.1',
         'root_numpy >= 3.3.0',
         'pandas >= 0.14.0',
-        'scikit-learn >= 0.15',
+        'scikit-learn = 0.15',
         'scipy >= 0.14.0',
         'numpy >= 1.8.1',
         'jinja2 >= 2.7.3',
