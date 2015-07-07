@@ -19,10 +19,10 @@ from sklearn.base import BaseEstimator, clone
 from sklearn.ensemble.weight_boosting import ClassifierMixin
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.utils.random import check_random_state
-from sklearn.utils.validation import check_arrays, column_or_1d
+from sklearn.utils.validation import column_or_1d
 
 from .commonutils import sigmoid_function, compute_bdt_cut, map_on_cluster, \
-    computeKnnIndicesOfSameClass, compute_cut_for_efficiency
+    computeKnnIndicesOfSameClass, compute_cut_for_efficiency, check_arrays
 from .metrics_utils import compute_group_efficiencies
 
 
@@ -230,8 +230,7 @@ class uBoostBDT:
 
         X_train_variables = self.get_train_vars(X)
         y = column_or_1d(y)
-        X_train_variables, y = check_arrays(
-            X_train_variables, y, sparse_format="dense")
+        X_train_variables, y = check_arrays(X_train_variables, y)
 
         # A dictionary to keep all intermediate weights, efficiencies and so on
         if self.keep_debug_info:

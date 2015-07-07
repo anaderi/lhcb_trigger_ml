@@ -13,7 +13,6 @@ import pandas
 from numpy.random.mtrand import RandomState
 from scipy.special import expit
 import sklearn.cross_validation
-from sklearn.utils.validation import check_arrays
 from sklearn.neighbors.unsupervised import NearestNeighbors
 
 __author__ = "Alex Rogozhnikov"
@@ -343,3 +342,20 @@ def check_xyw(X, y, sample_weight=None):
     return X, y, sample_weight
 
 
+def check_arrays(*arrays):
+    """
+    Minor lazy substitution for sklearn.check_arrays
+    :param arrays:
+    :return:
+    """
+    assert len(arrays) > 0, 'The number of array must be greater than zero'
+    checked_arrays = []
+    shapes = []
+    for arr in arrays:
+        if arr is not None:
+            checked_arrays.append(numpy.array(arr))
+            shapes.append(checked_arrays[-1].shape[0])
+        else:
+            checked_arrays.append(arr)
+    assert numpy.sum(numpy.array(shapes) == shapes[0]) == len(shapes), 'Different shapes of the arrays {}'.format(shapes)
+    return checked_arrays

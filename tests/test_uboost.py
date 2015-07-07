@@ -3,7 +3,7 @@ from __future__ import print_function, division, absolute_import
 import pylab as pl
 import numpy as np
 from six.moves import zip
-from sklearn.metrics.metrics import roc_auc_score, accuracy_score
+from sklearn.metrics import roc_auc_score, accuracy_score
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble.weight_boosting import AdaBoostClassifier

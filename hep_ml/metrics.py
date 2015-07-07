@@ -9,12 +9,12 @@ import numpy
 import pandas
 from sklearn.base import BaseEstimator
 from sklearn.neighbors.unsupervised import NearestNeighbors
-from sklearn.utils.validation import column_or_1d, check_arrays
+from sklearn.utils.validation import column_or_1d
 from sklearn.metrics import roc_curve
 
 from .commonutils import check_sample_weight, computeSignalKnnIndices
 from . import metrics_utils as ut
-from hep_ml.commonutils import take_features, check_xyw, weighted_percentile
+from hep_ml.commonutils import take_features, check_xyw, weighted_percentile, check_arrays
 
 
 __author__ = 'Alex Rogozhnikov'

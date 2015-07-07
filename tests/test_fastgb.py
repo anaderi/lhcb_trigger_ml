@@ -2,7 +2,7 @@ from __future__ import division, print_function, absolute_import
 
 import numpy
 from sklearn.ensemble.gradient_boosting import GradientBoostingClassifier
-from sklearn.metrics.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score
 from sklearn.tree.tree import DecisionTreeRegressor
 from hep_ml.commonutils import generate_sample
 from hep_ml.ugradientboosting import AdaLossFunction, BinomialDevianceLossFunction as BinomialDeviance, \

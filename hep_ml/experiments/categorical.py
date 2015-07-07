@@ -1,6 +1,5 @@
 from __future__ import division, print_function, absolute_import
-from sklearn.utils.validation import check_arrays
-from hep_ml.commonutils import check_sample_weight
+from hep_ml.commonutils import check_sample_weight, check_arrays
 from hep_ml.experiments import fasttree
 import numpy
 from sklearn.base import BaseEstimator, RegressorMixin, ClassifierMixin

@@ -7,9 +7,9 @@ import pandas
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.tree.tree import DecisionTreeRegressor, DTYPE
 from sklearn.utils.random import check_random_state
-from sklearn.utils.validation import check_arrays, column_or_1d
+from sklearn.utils.validation import column_or_1d
 
-from .commonutils import check_sample_weight, sigmoid_function
+from .commonutils import check_sample_weight, sigmoid_function, check_arrays
 from .losses import AbstractLossFunction, AdaLossFunction, AbstractFlatnessLossFunction, \
     KnnFlatnessLossFunction, BinFlatnessLossFunction, AbstractMatrixLossFunction, \
     SimpleKnnLossFunction, BinomialDevianceLossFunction
@@ -87,7 +87,8 @@ class uGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
         # preparing for fitting in trees
         X = self.get_train_vars(X)
         self.n_features = X.shape[1]
-        X, y = check_arrays(X, y, dtype=DTYPE, sparse_format="dense", check_ccontiguous=True)
+        X, y = check_arrays(X, y)
+        X = X.astype(DTYPE)
         y_pred = numpy.zeros(len(X), dtype=float)
 
         if self.init_estimator is not None:

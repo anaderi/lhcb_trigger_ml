@@ -4,10 +4,10 @@ import numpy
 import pandas
 from sklearn.cross_validation import StratifiedKFold, train_test_split
 from sklearn.tree.tree import DTYPE
-from sklearn.utils.validation import check_random_state, column_or_1d, check_arrays
+from sklearn.utils.validation import check_random_state, column_or_1d
 from sklearn.base import clone, BaseEstimator, ClassifierMixin
 
-from ..commonutils import check_sample_weight, sigmoid_function
+from ..commonutils import check_sample_weight, sigmoid_function, check_arrays
 from hep_ml.losses import AdaLossFunction
 from ..losses import AbstractLossFunction
 
@@ -122,7 +122,8 @@ class AbstractGradientBoostingClassifier(BaseEstimator, ClassifierMixin):
     def _prepare_data_for_fitting(self, X, y, sample_weight):
         """By default the same format used as for trees """
         X = self.get_train_vars(X)
-        X, y = check_arrays(X, y, dtype=self.dtype, sparse_format="dense", check_ccontiguous=True)
+        X, y = check_arrays(X, y)
+        X = X.astype(self.dtype)
         return X, y, sample_weight
 
     @staticmethod

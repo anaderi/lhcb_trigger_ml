@@ -16,7 +16,7 @@ import logging
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.cross_validation import StratifiedKFold
 from sklearn.grid_search import _check_param_grid
-from sklearn.metrics.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score
 from sklearn.utils.random import check_random_state
 from . import commonutils
 
